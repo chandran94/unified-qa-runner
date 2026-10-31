@@ -32,6 +32,7 @@ final class RunnerServer implements AutoCloseable {
     private final Path projectRoot;
     private final ExecutionService executionService;
     private final SharedPathConfig sharedPathConfig;
+    private final RemoteImportConfig remoteImportConfig;
     private final HttpServer server;
     private final ExecutorService httpExecutor;
     private final ExecutorService runExecutor;
@@ -45,6 +46,7 @@ final class RunnerServer implements AutoCloseable {
         this.projectRoot = projectRoot;
         this.executionService = new ExecutionService(projectRoot);
         this.sharedPathConfig = new SharedPathConfig(projectRoot);
+        this.remoteImportConfig = new RemoteImportConfig(projectRoot);
         server = HttpServer.create(new InetSocketAddress(DEFAULT_PORT), 0);
         httpExecutor = Executors.newCachedThreadPool(runnable -> daemonThread(runnable, "qa-http"));
         runExecutor = Executors.newSingleThreadExecutor(
@@ -190,6 +192,41 @@ final class RunnerServer implements AutoCloseable {
             scanSharedPath(exchange, name);
             return;
         }
+        // === Remote Import Endpoints ===
+        if (path.equals("/api/imports") && method.equals("GET")) {
+            sendJson(exchange, 200, remoteImportConfig.getImports().stream()
+                    .map(e -> Map.of("id", e.getId(), "name", e.getName(), "type", e.getType(),
+                            "source", e.getSource(), "path", e.getPath(), "importedAt", e.getImportedAt()))
+                    .toList());
+            return;
+        }
+        if (path.equals("/api/imports/github") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            importFromGitHub(exchange);
+            return;
+        }
+        if (path.equals("/api/imports/zip") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            importFromZip(exchange);
+            return;
+        }
+        if (path.startsWith("/api/imports/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/imports/".length());
+            try {
+                remoteImportConfig.removeImport(id);
+                sendJson(exchange, 200, Map.of("message", "Import '" + id + "' removed."));
+            } catch (IOException e) {
+                sendError(exchange, 500, "Failed to remove import: " + e.getMessage());
+            }
+            return;
+        }
+        if (path.startsWith("/api/imports/") && path.endsWith("/scan") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/imports/".length(), path.length() - "/scan".length());
+            scanImport(exchange, id);
+            return;
+        }
         if (path.equals("/api/runs") && method.equals("POST")) {
             requireSameOrigin(exchange);
             if (!runnerEnabled.get()) {
@@ -254,9 +291,11 @@ final class RunnerServer implements AutoCloseable {
     }
 
     private Map<String, Object> catalogResponse() throws IOException {
-        List<Path> sharedPaths = sharedPathConfig.getExistingPaths();
+        List<Path> allPaths = new ArrayList<>();
+        allPaths.addAll(sharedPathConfig.getExistingPaths());
+        allPaths.addAll(remoteImportConfig.getExistingPaths());
         List<Map<String, Object>> assets = executionService.pluginRegistry()
-                .discoverAllAssets(projectRoot, sharedPaths);
+                .discoverAllAssets(projectRoot, allPaths);
         List<Map<String, String>> sharedPathsList = new ArrayList<>();
         for (SharedPathConfig.SharedPathEntry entry : sharedPathConfig.getSharedPaths()) {
             Map<String, String> entryMap = new LinkedHashMap<>();
@@ -264,7 +303,19 @@ final class RunnerServer implements AutoCloseable {
             entryMap.put("path", entry.getPath());
             sharedPathsList.add(entryMap);
         }
-        return Map.of("assets", assets, "sharedPaths", sharedPathsList);
+        // Add imports list
+        List<Map<String, Object>> importsList = new ArrayList<>();
+        for (RemoteImportConfig.ImportEntry entry : remoteImportConfig.getImports()) {
+            Map<String, Object> entryMap = new LinkedHashMap<>();
+            entryMap.put("id", entry.getId());
+            entryMap.put("name", entry.getName());
+            entryMap.put("type", entry.getType());
+            entryMap.put("source", entry.getSource());
+            entryMap.put("path", entry.getPath());
+            entryMap.put("importedAt", entry.getImportedAt());
+            importsList.add(entryMap);
+        }
+        return Map.of("assets", assets, "sharedPaths", sharedPathsList, "imports", importsList);
     }
 
     private void addSharedPath(HttpExchange exchange) throws Exception {
@@ -361,6 +412,203 @@ final class RunnerServer implements AutoCloseable {
         ));
     }
 
+    private void importFromGitHub(HttpExchange exchange) throws Exception {
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.toLowerCase().startsWith("application/json")) {
+            throw new IllegalArgumentException("Send GitHub URL as application/json.");
+        }
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request must be a JSON object.");
+        }
+        String repoUrl = stringField(values, "repoUrl");
+        if (repoUrl.isBlank()) {
+            throw new IllegalArgumentException("GitHub repository URL is required.");
+        }
+        // Validate URL format
+        if (!repoUrl.startsWith("https://github.com/") && !repoUrl.startsWith("git@github.com:")) {
+            throw new IllegalArgumentException("Only GitHub repositories are supported (https://github.com/... or git@github.com:...).");
+        }
+        try {
+            RemoteImportConfig.ImportEntry entry = remoteImportConfig.cloneGitHubRepo(repoUrl);
+            sendJson(exchange, 200, Map.of(
+                    "message", "Repository cloned successfully.",
+                    "id", entry.getId(),
+                    "name", entry.getName(),
+                    "path", entry.getPath()
+            ));
+        } catch (IOException | InterruptedException e) {
+            sendError(exchange, 500, "Failed to clone repository: " + e.getMessage());
+        }
+    }
+
+    private void importFromZip(HttpExchange exchange) throws Exception {
+        // Parse multipart form data for ZIP file upload
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.toLowerCase().contains("multipart/form-data")) {
+            throw new IllegalArgumentException("Send ZIP file as multipart/form-data.");
+        }
+
+        // Read the request body
+        byte[] body = exchange.getRequestBody().readNBytes(50 * 1024 * 1024 + 1); // 50MB max
+        if (body.length > 50 * 1024 * 1024) {
+            throw new IllegalArgumentException("ZIP file is too large (max 50MB).");
+        }
+
+        // Parse multipart manually
+        String boundary = extractBoundary(contentType);
+        if (boundary == null) {
+            throw new IllegalArgumentException("Invalid multipart form data.");
+        }
+
+        // Find the ZIP file part
+        String bodyStr = new String(body, StandardCharsets.ISO_8859_1);
+        String fileName = extractFileName(bodyStr, boundary);
+        if (fileName == null) {
+            throw new IllegalArgumentException("No ZIP file found in the upload.");
+        }
+
+        // Extract the ZIP data from multipart
+        byte[] zipData = extractZipData(body, boundary, fileName);
+        if (zipData == null || zipData.length == 0) {
+            throw new IllegalArgumentException("Failed to extract ZIP data from upload.");
+        }
+
+        // Write ZIP to temp file
+        Path tempZip = Path.of("target", "uploads", fileName + "-" + UUID.randomUUID().toString().substring(0, 8) + ".zip");
+        Files.createDirectories(tempZip.getParent());
+        Files.write(tempZip, zipData);
+
+        try {
+            RemoteImportConfig.ImportEntry entry = remoteImportConfig.extractZipFile(tempZip, fileName);
+            sendJson(exchange, 200, Map.of(
+                    "message", "ZIP file extracted successfully.",
+                    "id", entry.getId(),
+                    "name", entry.getName(),
+                    "path", entry.getPath()
+            ));
+        } finally {
+            Files.deleteIfExists(tempZip);
+        }
+    }
+
+    private void scanImport(HttpExchange exchange, String id) throws IOException {
+        RemoteImportConfig.ImportEntry entry = remoteImportConfig.findImport(id);
+        if (entry == null) {
+            sendError(exchange, 404, "Import '" + id + "' not found.");
+            return;
+        }
+        Path importPath = Path.of(entry.getPath());
+        if (!Files.isDirectory(importPath)) {
+            sendError(exchange, 404, "Import directory not found: " + entry.getPath());
+            return;
+        }
+        // Scan the directory
+        List<Path> paths = List.of(importPath);
+        List<Map<String, Object>> assets = executionService.pluginRegistry()
+                .discoverAllAssets(projectRoot, paths);
+        String importPathStr = importPath.toString().replace('\\', '/');
+        List<Map<String, Object>> pathAssets = new ArrayList<>();
+        for (Map<String, Object> asset : assets) {
+            String selection = (String) asset.get("selection");
+            if (selection != null && selection.contains(importPathStr)) {
+                pathAssets.add(asset);
+            }
+        }
+        // Count by framework
+        Map<String, Integer> frameworkCounts = new LinkedHashMap<>();
+        for (Map<String, Object> asset : pathAssets) {
+            String kind = (String) asset.get("kind");
+            frameworkCounts.merge(kind, 1, Integer::sum);
+        }
+        List<Map<String, String>> frameworks = new ArrayList<>();
+        for (Map.Entry<String, Integer> fc : frameworkCounts.entrySet()) {
+            Map<String, String> fw = new LinkedHashMap<>();
+            fw.put("name", fc.getKey());
+            switch (fc.getKey()) {
+                case "cucumber": fw.put("label", "Cucumber/Selenium"); fw.put("icon", "🎯"); break;
+                case "newman": fw.put("label", "Postman/Newman"); fw.put("icon", "🔌"); break;
+                case "playwright": fw.put("label", "Playwright Java"); fw.put("icon", "🎭"); break;
+                case "karate": fw.put("label", "Karate DSL"); fw.put("icon", "🥋"); break;
+                case "wdio": fw.put("label", "WebdriverIO"); fw.put("icon", "🌐"); break;
+                case "restassured": fw.put("label", "RestAssured"); fw.put("icon", "⚡"); break;
+                default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
+            }
+            fw.put("count", String.valueOf(fc.getValue()));
+            frameworks.add(fw);
+        }
+        sendJson(exchange, 200, Map.of(
+                "id", id,
+                "name", entry.getName(),
+                "type", entry.getType(),
+                "source", entry.getSource(),
+                "path", entry.getPath(),
+                "totalAssets", pathAssets.size(),
+                "frameworks", frameworks,
+                "assets", pathAssets
+        ));
+    }
+
+    private String extractBoundary(String contentType) {
+        for (String part : contentType.split(";")) {
+            String trimmed = part.trim();
+            if (trimmed.startsWith("boundary=")) {
+                return trimmed.substring("boundary=".length()).trim();
+            }
+        }
+        return null;
+    }
+
+    private String extractFileName(String body, String boundary) {
+        String separator = "--" + boundary;
+        String[] parts = body.split("(?=" + java.util.regex.Pattern.quote(separator) + ")");
+        for (String part : parts) {
+            int contentDispIdx = part.indexOf("Content-Disposition");
+            if (contentDispIdx >= 0) {
+                int filenameIdx = part.indexOf("filename=\"", contentDispIdx);
+                if (filenameIdx >= 0) {
+                    filenameIdx += "filename=\"".length();
+                    int endIdx = part.indexOf("\"", filenameIdx);
+                    if (endIdx > filenameIdx) {
+                        return part.substring(filenameIdx, endIdx);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private byte[] extractZipData(byte[] body, String boundary, String fileName) {
+        String bodyStr = new String(body, StandardCharsets.ISO_8859_1);
+
+        // Find the part containing the file
+        int partStart = bodyStr.indexOf("filename=\"" + fileName + "\"");
+        if (partStart < 0) return null;
+
+        // Find the blank line after headers (CRLF CRLF)
+        int headersEnd = bodyStr.indexOf("\r\n\r\n", partStart);
+        if (headersEnd < 0) return null;
+
+        // Convert to byte offset
+        int dataStart = headersEnd + 4;
+
+        // Find the end of this part
+        int dataEnd = bodyStr.indexOf("\r\n--" + boundary, dataStart);
+        if (dataEnd < 0) {
+            dataEnd = bodyStr.length() - 2; // end of body
+        }
+
+        // Extract the raw bytes directly
+        int length = dataEnd - dataStart;
+        byte[] result = new byte[length];
+        System.arraycopy(body, dataStart, result, 0, length);
+        return result;
+    }
+
     private void createRun(HttpExchange exchange) throws Exception {
         String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
         if (contentType == null || !contentType.toLowerCase().startsWith("application/json")) {
@@ -407,10 +655,12 @@ final class RunnerServer implements AutoCloseable {
         String runId = "RUN-" + UUID.randomUUID().toString().substring(0, 8);
         RunEntry entry;
 
-        // Get all assets including from shared paths
-        List<Path> sharedPaths = sharedPathConfig.getExistingPaths();
+        // Get all assets including from shared paths and imports
+        List<Path> allPaths = new ArrayList<>();
+        allPaths.addAll(sharedPathConfig.getExistingPaths());
+        allPaths.addAll(remoteImportConfig.getExistingPaths());
         List<Map<String, Object>> allAssets = executionService.pluginRegistry()
-                .discoverAllAssets(projectRoot, sharedPaths);
+                .discoverAllAssets(projectRoot, allPaths);
 
         if (selectionsObj instanceof List<?> selections && !selections.isEmpty()) {
             // Collection run: validate all selections are known assets

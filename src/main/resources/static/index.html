@@ -216,6 +216,33 @@
           <div id="sharedPathList"><div class="empty">No shared paths configured.</div></div>
           <div class="hint">Scripts dropped in shared paths appear in the asset picker automatically. Supported formats: .feature files (Cucumber), .json collections (Newman), .java files with pom.xml (Playwright, RestAssured, Karate).</div>
         </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Import from GitHub or ZIP</h2><span class="tag">Remote imports</span></div>
+          <p class="hint">Import test scripts from a GitHub repository or upload a ZIP file. The runner will auto-discover and scan the imported scripts.</p>
+
+          <!-- GitHub Import -->
+          <div style="margin-bottom:16px">
+            <h3 style="font-size:14px;margin:0 0 8px;display:flex;align-items:center;gap:6px">🔗 Import from GitHub</h3>
+            <div style="display:flex;gap:8px">
+              <input id="githubRepoUrl" type="text" placeholder="https://github.com/username/repo" style="flex:1">
+              <button class="btn primary" onclick="importFromGitHub()">Clone</button>
+            </div>
+            <div class="hint" style="margin-top:6px">Enter a public GitHub repository URL. The repo will be cloned to the imports folder and scanned for test scripts.</div>
+          </div>
+
+          <!-- ZIP Upload -->
+          <div style="margin-bottom:16px">
+            <h3 style="font-size:14px;margin:0 0 8px;display:flex;align-items:center;gap:6px">📦 Import from ZIP file</h3>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="file" id="zipFileInput" accept=".zip" style="flex:1">
+              <button class="btn primary" onclick="importFromZip()">Upload</button>
+            </div>
+            <div class="hint" style="margin-top:6px">Upload a ZIP file containing test scripts. Max file size: 50MB.</div>
+          </div>
+
+          <!-- Imports List -->
+          <div id="importsList"><div class="empty">No imports yet. Clone a GitHub repo or upload a ZIP file.</div></div>
+        </section>
       </div>
     </div>
   </main>
@@ -309,6 +336,8 @@
       renderAssets();
       // Render shared paths
       renderSharedPaths(body.sharedPaths || []);
+      // Render imports
+      renderImports(body.imports || []);
     } catch (error) {
       document.getElementById("connectionStatus").textContent = "Runner connection failed";
       notify(error.message);
@@ -768,6 +797,138 @@
     } catch (error) {
       notify(error.message);
     }
+  }
+
+  // ============================================================
+  // Remote Imports (GitHub / ZIP)
+  // ============================================================
+
+  async function importFromGitHub() {
+    const urlInput = document.getElementById("githubRepoUrl");
+    const repoUrl = urlInput.value.trim();
+    if (!repoUrl) {
+      notify("Please enter a GitHub repository URL.");
+      return;
+    }
+    if (!repoUrl.startsWith("https://github.com/") && !repoUrl.startsWith("git@github.com:")) {
+      notify("Only GitHub repositories are supported.");
+      return;
+    }
+    try {
+      notify("Cloning repository... This may take a moment.");
+      const result = await api("/api/imports/github", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({repoUrl})
+      });
+      urlInput.value = "";
+      notify("✅ Repository cloned: " + result.name);
+      // Scan the imported repo
+      const scanResult = await api(`/api/imports/${result.id}/scan`, {method: "POST"});
+      notify("Found " + scanResult.totalAssets + " test asset(s) in the imported repo.");
+      await loadCatalog();
+    } catch (error) {
+      notify("Import failed: " + error.message);
+    }
+  }
+
+  async function importFromZip() {
+    const fileInput = document.getElementById("zipFileInput");
+    const file = fileInput.files[0];
+    if (!file) {
+      notify("Please select a ZIP file.");
+      return;
+    }
+    if (!file.name.endsWith(".zip")) {
+      notify("Please select a valid ZIP file.");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      notify("ZIP file is too large (max 50MB).");
+      return;
+    }
+    try {
+      notify("Uploading and extracting ZIP file...");
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/imports/zip", {
+        method: "POST",
+        body: formData
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Upload failed");
+      fileInput.value = "";
+      notify("✅ ZIP extracted: " + result.name);
+      // Scan the imported ZIP
+      const scanResult = await api(`/api/imports/${result.id}/scan`, {method: "POST"});
+      notify("Found " + scanResult.totalAssets + " test asset(s) in the ZIP file.");
+      await loadCatalog();
+    } catch (error) {
+      notify("Import failed: " + error.message);
+    }
+  }
+
+  async function scanImport(id) {
+    const resultDiv = document.getElementById("importScanResult-" + id);
+    if (resultDiv) resultDiv.innerHTML = '<div style="padding:12px;background:#f0f3f9;border-radius:8px;font-size:12px">🔍 Scanning...</div>';
+    try {
+      const result = await api(`/api/imports/${id}/scan`, {method: "POST"});
+      let html = '<div style="padding:12px;background:#f0fff4;border-radius:8px;font-size:12px">';
+      html += `<strong>✅ Scan complete!</strong> Found <strong>${result.totalAssets}</strong> test asset(s).<br><br>`;
+      if (result.frameworks && result.frameworks.length > 0) {
+        html += "<strong>Detected frameworks:</strong><br>";
+        result.frameworks.forEach(fw => {
+          html += `${fw.icon} <strong>${escapeHtml(fw.label)}</strong>: ${fw.count} test(s)<br>`;
+        });
+        html += "<br>";
+      }
+      if (result.assets && result.assets.length > 0) {
+        html += "<strong>Discovered tests:</strong><br>";
+        result.assets.forEach(asset => {
+          const fileName = asset.selection.split('/').pop();
+          html += `📄 ${escapeHtml(fileName)} <small style="color:#666">(${escapeHtml(asset.kind)})</small><br>`;
+        });
+      }
+      html += '</div>';
+      if (resultDiv) resultDiv.innerHTML = html;
+      await loadCatalog();
+      notify("Import scanned: found " + result.totalAssets + " test asset(s).");
+    } catch (error) {
+      if (resultDiv) resultDiv.innerHTML = `<div style="padding:12px;background:#fff0f0;border-radius:8px;font-size:12px"><strong>❌ Scan failed:</strong> ${escapeHtml(error.message)}</div>`;
+      notify("Scan failed: " + error.message);
+    }
+  }
+
+  async function removeImport(id) {
+    if (!confirm("Remove this import and delete its files?")) return;
+    try {
+      await api(`/api/imports/${id}`, {method: "DELETE"});
+      notify("Import removed.");
+      await loadCatalog();
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  function renderImports(imports) {
+    const container = document.getElementById("importsList");
+    if (!imports || imports.length === 0) {
+      container.innerHTML = '<div class="empty">No imports yet. Clone a GitHub repo or upload a ZIP file.</div>';
+      return;
+    }
+    let html = '';
+    imports.forEach(imp => {
+      const typeIcon = imp.type === "github" ? "🔗" : "📦";
+      const typeLabel = imp.type === "github" ? "GitHub" : "ZIP";
+      html += `<div class="asset">`;
+      html += `<div class="asset-name"><strong>${typeIcon} ${escapeHtml(imp.name)}</strong>`;
+      html += `<small>(${typeLabel}: ${escapeHtml(imp.source ? imp.source.substring(0, 60) + (imp.source.length > 60 ? '...' : '') : 'N/A')})</small></div>`;
+      html += `<button class="btn secondary" onclick="scanImport('${imp.id}')">🔍 Scan</button>`;
+      html += `<button class="btn secondary" onclick="removeImport('${imp.id}')" style="color:#e53e3e">🗑️</button>`;
+      html += `</div>`;
+      html += `<div id="importScanResult-${imp.id}" style="margin:8px 0 12px 0"></div>`;
+    });
+    container.innerHTML = html;
   }
 
   // ============================================================
