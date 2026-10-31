@@ -1,0 +1,8 @@
+{
+  "name": "unified-qa-runner",
+  "private": true,
+  "description": "Local Newman runtime for Unified QA Runner",
+  "devDependencies": {
+    "newman": "6.2.1"
+  }
+}

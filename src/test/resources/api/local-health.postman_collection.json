@@ -1,0 +1,53 @@
+{
+  "info": {
+    "name": "Local health check",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health endpoint",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Readiness check",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/ready"
+      }
+    },
+    {
+      "name": "Version info",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/version"
+      }
+    },
+    {
+      "name": "Echo POST",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"message\":\"hello\"}"
+        },
+        "url": "{{baseUrl}}/echo"
+      }
+    },
+    {
+      "name": "Server info",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/info"
+      }
+    }
+  ]
+}

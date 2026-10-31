@@ -1,0 +1,11 @@
+# Copy to test.properties and configure values for your environment.
+ui.baseUrl=https://demoqa.com
+amazon.baseUrl=https://www.amazon.com
+
+api.baseUrl=https://jsonplaceholder.typicode.com
+api.allowedHosts=jsonplaceholder.typicode.com
+api.username=
+api.password=
+
+test.browser=chrome
+test.headless=true

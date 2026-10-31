@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unified QA Runner</title>
+  <style>
+    :root{font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f4f6fb;--blue:#315eea;--line:#e1e6ef;--muted:#667085}
+    *{box-sizing:border-box}body{margin:0}.layout{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:100vh}
+    aside{padding:24px 16px;background:#10182b;color:#eff3ff}.brand{font-size:18px;font-weight:800;margin:4px 8px 34px}
+    .nav{display:block;color:#b8c2d9;padding:11px 12px;margin:5px 0;border-radius:8px;text-decoration:none}.nav:hover,.nav.active{background:#24304c;color:#fff}
+    .side-note{margin:34px 8px;padding:13px;border:1px solid #34405a;border-radius:10px;color:#c1cbe0;font-size:12px}
+    main{width:min(1440px,100%);margin:auto;padding:28px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+    h1{font-size:27px;margin:4px 0}.eyebrow{color:var(--blue);font-size:11px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}.muted{color:var(--muted)}
+    .status{border:1px solid var(--line);border-radius:999px;background:#fff;padding:7px 12px;font-size:12px}
+    .status.enabled{background:#e5f7ef;color:#16845b;border-color:#16845b}
+    .status.disabled{background:#ffebee;color:#b32b3b;border-color:#b32b3b}
+    .runner-toggle{display:flex;align-items:center;gap:8px}
+    .toggle-switch{position:relative;width:44px;height:24px;cursor:pointer}
+    .toggle-switch input{opacity:0;width:0;height:0}
+    .toggle-slider{position:absolute;inset:0;background:#d5dce8;border-radius:99px;transition:background .2s}
+    .toggle-slider::before{content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:transform .2s}
+    .toggle-switch input:checked+.toggle-slider{background:var(--blue)}
+    .toggle-switch input:checked+.toggle-slider::before{transform:translateX(20px)}
+    .toggle-label{font-size:12px;font-weight:600;user-select:none}
+    .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:18px}
+    .card,.panel{background:#fff;border:1px solid var(--line);border-radius:13px;padding:17px}.label{font-size:12px;color:var(--muted)}.value{font-size:27px;font-weight:800;margin:4px 0}
+    .grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.9fr);gap:17px}.panel{margin-bottom:17px}
+    .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}.panel h2{font-size:16px;margin:0}
+    .tag{font-size:11px;color:#596579;background:#f0f3f9;padding:4px 8px;border-radius:6px}
+    .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.mode{border:1px solid var(--line);padding:12px;border-radius:9px;background:#fff;text-align:left;cursor:pointer;font:inherit}
+    .mode.selected{border-color:var(--blue);background:#edf2ff}.mode b,.mode small{display:block}.mode small{color:var(--muted);margin-top:3px}
+    label{display:block;font-size:12px;font-weight:700;margin:12px 0 5px}
+    select,input[type=url]{width:100%;padding:10px 11px;border:1px solid #d5dce8;border-radius:8px;background:#fff;color:inherit;font:inherit}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.check{display:flex;gap:8px;align-items:flex-start;font-weight:500;line-height:1.4}
+    .buttons{display:flex;gap:9px;margin-top:16px}.btn{border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer}
+    .primary{background:var(--blue);color:#fff}.secondary{background:#fff;border:1px solid var(--line);color:inherit}.btn:disabled{opacity:.55;cursor:wait}
+    .toast{display:none;padding:10px 12px;margin-bottom:14px;border-radius:8px;background:#fff1df;color:#865400}.toast.show{display:block}
+    .hint{font-size:12px;color:var(--muted);margin-top:12px}.empty{text-align:center;color:var(--muted);padding:20px}
+    .pill{display:inline-block;font-size:11px;padding:3px 8px;border-radius:99px;background:#eef1f6;color:#535f72}
+    .pill.PASSED{background:#e5f7ef;color:#16845b}.pill.FAILED,.pill.CANCELLED{background:#ffebee;color:#b32b3b}.pill.RUNNING,.pill.CANCELLING{background:#fff4df;color:#a96500}
+    .pill.SKIPPED{background:#fff4df;color:#a96500}
+    .tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);font-size:12px}th{color:var(--muted)}
+    .detail-table td{vertical-align:top;word-break:break-word}.detail-table pre{margin:4px 0;padding:6px 8px;background:#f4f6fb;border-radius:6px;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto}
+    .detail-error{color:#b32b3b}
+    .screenshot-thumb{width:120px;height:80px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--line);transition:transform .15s}
+    .screenshot-thumb:hover{transform:scale(1.05)}
+    .screenshot-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;justify-content:center;align-items:center;cursor:pointer}
+    .screenshot-modal.show{display:flex}
+    .screenshot-modal img{max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5)}
+    .asset{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}.asset:last-child{border:0}.asset .asset-name{flex:1;min-width:0}.asset strong{display:block;overflow-wrap:anywhere}.asset small{color:var(--muted)}
+    .collection-bar{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;background:#f0f3f9;border-radius:8px;flex-wrap:wrap}
+    .collection-bar label{font-size:12px;font-weight:700;margin:0;cursor:pointer;display:flex;align-items:center;gap:6px}
+    .collection-count{font-size:12px;color:var(--muted);margin-left:auto}
+    .collection-count strong{color:var(--blue)}
+    .asset-checkbox{width:16px;height:16px;cursor:pointer;flex-shrink:0}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;background:#111827;color:#e5e7eb;padding:12px;border-radius:8px;font-size:12px}
+    a{color:var(--blue)}[hidden]{display:none!important}
+    @media(max-width:950px){.layout{grid-template-columns:1fr}aside{display:none}main{padding:18px}.grid{grid-template-columns:1fr}}
+    @media(max-width:560px){.cards{grid-template-columns:1fr 1fr}.row,.modes{grid-template-columns:1fr}.top{align-items:flex-start;gap:12px;flex-direction:column}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand">✓ Unified QA Runner</div>
+    <a class="nav active" href="#dashboard">Dashboard</a>
+    <a class="nav" href="#runner">Test execution</a>
+    <a class="nav" href="#assets">Project test assets</a>
+    <a class="nav" href="#history">Execution reports</a>
+    <div class="side-note"><b>Local execution</b><br><br>Runs checked-in project tests through the existing Maven and Newman runners.</div>
+  </aside>
+  <main id="dashboard">
+    <header class="top">
+      <div><div class="eyebrow">Quality engineering workspace</div><h1>Test execution dashboard</h1>
+        <div class="muted">Run project API collections and UI automation from one place.</div></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="runner-toggle">
+          <label class="toggle-switch" title="Enable or disable the runner">
+            <input type="checkbox" id="runnerToggle" checked onchange="toggleRunner()">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label" id="toggleLabel">Runner enabled</span>
+        </div>
+        <div class="status enabled" id="connectionStatus">Connecting to local runner…</div>
+        <button class="btn secondary" id="exitButton" onclick="exitRunner()">Disable runner</button>
+      </div>
+    </header>
+    <div id="toast" class="toast" role="status"></div>
+    <section class="cards">
+      <div class="card"><div class="label">Discovered assets</div><div class="value" id="assetCount">0</div><div class="label">Project-owned tests</div></div>
+      <div class="card"><div class="label">Total executions</div><div class="value" id="runCount">0</div><div class="label">This runner session</div></div>
+      <div class="card"><div class="label">Passed</div><div class="value" id="passCount">0</div><div class="label">Successful runs</div></div>
+      <div class="card"><div class="label">Failed</div><div class="value" id="failCount">0</div><div class="label">Failed runs</div></div>
+    </section>
+    <div class="grid">
+      <div>
+        <section class="panel" id="runner">
+          <div class="panel-head"><h2>Launch an execution</h2><span class="tag">Real Maven / Newman run</span></div>
+          <div class="modes">
+            <button type="button" class="mode selected" data-mode="frontend" onclick="chooseMode('frontend')">🖥️ <b>Frontend UI</b><small>Selenium Java and Cucumber</small></button>
+            <button type="button" class="mode" data-mode="backend" onclick="chooseMode('backend')">🔌 <b>Backend API</b><small>Postman Newman and RestAssured</small></button>
+          </div>
+          <label for="frameworkSelect">Framework</label>
+          <select id="frameworkSelect" onchange="onFrameworkChange()">
+            <option value="all">All frameworks</option>
+          </select>
+          <label for="assetSelect">Test asset</label>
+          <select id="assetSelect"><option value="">Loading project assets…</option></select>
+          <div class="row">
+            <div>
+              <label for="targetUrl">Target URL</label>
+              <div style="display:flex;gap:6px">
+                <select id="targetUrlPreset" style="flex:0 0 auto;width:auto;min-width:160px" onchange="applyTargetPreset()">
+                  <option value="https://demoqa.com">🖥️ DemoQA</option>
+                  <option value="https://www.amazon.com">🛒 Amazon</option>
+                  <option value="https://jsonplaceholder.typicode.com">📝 JSONPlaceholder</option>
+                  <option value="http://127.0.0.1:8080">🔧 Localhost:8080</option>
+                  <option value="custom">✏️ Custom…</option>
+                </select>
+                <input id="targetUrl" type="url" value="https://demoqa.com" placeholder="https://demoqa.com" style="flex:1" onchange="syncTargetPreset()">
+              </div>
+            </div>
+            <div><label>Browser execution</label><label class="check"><input id="headless" type="checkbox" checked> Run browser tests headlessly</label></div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <div>
+              <label>Browsers to run</label>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
+                <label class="check"><input type="checkbox" id="browserChrome" checked> 🌐 Chrome</label>
+                <label class="check"><input type="checkbox" id="browserFirefox"> 🦊 Firefox</label>
+                <label class="check" style="margin-left:auto"><input type="checkbox" id="browserAll" onchange="toggleAllBrowsers()"> <b>All</b></label>
+              </div>
+            </div>
+          </div>
+          <label class="check" style="margin-top:14px"><input id="authorized" type="checkbox"> I am authorized to test this non-local target</label>
+          <div class="buttons">
+            <button class="btn primary" id="runButton" onclick="runTest()">▶ Run frontend suite</button>
+            <button class="btn primary" id="runCollectionButton" onclick="runCollection()" style="background:#16845b">▶ Run selected as collection</button>
+            <button class="btn secondary" id="stopButton" onclick="cancelRun()" disabled>Stop</button>
+          </div>
+          <div class="hint">Only discovered project assets can be launched. Remote targets require authorization and are checked by the runner before execution.</div>
+        </section>
+        <section class="panel" id="assets">
+          <div class="panel-head"><h2>Cucumber feature files</h2><span class="tag" id="featureCount">0 features</span></div>
+          <p class="hint">Check features to run them as a collection, or click Select to run a single feature.</p>
+          <label for="featureSearch">Find a feature</label>
+          <input id="featureSearch" type="search" placeholder="Search feature names…" autocomplete="off">
+          <div id="assetList"><div class="empty">Loading feature files…</div></div>
+          <div class="collection-bar" id="collectionBar" hidden>
+            <label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"> Select all</label>
+            <span class="collection-count"><strong id="selectedCount">0</strong> features selected</span>
+          </div>
+          <div class="hint">For safety, opt-in Amazon scenarios and manual security UI scenarios are not available in the runner.</div>
+        </section>
+      </div>
+      <div>
+        <section class="panel">
+          <div class="panel-head"><h2>Latest execution</h2><span class="tag">Live status</span></div>
+          <div id="latest"><div class="empty">No execution yet. Select an asset and click Run.</div></div>
+        </section>
+        <section class="panel" id="history">
+          <div class="panel-head"><h2>Execution history</h2></div>
+          <div class="tablewrap"><table><thead><tr><th>Run ID</th><th>Test asset</th><th>Status</th><th>Time</th></tr></thead>
+            <tbody id="historyBody"><tr><td colspan="4" class="empty">No reports yet.</td></tr></tbody></table></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Runner output</h2><span class="tag">Credentials redacted</span></div>
+          <pre id="output">Output from the latest run will appear here.</pre>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Shared script paths</h2><span class="tag">External scripts</span></div>
+          <p class="hint">Add a shared folder path where test scripts are deployed. The runner will auto-discover scripts from these paths.</p>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input id="sharedPathDir" type="text" placeholder="Enter absolute path (e.g., C:\shared\tests)" style="flex:1">
+            <input type="file" id="sharedPathFolderPicker" webkitdirectory multiple style="display:none" onchange="handleFolderPicker(event)">
+            <button class="btn secondary" onclick="document.getElementById('sharedPathFolderPicker').click()">📁 Browse</button>
+            <button class="btn primary" onclick="addSharedPath()">Add</button>
+          </div>
+          <div id="sharedPathWarning" style="display:none;padding:8px 12px;margin-bottom:12px;background:#fff0f0;border:1px solid #ff4444;border-radius:8px;font-size:13px;color:#8b0000">
+            <strong>⚠️ Warning:</strong> Please use an <strong>absolute path</strong> (e.g., <code>C:\shared\tests</code> or <code>/home/user/tests</code>). Relative paths are not supported.
+          </div>
+          <div id="sharedPathList"><div class="empty">No shared paths configured.</div></div>
+          <div class="hint">Scripts dropped in shared paths appear in the asset picker automatically. Supported formats: .feature files (Cucumber), .json collections (Newman), .java files with pom.xml (Playwright).</div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="screenshot-modal" id="screenshotModal" onclick="closeScreenshotModal()">
+  <img id="screenshotFull" src="" alt="Screenshot">
+</div>
+<script>
+  const frameworks = [
+    {name: "cucumber", label: "Cucumber/Selenium", icon: "🎯"},
+    {name: "newman", label: "Postman/Newman", icon: "🔌"},
+    {name: "playwright", label: "Playwright Java", icon: "🎭"},
+    {name: "karate", label: "Karate DSL", icon: "🥋"},
+    {name: "wdio", label: "WebdriverIO", icon: "🌐"}
+  ];
+  let mode = "frontend", selectedFramework = "all", assets = [], runs = [], activeRunId = null, pollTimer = null, runnerEnabled = true;
+
+  function notify(message) {
+    const toast = document.getElementById("toast");
+    toast.textContent = message;
+    toast.classList.add("show");
+    window.setTimeout(() => toast.classList.remove("show"), 5000);
+  }
+  async function api(url, options = {}) {
+    const response = await fetch(url, {cache: "no-store", ...options});
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `Runner returned HTTP ${response.status}`);
+    return body;
+  }
+  function chooseMode(nextMode) {
+    mode = nextMode;
+    document.querySelectorAll(".mode").forEach(button =>
+      button.classList.toggle("selected", button.dataset.mode === mode));
+    document.getElementById("runButton").textContent =
+      mode === "frontend" ? "▶ Run frontend suite" : "▶ Run backend collection";
+    renderAssetOptions();
+  }
+  function onFrameworkChange() {
+    selectedFramework = document.getElementById("frameworkSelect").value;
+    renderAssetOptions();
+    renderAssets();
+  }
+  async function loadStatus() {
+    try {
+      const body = await api("/api/status");
+      runnerEnabled = body.enabled;
+      updateToggleUI();
+    } catch (error) {
+      // Ignore status errors; default to enabled
+    }
+  }
+  function updateToggleUI() {
+    const toggle = document.getElementById("runnerToggle");
+    const label = document.getElementById("toggleLabel");
+    const status = document.getElementById("connectionStatus");
+    toggle.checked = runnerEnabled;
+    label.textContent = runnerEnabled ? "Runner enabled" : "Runner disabled";
+    status.textContent = runnerEnabled ? "Local runner connected" : "Runner disabled";
+    status.className = "status " + (runnerEnabled ? "enabled" : "disabled");
+    document.getElementById("runButton").disabled = !!activeRunId || !runnerEnabled;
+  }
+  async function toggleRunner() {
+    const newEnabled = document.getElementById("runnerToggle").checked;
+    try {
+      const endpoint = newEnabled ? "/api/enable" : "/api/disable";
+      await api(endpoint, {method: "POST"});
+      runnerEnabled = newEnabled;
+      updateToggleUI();
+      notify(newEnabled ? "Runner enabled — you can now execute tests." : "Runner disabled — tests will not execute until re-enabled.");
+    } catch (error) {
+      document.getElementById("runnerToggle").checked = runnerEnabled;
+      notify(error.message);
+    }
+  }
+  async function loadCatalog() {
+    try {
+      const body = await api("/api/catalog");
+      assets = body.assets;
+      document.getElementById("assetCount").textContent = assets.length;
+      updateToggleUI();
+      // Populate framework selector
+      const fwSelect = document.getElementById("frameworkSelect");
+      fwSelect.replaceChildren();
+      fwSelect.add(new Option("All frameworks", "all"));
+      frameworks.forEach(fw => {
+        const count = assets.filter(a => a.kind === fw.name).length;
+        fwSelect.add(new Option(`${fw.icon} ${fw.label}${count ? ' (' + count + ')' : ''}`, fw.name));
+      });
+      renderAssetOptions();
+      renderAssets();
+      // Render shared paths
+      renderSharedPaths(body.sharedPaths || []);
+    } catch (error) {
+      document.getElementById("connectionStatus").textContent = "Runner connection failed";
+      notify(error.message);
+    }
+  }
+  function renderAssetOptions() {
+    const availableKinds = mode === "frontend" ? ["cucumber", "playwright", "wdio"] : ["newman", "karate"];
+    let choices = assets.filter(asset => availableKinds.includes(asset.kind));
+    if (selectedFramework !== "all") {
+      choices = choices.filter(asset => asset.kind === selectedFramework);
+    }
+    const select = document.getElementById("assetSelect");
+    const previous = select.value;
+    select.replaceChildren();
+    if (!choices.length) {
+      select.add(new Option("No compatible project tests found", ""));
+      return;
+    }
+    choices.forEach(asset => {
+      const option = new Option(`${asset.selection} — ${asset.label}`, `${asset.kind}|${asset.selection}`);
+      select.add(option);
+    });
+    if ([...select.options].some(option => option.value === previous)) select.value = previous;
+    select.onchange = () => autoFillTargetUrl();
+  }
+  function autoFillTargetUrl() {
+    const value = document.getElementById("assetSelect").value;
+    if (!value) return;
+    const [, selection] = value.split("|");
+    const asset = assets.find(a => a.selection === selection);
+    if (asset && asset.defaultTargetUrl) {
+      document.getElementById("targetUrl").value = asset.defaultTargetUrl;
+      syncTargetPreset();
+    }
+  }
+  function applyTargetPreset() {
+    const preset = document.getElementById("targetUrlPreset").value;
+    if (preset !== "custom") {
+      document.getElementById("targetUrl").value = preset;
+    }
+  }
+  function syncTargetPreset() {
+    const url = document.getElementById("targetUrl").value;
+    const preset = document.getElementById("targetUrlPreset");
+    const match = [...preset.options].find(opt => opt.value === url);
+    if (match) {
+      preset.value = url;
+    } else {
+      preset.value = "custom";
+    }
+  }
+  function renderAssets() {
+    const list = document.getElementById("assetList");
+    // Show all framework assets, not just CUCUMBER_FEATURE
+    let allAssets = assets;
+    if (selectedFramework !== "all") {
+      allAssets = assets.filter(asset => asset.kind === selectedFramework);
+    }
+    const search = document.getElementById("featureSearch").value.trim().toLowerCase();
+    const filtered = allAssets.filter(asset => asset.selection.toLowerCase().includes(search));
+    const fwLabel = selectedFramework === "all" ? "assets" : selectedFramework;
+    document.getElementById("featureCount").textContent =
+      `${allAssets.length} ${allAssets.length === 1 ? "asset" : "assets"}`;
+    const collectionBar = document.getElementById("collectionBar");
+    if (!allAssets.length) {
+      list.innerHTML = '<div class="empty">No test assets found for this framework.</div>';
+      collectionBar.hidden = true;
+      return;
+    }
+    collectionBar.hidden = false;
+    if (!filtered.length) {
+      list.innerHTML = '<div class="empty">No asset names match this search.</div>';
+      return;
+    }
+    list.innerHTML = filtered.map(asset => {
+      const index = allAssets.indexOf(asset);
+      const fw = frameworks.find(f => f.name === asset.kind);
+      const icon = fw ? fw.icon : "📄";
+      return `<div class="asset">` +
+        `<input type="checkbox" class="asset-checkbox" data-selection="${escapeHtml(asset.selection)}" data-kind="${escapeHtml(asset.kind)}" onchange="updateSelectedCount()">` +
+        `<div class="asset-name"><strong>${icon} ${escapeHtml(asset.selection)}</strong>` +
+        `<small>${escapeHtml(asset.label)}</small></div>` +
+        `<button class="btn secondary" type="button" onclick="selectAsset(${index})">Select</button></div>`;
+    }).join("");
+    updateSelectedCount();
+  }
+  function updateSelectedCount() {
+    const checked = document.querySelectorAll('.asset-checkbox:checked').length;
+    document.getElementById("selectedCount").textContent = checked;
+    document.getElementById("runCollectionButton").disabled = !!activeRunId || !runnerEnabled || checked === 0;
+    // Update select-all checkbox state
+    const allCheckboxes = document.querySelectorAll('.asset-checkbox');
+    const selectAll = document.getElementById("selectAllCheckbox");
+    if (selectAll) {
+      selectAll.checked = allCheckboxes.length > 0 && checked === allCheckboxes.length;
+      selectAll.indeterminate = checked > 0 && checked < allCheckboxes.length;
+    }
+  }
+  function toggleSelectAll() {
+    const checked = document.getElementById("selectAllCheckbox").checked;
+    document.querySelectorAll('.asset-checkbox').forEach(cb => cb.checked = checked);
+    updateSelectedCount();
+  }
+  function selectAsset(index) {
+    let allAssets = assets;
+    if (selectedFramework !== "all") {
+      allAssets = assets.filter(asset => asset.kind === selectedFramework);
+    }
+    const asset = allAssets[index];
+    if (!asset) return;
+    const isFrontend = ["cucumber", "playwright", "wdio"].includes(asset.kind);
+    chooseMode(isFrontend ? "frontend" : "backend");
+    document.getElementById("assetSelect").value = `${asset.kind}|${asset.selection}`;
+    autoFillTargetUrl();
+    document.getElementById("runner").scrollIntoView({behavior: "smooth", block: "start"});
+  }
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character =>
+      ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[character]));
+  }
+  function getSelectedBrowsers() {
+    const browsers = [];
+    if (document.getElementById("browserChrome").checked) browsers.push("chrome");
+    if (document.getElementById("browserFirefox").checked) browsers.push("firefox");
+    return browsers.length > 0 ? browsers : ["chrome"];
+  }
+  function toggleAllBrowsers() {
+    const all = document.getElementById("browserAll").checked;
+    document.getElementById("browserChrome").checked = all;
+    document.getElementById("browserFirefox").checked = all;
+  }
+  async function runTest() {
+    if (activeRunId) return;
+    const [kind, selection] = document.getElementById("assetSelect").value.split("|");
+    if (!kind || !selection) {
+      notify("Choose a discovered test asset first.");
+      return;
+    }
+    try {
+      const run = await api("/api/runs", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          kind, selection,
+          targetUrl: document.getElementById("targetUrl").value,
+          authorized: document.getElementById("authorized").checked,
+          headless: document.getElementById("headless").checked,
+          browsers: getSelectedBrowsers()
+        })
+      });
+      activeRunId = run.id;
+      updateControls();
+      await refreshRuns();
+      pollTimer = window.setInterval(refreshRuns, 1000);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+  async function runCollection() {
+    if (activeRunId) return;
+    const checkedBoxes = [...document.querySelectorAll('.asset-checkbox:checked')];
+    const selections = checkedBoxes.map(cb => cb.dataset.selection);
+    if (selections.length === 0) {
+      notify("Check at least one asset to run as a collection.");
+      return;
+    }
+    try {
+      const run = await api("/api/runs", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          selections,
+          targetUrl: document.getElementById("targetUrl").value,
+          authorized: document.getElementById("authorized").checked,
+          headless: document.getElementById("headless").checked,
+          browsers: getSelectedBrowsers()
+        })
+      });
+      activeRunId = run.id;
+      updateControls();
+      await refreshRuns();
+      pollTimer = window.setInterval(refreshRuns, 1000);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+  async function cancelRun() {
+    if (!activeRunId) return;
+    try {
+      await api(`/api/runs/${encodeURIComponent(activeRunId)}`, {method: "DELETE"});
+      notify("Stop requested.");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+  async function exitRunner() {
+    if (runnerEnabled) {
+      if (!confirm("Disable the runner? Tests will not execute until re-enabled.")) return;
+      try {
+        await api("/api/disable", {method: "POST"});
+        runnerEnabled = false;
+        updateToggleUI();
+        document.getElementById("exitButton").textContent = "Enable runner";
+        notify("Runner disabled — tests will not execute until re-enabled.");
+      } catch (error) {
+        notify(error.message);
+      }
+    } else {
+      try {
+        await api("/api/enable", {method: "POST"});
+        runnerEnabled = true;
+        updateToggleUI();
+        document.getElementById("exitButton").textContent = "Disable runner";
+        notify("Runner enabled — you can now execute tests.");
+      } catch (error) {
+        notify(error.message);
+      }
+    }
+  }
+  async function refreshRuns() {
+    try {
+      const body = await api("/api/runs");
+      runs = body.runs;
+      activeRunId = runs.find(run => run.status === "RUNNING" || run.status === "CANCELLING")?.id || null;
+      updateControls();
+      renderRuns();
+      if (!activeRunId && pollTimer) {
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+  function updateControls() {
+    document.getElementById("runButton").disabled = !!activeRunId || !runnerEnabled;
+    document.getElementById("stopButton").disabled = !activeRunId;
+  }
+  function renderRuns() {
+    document.getElementById("runCount").textContent = runs.length;
+    document.getElementById("passCount").textContent = runs.filter(run => run.status === "PASSED").length;
+    document.getElementById("failCount").textContent = runs.filter(run => run.status === "FAILED").length;
+    document.getElementById("historyBody").innerHTML = runs.length ? runs.map(run =>
+      `<tr><td>${escapeHtml(run.id)}</td><td>${escapeHtml(run.selection)}</td>` +
+      `<td><span class="pill ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span></td>` +
+      `<td>${escapeHtml(new Date(run.startedAt).toLocaleString())}</td></tr>`
+    ).join("") : '<tr><td colspan="4" class="empty">No reports yet.</td></tr>';
+    const latest = runs[0];
+    if (!latest) return;
+    const summary = latest.summary;
+    let detailsHtml = "";
+    if (summary && summary.details && summary.details.length) {
+      detailsHtml = `<div class="tablewrap" style="margin-top:12px"><table class="detail-table"><thead><tr>` +
+        `<th>#</th><th>Name</th><th>Status</th><th>Request</th><th>Response</th><th>Screenshot</th>` +
+        `</tr></thead><tbody>` +
+        summary.details.map((d, i) => {
+          const statusClass = d.status || "";
+          const responseText = d.response ? `<pre>${escapeHtml(d.response)}</pre>` : "";
+          let screenshotCell = "";
+          if (d.screenshotPath) {
+            const src = "/" + d.screenshotPath;
+            screenshotCell = `<img class="screenshot-thumb" src="${escapeHtml(src)}" alt="Screenshot" onclick="openScreenshotModal('${escapeHtml(src)}')">`;
+          } else if (d.errorMessage) {
+            screenshotCell = `<pre class="detail-error">${escapeHtml(d.errorMessage)}</pre>`;
+          }
+          return `<tr>` +
+            `<td>${i + 1}</td>` +
+            `<td>${escapeHtml(d.name)}</td>` +
+            `<td><span class="pill ${escapeHtml(statusClass)}">${escapeHtml(statusClass)}</span></td>` +
+            `<td>${escapeHtml(d.request || "")}</td>` +
+            `<td>${responseText}</td>` +
+            `<td>${screenshotCell}</td>` +
+            `</tr>`;
+        }).join("") +
+        `</tbody></table></div>`;
+    }
+    document.getElementById("latest").innerHTML =
+      `<div class="eyebrow">${escapeHtml(latest.id)}</div>` +
+      `<h3>${escapeHtml(latest.selection)}</h3>` +
+      `<span class="pill ${escapeHtml(latest.status)}">${escapeHtml(latest.status)}</span>` +
+      `<p class="muted">${escapeHtml(latest.label)} · ${escapeHtml(latest.targetUrl)}</p>` +
+      (summary ? `<p>Total: ${summary.total} · Passed: ${summary.passed} · Failed: ${summary.failed} · Skipped: ${summary.skipped}</p>` : "") +
+      (latest.error ? `<p class="muted">${escapeHtml(latest.error)}</p>` : "") +
+      detailsHtml +
+      (latest.reportUrl ? `<a href="${escapeHtml(latest.reportUrl)}" target="_blank" rel="noopener">Open HTML report</a>` : "");
+    const output = latest.logs || [];
+    document.getElementById("output").textContent = output.length
+      ? output.join("\n") : (latest.error || "Waiting for runner output…");
+  }
+  document.getElementById("featureSearch").addEventListener("input", renderAssets);
+  loadStatus();
+  loadCatalog();
+  refreshRuns();
+
+  function openScreenshotModal(src) {
+    event.stopPropagation();
+    document.getElementById("screenshotFull").src = src;
+    document.getElementById("screenshotModal").classList.add("show");
+  }
+  function closeScreenshotModal() {
+    document.getElementById("screenshotModal").classList.remove("show");
+  }
+
+  // Shared path management
+  function handleFolderPicker(event) {
+    const files = event.target.files;
+    if (files.length === 0) return;
+    const paths = Array.from(files).map(f => f.webkitRelativePath || f.name);
+    if (paths.length === 0) return;
+    let commonPath = paths[0];
+    for (let i = 1; i < paths.length; i++) {
+      const parts1 = commonPath.split('/');
+      const parts2 = paths[i].split('/');
+      const commonParts = [];
+      for (let j = 0; j < Math.min(parts1.length, parts2.length); j++) {
+        if (parts1[j] === parts2[j]) {
+          commonParts.push(parts1[j]);
+        } else {
+          break;
+        }
+      }
+      commonPath = commonParts.join('/');
+    }
+    const folderName = commonPath.split('/').pop() || commonPath;
+    const pathInput = document.getElementById("sharedPathDir");
+    pathInput.value = commonPath;
+    pathInput.focus();
+    pathInput.select();
+    notify("Folder selected: " + folderName + ". Edit the path to the full absolute path (e.g., C:\\shared\\" + folderName + ").");
+    event.target.value = "";
+  }
+
+  function deriveNameFromPath(path) {
+    // Extract the last folder name from the path
+    const normalized = path.replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : path;
+  }
+
+  function isAbsolutePath(path) {
+    // Windows: starts with drive letter like C:\ or C:/
+    // Unix: starts with /
+    return /^[A-Za-z]:[/\\]/.test(path) || path.startsWith('/');
+  }
+
+  function showPathWarning(show) {
+    document.getElementById("sharedPathWarning").style.display = show ? "block" : "none";
+  }
+
+  function renderSharedPaths(paths) {
+    const list = document.getElementById("sharedPathList");
+    if (!paths || paths.length === 0) {
+      list.innerHTML = '<div class="empty">No shared paths configured.</div>';
+      return;
+    }
+    list.innerHTML = paths.map(p =>
+      `<div class="asset">
+        <div class="asset-name">
+          <strong>${escapeHtml(p.name)}</strong>
+          <small>${escapeHtml(p.path)}</small>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn primary" style="padding:4px 10px;font-size:11px"
+            onclick="scanSharedPath('${escapeHtml(p.name)}')">🔍 Scan</button>
+          <button class="btn secondary" style="padding:4px 10px;font-size:11px"
+            onclick="removeSharedPath('${escapeHtml(p.name)}')">Remove</button>
+        </div>
+        <div id="scanResult-${escapeHtml(p.name)}" style="margin-top:8px;display:none"></div>
+      </div>`
+    ).join("");
+  }
+
+  async function scanSharedPath(name) {
+    const resultDiv = document.getElementById("scanResult-" + name);
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML = '<div style="padding:12px;background:#f0f4ff;border-radius:8px;font-size:12px"><strong>🔍 Scanning...</strong><br>Reading files and detecting frameworks.</div>';
+    try {
+      const result = await api(`/api/shared-paths/${encodeURIComponent(name)}/scan`, {
+        method: "POST"
+      });
+      let html = '<div style="padding:12px;background:#f0fff4;border-radius:8px;font-size:12px">';
+      html += `<strong>✅ Scan complete!</strong> Found <strong>${result.totalAssets}</strong> test asset(s).<br><br>`;
+      if (result.frameworks && result.frameworks.length > 0) {
+        html += "<strong>Detected frameworks:</strong><br>";
+        result.frameworks.forEach(fw => {
+          html += `${fw.icon} <strong>${escapeHtml(fw.label)}</strong>: ${fw.count} test(s)<br>`;
+        });
+        html += "<br>";
+      }
+      if (result.assets && result.assets.length > 0) {
+        html += "<strong>Discovered tests:</strong><br>";
+        result.assets.forEach(asset => {
+          const fileName = asset.selection.split('/').pop();
+          html += `📄 ${escapeHtml(fileName)} <small style="color:#666">(${escapeHtml(asset.kind)})</small><br>`;
+        });
+      }
+      html += '</div>';
+      resultDiv.innerHTML = html;
+      // Refresh the main catalog to include newly discovered assets
+      await loadCatalog();
+      notify("Scanned '" + name + "': found " + result.totalAssets + " test asset(s).");
+    } catch (error) {
+      resultDiv.innerHTML = `<div style="padding:12px;background:#fff0f0;border-radius:8px;font-size:12px"><strong>❌ Scan failed:</strong> ${escapeHtml(error.message)}</div>`;
+      notify("Scan failed: " + error.message);
+    }
+  }
+
+  async function addSharedPath() {
+    const pathInput = document.getElementById("sharedPathDir");
+    const path = pathInput.value.trim();
+    if (!path) {
+      notify("Please enter a directory path.");
+      showPathWarning(false);
+      return;
+    }
+    // Check if the path is absolute
+    if (!isAbsolutePath(path)) {
+      showPathWarning(true);
+      notify("⚠️ Please use an absolute path (e.g., C:\\shared\\tests). Relative paths are not supported.");
+      return;
+    }
+    showPathWarning(false);
+    // Derive the name from the last folder in the path
+    const name = deriveNameFromPath(path);
+    try {
+      await api("/api/shared-paths", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name, path})
+      });
+      pathInput.value = "";
+      notify("Shared path '" + name + "' added. Scanning for test scripts...");
+      // Reload catalog to discover assets from the new shared path
+      const newCatalog = await api("/api/catalog");
+      const newAssetCount = newCatalog.assets.length;
+      assets = newCatalog.assets;
+      document.getElementById("assetCount").textContent = newAssetCount;
+      renderAssetOptions();
+      renderAssets();
+      renderSharedPaths(newCatalog.sharedPaths || []);
+      notify("Done! Found " + newAssetCount + " total test assets (including " + 
+        newCatalog.assets.filter(a => a.selection.includes(path.replace(/\\/g, '/'))).length + 
+        " from the new shared path).");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function removeSharedPath(name) {
+    if (!confirm("Remove shared path '" + name + "'?")) return;
+    try {
+      await api(`/api/shared-paths/${encodeURIComponent(name)}`, {method: "DELETE"});
+      notify("Shared path '" + name + "' removed.");
+      await loadCatalog();
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+</script>
+</body>
+</html>
