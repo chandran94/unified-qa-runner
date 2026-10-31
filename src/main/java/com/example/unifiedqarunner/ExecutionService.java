@@ -59,6 +59,7 @@ final class ExecutionService {
         pluginRegistry.register(new PlaywrightPlugin(projectRoot));
         pluginRegistry.register(new KaratePlugin(projectRoot));
         pluginRegistry.register(new WebdriverIOPlugin(projectRoot));
+        pluginRegistry.register(new RestAssuredPlugin(projectRoot));
     }
 
     /**

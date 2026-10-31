@@ -239,3 +239,10 @@ Allow users to deploy test scripts to a shared folder and have them auto-discove
 - Create Karate example at `C:\shared\karate-tests/` with `pom.xml`, `PostsTest.java`, and `posts.feature` (5 API test scenarios).
 - Verify: Karate example deployed to `C:\shared\karate-tests\`, discovered and executed via UI with 5/5 tests passed.
 - Verify: Scan endpoint detects Karate framework with 1 test asset.
+- Create `RestAssuredPlugin.java` — discovers `*Test.java` files in `tests/restassured/` and shared paths, executes via Maven, parses surefire reports.
+- Register `RestAssuredPlugin` in `ExecutionService.java` and add to UI frameworks list in `index.html`.
+- Update `RunnerServer.java` scan endpoint to detect RestAssured framework with ⚡ icon.
+- Create RestAssured example at `C:\shared\restassured-tests/` with `pom.xml` and `JsonPlaceholderApiTest.java` (10 API test scenarios: GET, POST, PUT, DELETE).
+- Update `qa-runner.json` to include `C:\\shared\\restassured-tests` as a shared path.
+- Verify: RestAssured example deployed to `C:\shared\restassured-tests\`, discovered and executed via UI with 10/10 tests passed.
+- Verify: Scan endpoint detects RestAssured framework with 1 test asset.

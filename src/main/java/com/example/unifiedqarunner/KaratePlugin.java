@@ -69,7 +69,7 @@ public class KaratePlugin implements RunnerPlugin {
                 String fileName = file.getFileName().toString();
                 if (fileName.endsWith(".feature")) {
                     // Skip node_modules, target, and hidden directories
-                    if (file.toString().contains("node_modules") || file.toString().contains("/target/") || fileName.startsWith(".")) {
+                    if (file.toString().contains("node_modules") || file.toString().contains("target") || fileName.startsWith(".")) {
                         continue;
                     }
                     String relativePath = dir.relativize(file).toString().replace('\\', '/');

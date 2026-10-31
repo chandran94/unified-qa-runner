@@ -313,6 +313,7 @@ final class RunnerServer implements AutoCloseable {
                 case "playwright": fw.put("label", "Playwright Java"); fw.put("icon", "🎭"); break;
                 case "karate": fw.put("label", "Karate DSL"); fw.put("icon", "🥋"); break;
                 case "wdio": fw.put("label", "WebdriverIO"); fw.put("icon", "🌐"); break;
+                case "restassured": fw.put("label", "RestAssured"); fw.put("icon", "⚡"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
             }
             fw.put("count", String.valueOf(fc.getValue()));
