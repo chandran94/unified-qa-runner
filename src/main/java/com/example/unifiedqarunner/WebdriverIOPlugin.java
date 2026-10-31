@@ -84,6 +84,13 @@ public class WebdriverIOPlugin implements RunnerPlugin {
         }
     }
 
+    /**
+     * Check if a selection is an API test (located in test/api/ folder).
+     */
+    private boolean isApiTest(String selection) {
+        return selection.contains("/test/api/") || selection.contains("\\test\\api\\");
+    }
+
     @Override
     public ExecutionService.RunResult execute(String selection, String targetUrl, boolean authorized,
                                               boolean headless, List<String> browsers,
@@ -106,30 +113,36 @@ public class WebdriverIOPlugin implements RunnerPlugin {
 
         // Check if this is a shared path test (contains drive letter or starts with /)
         boolean isSharedPath = selection.contains(":") || selection.startsWith("/");
+        boolean isApi = isApiTest(selection);
 
         if (!isSharedPath && selection.startsWith("tests/wdio/")) {
             // Project root test
             workDir = projectRoot;
-            wdioConfPath = "tests/wdio/wdio.conf.js";
+            wdioConfPath = isApi ? "tests/wdio/wdio-api.conf.js" : "tests/wdio/wdio.conf.js";
             specPath = selection;
         } else {
             // Shared path test - find wdio.conf.js and package.json
             Path selectionPath = Path.of(selection.replace('/', java.io.File.separatorChar));
             Path testDir = selectionPath.toAbsolutePath().getParent();
 
-            // Look for wdio.conf.js starting from the test file's directory
-            Path wdioConf = testDir.resolve("wdio.conf.js");
+            // Look for wdio.conf.js (or wdio-api.conf.js for API tests) starting from the test file's directory
+            Path wdioConf = testDir.resolve(isApi ? "wdio-api.conf.js" : "wdio.conf.js");
             if (!Files.isRegularFile(wdioConf)) {
                 // Try parent directories up to 5 levels
                 Path current = testDir;
                 for (int i = 0; i < 5; i++) {
-                    wdioConf = current.resolve("wdio.conf.js");
+                    wdioConf = current.resolve(isApi ? "wdio-api.conf.js" : "wdio.conf.js");
                     if (Files.isRegularFile(wdioConf)) {
                         workDir = current;
                         break;
                     }
                     current = current.getParent();
                     if (current == null) break;
+                }
+                // Fallback to the other config if not found
+                if (!Files.isRegularFile(wdioConf)) {
+                    String fallback = isApi ? "wdio.conf.js" : "wdio-api.conf.js";
+                    wdioConf = current != null ? current.resolve(fallback) : testDir.resolve(fallback);
                 }
                 workDir = current != null ? current : testDir;
             } else {
@@ -206,15 +219,16 @@ public class WebdriverIOPlugin implements RunnerPlugin {
         // If no JSON report found, parse from WDIO output logs
         if (total == 0) {
             for (String line : outputLines) {
-                // Parse "3 passing (4s)" or "1 failing" from WDIO spec reporter output
-                if (line.matches(".*\\d+ passing.*")) {
-                    String num = line.replaceAll(".*(\\d+) passing.*", "$1");
+                String trimmed = line.trim();
+                // Parse "10 passing (2.2s)" from WDIO spec reporter output
+                if (trimmed.matches(".*\\d+ passing.*")) {
+                    String num = trimmed.replaceAll(".*?(\\d+) passing.*", "$1");
                     total += Integer.parseInt(num.trim());
-                } else if (line.matches(".*\\d+ failing.*")) {
-                    String num = line.replaceAll(".*(\\d+) failing.*", "$1");
+                } else if (trimmed.matches(".*\\d+ failing.*")) {
+                    String num = trimmed.replaceAll(".*?(\\d+) failing.*", "$1");
                     failed += Integer.parseInt(num.trim());
-                } else if (line.matches(".*\\d+ pending.*")) {
-                    String num = line.replaceAll(".*(\\d+) pending.*", "$1");
+                } else if (trimmed.matches(".*\\d+ pending.*")) {
+                    String num = trimmed.replaceAll(".*?(\\d+) pending.*", "$1");
                     skipped += Integer.parseInt(num.trim());
                 }
             }
@@ -246,6 +260,9 @@ public class WebdriverIOPlugin implements RunnerPlugin {
 
     @Override
     public String defaultTargetUrl(String selection) {
+        if (isApiTest(selection)) {
+            return "https://jsonplaceholder.typicode.com";
+        }
         return "https://demoqa.com";
     }
 }
