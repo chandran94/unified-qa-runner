@@ -246,3 +246,27 @@ Allow users to deploy test scripts to a shared folder and have them auto-discove
 - Update `qa-runner.json` to include `C:\\shared\\restassured-tests` as a shared path.
 - Verify: RestAssured example deployed to `C:\shared\restassured-tests\`, discovered and executed via UI with 10/10 tests passed.
 - Verify: Scan endpoint detects RestAssured framework with 1 test asset.
+
+### ✓ Step 8: Create ErrorAnalyzer engine in index.html
+Build the client-side error analysis engine with pattern database.
+- Add `ErrorAnalyzer` JavaScript object to `index.html` with `analyze(run)` method.
+- Create pattern database with 20+ error patterns across categories: Network (ERR_CONNECTION_REFUSED, ECONNREFUSED, timeout), Element (NoSuchElementException, stale element), HTTP (404, 500, 502), Driver (NoSuchDriverException), Assertion (AssertionError), Configuration (missing credentials), Cucumber (undefined step), Newman (SSL error), WDIO (session not created).
+- Each pattern includes: regex matcher, category, title, explanation, fix steps, and severity.
+- The analyzer scans logs, error messages, and RunDetail error messages for matches.
+- Returns AnalysisResult with categorized issues sorted by severity.
+
+### ✓ Step 9: Add analysis panel UI to index.html
+Add the AI analysis panel to the UI dashboard below execution details.
+- Add "🔍 Analyze" button that appears on failed runs in the "Latest execution" panel.
+- Create collapsible analysis section with issue cards showing category icon, title, explanation, and suggested fix.
+- Add severity badges (critical/warning/info) and "Copy analysis" button.
+- Auto-trigger analysis when a run completes with FAILED status.
+- Style the panel with consistent colors matching the existing dashboard theme.
+
+### ✓ Step 10: Add analyze API endpoint and verify end-to-end
+Add server-side analyze endpoint and verify the full analysis flow.
+- Add `/api/runs/{id}/analyze` POST endpoint in `RunnerServer.java` that returns run data for analysis.
+- Rebuild and restart the app.
+- Test against known failure scenarios: connection refused, element not found, HTTP 404, missing driver.
+- Verify analysis appears correctly in the UI with proper categorization and fix suggestions.
+- Push changes to GitHub.

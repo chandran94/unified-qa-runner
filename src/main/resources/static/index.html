@@ -49,6 +49,39 @@
     .screenshot-modal.show{display:flex}
     .screenshot-modal img{max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5)}
     .asset{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}.asset:last-child{border:0}.asset .asset-name{flex:1;min-width:0}.asset strong{display:block;overflow-wrap:anywhere}.asset small{color:var(--muted)}
+    /* AI Analysis Panel */
+    .ai-panel{margin-top:16px;border:1px solid #e1e6ef;border-radius:13px;background:#fff;overflow:hidden}
+    .ai-panel-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f0f3f9;cursor:pointer;user-select:none}
+    .ai-panel-header h3{font-size:14px;margin:0;display:flex;align-items:center;gap:8px}
+    .ai-panel-body{padding:16px;display:none}
+    .ai-panel-body.show{display:block}
+    .ai-issue{padding:12px;margin-bottom:10px;border-radius:8px;border-left:4px solid #ddd}
+    .ai-issue.critical{background:#fff5f5;border-left-color:#e53e3e}
+    .ai-issue.warning{background:#fffff0;border-left-color:#ecc94b}
+    .ai-issue.info{background:#f0f7ff;border-left-color:#3182ce}
+    .ai-issue-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .ai-issue-icon{font-size:18px}
+    .ai-issue-title{font-weight:700;font-size:13px}
+    .ai-severity{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:700;text-transform:uppercase}
+    .ai-severity.critical{background:#e53e3e;color:#fff}
+    .ai-severity.warning{background:#ecc94b;color:#744210}
+    .ai-severity.info{background:#3182ce;color:#fff}
+    .ai-issue-explanation{font-size:12px;color:#4a5568;margin-bottom:8px;line-height:1.5}
+    .ai-issue-fix{font-size:12px;background:#f7fafc;padding:8px 12px;border-radius:6px;border:1px solid #e2e8f0}
+    .ai-issue-fix strong{color:#2d3748}
+    .ai-issue-fix ul{margin:4px 0 0 16px;padding:0}
+    .ai-issue-fix li{margin-bottom:2px}
+    .ai-issue-log{font-size:11px;background:#1a202c;color:#e5e7eb;padding:6px 10px;border-radius:4px;margin-top:6px;white-space:pre-wrap;word-break:break-all;max-height:80px;overflow:auto}
+    .ai-summary{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+    .ai-summary-item{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700}
+    .ai-summary-item.critical{background:#fff5f5;color:#e53e3e}
+    .ai-summary-item.warning{background:#fffff0;color:#b7791f}
+    .ai-summary-item.info{background:#f0f7ff;color:#3182ce}
+    .ai-copy-btn{font-size:11px;padding:4px 10px;background:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-weight:600}
+    .ai-copy-btn:hover{background:#f0f3f9}
+    .ai-analyze-btn{font-size:12px;padding:6px 14px;background:#805ad5;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:700;margin-top:10px}
+    .ai-analyze-btn:hover{background:#6b46c1}
+    .ai-no-issues{padding:16px;text-align:center;color:#16845b;background:#e5f7ef;border-radius:8px;font-size:13px}
     .collection-bar{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;background:#f0f3f9;border-radius:8px;flex-wrap:wrap}
     .collection-bar label{font-size:12px;font-weight:700;margin:0;cursor:pointer;display:flex;align-items:center;gap:6px}
     .collection-count{font-size:12px;color:var(--muted);margin-left:auto}
@@ -564,6 +597,8 @@
     const output = latest.logs || [];
     document.getElementById("output").textContent = output.length
       ? output.join("\n") : (latest.error || "Waiting for runner output…");
+    // Render AI analysis panel for failed runs
+    renderAnalysisPanel(latest);
   }
   document.getElementById("featureSearch").addEventListener("input", renderAssets);
   loadStatus();
@@ -733,6 +768,404 @@
     } catch (error) {
       notify(error.message);
     }
+  }
+
+  // ============================================================
+  // AI QA Assistant - ErrorAnalyzer Engine
+  // ============================================================
+  const ErrorAnalyzer = {
+    patterns: [
+      // === NETWORK ERRORS ===
+      {
+        category: "Network",
+        icon: "🌐",
+        regex: /ERR_CONNECTION_REFUSED|ECONNREFUSED|Connection refused|connect ECONNREFUSED/i,
+        title: "Connection Refused",
+        explanation: "The target server is not running or not accessible at the specified URL. The test tried to connect but no service accepted the connection.",
+        fix: ["Verify the target URL is correct and the server is running", "Check if the correct port is specified (e.g., http://localhost:8080)", "If testing locally, ensure the application server is started before running tests", "For DemoQA tests, use https://demoqa.com as the target URL"],
+        severity: "critical"
+      },
+      {
+        category: "Network",
+        icon: "🌐",
+        regex: /ERR_NAME_NOT_RESOLVED|ENOTFOUND|getaddrinfo|DNS resolution/i,
+        title: "DNS Resolution Failed",
+        explanation: "The hostname in the target URL cannot be resolved to an IP address. This usually means the domain name is incorrect or DNS is not working.",
+        fix: ["Check the target URL for typos in the domain name", "Verify your network connection and DNS settings", "Try pinging the target host from the command line", "If using a local hostname, ensure it's configured in your hosts file"],
+        severity: "critical"
+      },
+      {
+        category: "Network",
+        icon: "🌐",
+        regex: /timeout|Timed out|Connection timed out|ETIMEDOUT|read timed out/i,
+        title: "Connection Timeout",
+        explanation: "The test waited for a response from the server but the connection timed out. The server might be slow, overloaded, or the network is unstable.",
+        fix: ["Increase the timeout settings in your test configuration", "Check if the target server is responding (try opening the URL in a browser)", "Verify network connectivity between the test runner and the target", "For flaky tests, add retry logic with exponential backoff"],
+        severity: "warning"
+      },
+      {
+        category: "Network",
+        icon: "🌐",
+        regex: /ERR_INTERNET_DISCONNECTED|No internet|network is unreachable/i,
+        title: "No Internet Connection",
+        explanation: "The machine running the tests has no internet connection. External websites and APIs cannot be reached.",
+        fix: ["Check your network connection and ensure internet access is available", "If behind a proxy, configure the proxy settings in your test environment", "For offline testing, use local mock servers instead of external APIs"],
+        severity: "critical"
+      },
+      // === ELEMENT ERRORS ===
+      {
+        category: "Element",
+        icon: "🔍",
+        regex: /NoSuchElementException|Unable to locate element|element not found|stale element reference/i,
+        title: "Element Not Found",
+        explanation: "The test tried to interact with a UI element that doesn't exist on the page. The element might have a different locator, the page structure changed, or the element hasn't loaded yet.",
+        fix: ["Verify the locator (XPath, CSS selector, ID) matches the current page HTML", "Use explicit waits instead of implicit waits for dynamic content", "Check if the page loaded completely before interacting with elements", "For React/Vue apps, use data-testid attributes for stable locators", "Add a wait for the element to be visible before interacting"],
+        severity: "critical"
+      },
+      {
+        category: "Element",
+        icon: "🔍",
+        regex: /element not interactable|ElementClickIntercepted|element not visible/i,
+        title: "Element Not Interactable",
+        explanation: "The element exists on the page but cannot be interacted with. It might be hidden, covered by another element, or not yet ready for interaction.",
+        fix: ["Scroll the element into view before clicking", "Wait for the element to be clickable using explicit waits", "Check if a modal or overlay is blocking the element", "Use JavaScript click instead of native click if the element is obscured"],
+        severity: "warning"
+      },
+      {
+        category: "Element",
+        icon: "🔍",
+        regex: /NoSuchFrameException|NoSuchWindowException|no such window/i,
+        title: "Frame/Window Not Found",
+        explanation: "The test tried to switch to a frame or window that doesn't exist. The page structure might have changed or the frame/window hasn't loaded.",
+        fix: ["Verify the frame/window exists before switching to it", "Add a wait for the frame/window to be available", "Check if the correct frame index or name is used", "Handle dynamic iframes by waiting for them to load"],
+        severity: "warning"
+      },
+      // === HTTP ERRORS ===
+      {
+        category: "HTTP",
+        icon: "📡",
+        regex: /HTTP [4][0-9][0-9]|status code 4[0-9][0-9]|404 Not Found|403 Forbidden|401 Unauthorized/i,
+        title: "HTTP Client Error (4xx)",
+        explanation: "The server returned a 4xx status code, indicating a client-side error. The request might be malformed, the resource doesn't exist, or authentication is required.",
+        fix: ["Check the request URL, method, and headers for correctness", "Verify authentication tokens or API keys are valid", "For 404 errors, confirm the endpoint path is correct", "For 403/401 errors, check authorization and permissions"],
+        severity: "warning"
+      },
+      {
+        category: "HTTP",
+        icon: "📡",
+        regex: /HTTP [5][0-9][0-9]|status code 5[0-9][0-9]|500 Internal Server Error|502 Bad Gateway|503 Service Unavailable/i,
+        title: "HTTP Server Error (5xx)",
+        explanation: "The server returned a 5xx status code, indicating a server-side error. The application might be crashing, misconfigured, or overloaded.",
+        fix: ["Check the server logs for the root cause of the error", "Verify the server is properly configured and all dependencies are available", "For 502/503 errors, check if the upstream service is running", "Retry the request after a short delay if the error is transient"],
+        severity: "critical"
+      },
+      {
+        category: "HTTP",
+        icon: "📡",
+        regex: /expected (status|statusCode) (to be|===|==) (\d+)|expected (\d+) to (be|equal) (\d+)|status.*mismatch/i,
+        title: "HTTP Status Code Mismatch",
+        explanation: "The test expected a specific HTTP status code but received a different one. The API behavior might have changed or the test expectation is incorrect.",
+        fix: ["Verify the expected status code matches the actual API behavior", "Check if the API response changed recently", "Update the test assertion if the new behavior is correct", "Add logging to see the actual response status and body"],
+        severity: "warning"
+      },
+      // === DRIVER ERRORS ===
+      {
+        category: "Driver",
+        icon: "🚗",
+        regex: /NoSuchDriverException|Unable to obtain.*driver|msedgedriver|geckodriver|chromedriver/i,
+        title: "Browser Driver Not Found",
+        explanation: "The WebDriver binary for the selected browser is not installed or not found. The test cannot launch the browser without the correct driver.",
+        fix: ["Install the correct WebDriver for your browser version", "For Chrome: download chromedriver matching your Chrome version", "For Firefox: download geckodriver matching your Firefox version", "For Edge: download msedgedriver from Microsoft's website", "Place the driver in a directory on your system PATH"],
+        severity: "critical"
+      },
+      {
+        category: "Driver",
+        icon: "🚗",
+        regex: /session not created|SessionNotCreatedException|unable to connect to renderer/i,
+        title: "Browser Session Creation Failed",
+        explanation: "The browser driver started but failed to create a new browser session. This can happen due to version mismatches, corrupted browser profiles, or system resource issues.",
+        fix: ["Ensure the browser and driver versions are compatible", "Close all existing browser instances and retry", "Clear the browser's temporary profile directory", "Restart the test runner if browser processes are stuck"],
+        severity: "critical"
+      },
+      // === ASSERTION ERRORS ===
+      {
+        category: "Assertion",
+        icon: "❌",
+        regex: /AssertionError|assertion.*failed|expected.*to (be|equal|contain|match)|expected.*but got|expected.*to throw/i,
+        title: "Assertion Failed",
+        explanation: "A test assertion failed, meaning the actual result didn't match the expected result. The application behavior differs from what the test expects.",
+        fix: ["Check the actual vs expected values in the error message", "Verify the test data and preconditions are correct", "If the application behavior changed, update the test expectations", "Add more logging to understand what value was returned"],
+        severity: "critical"
+      },
+      {
+        category: "Assertion",
+        icon: "❌",
+        regex: /expected.*to (be true|be false|be null|be undefined|be empty|be greater than|be less than)/i,
+        title: "Value Assertion Failed",
+        explanation: "The test expected a specific value (true/false/null/empty) but got something different. The application state or response doesn't match the test's expectations.",
+        fix: ["Inspect the actual value returned by the application", "Check if the test setup correctly initializes the required state", "Verify the API or UI returns the expected data format", "Update the assertion if the new behavior is correct"],
+        severity: "warning"
+      },
+      // === CONFIGURATION ERRORS ===
+      {
+        category: "Configuration",
+        icon: "⚙️",
+        regex: /missing.*credential|AMAZON_EMAIL|invalid.*config|configuration.*error|config.*not found/i,
+        title: "Missing Configuration or Credentials",
+        explanation: "The test requires configuration values or credentials that are not set. Environment variables, config files, or secrets might be missing.",
+        fix: ["Check the test.properties or environment variables for required values", "For Amazon tests, set AMAZON_EMAIL and AMAZON_PASSWORD environment variables", "Verify all required configuration keys are present", "Use a .env file or secrets manager for sensitive credentials"],
+        severity: "critical"
+      },
+      {
+        category: "Configuration",
+        icon: "⚙️",
+        regex: /file not found|FileNotFoundException|ENOENT|no such file/i,
+        title: "File Not Found",
+        explanation: "The test tried to access a file that doesn't exist. The file path might be incorrect, the file was deleted, or the working directory is wrong.",
+        fix: ["Verify the file path is correct and the file exists", "Check if the file is in the expected directory", "For shared paths, ensure the absolute path is correct", "Verify file permissions allow reading the file"],
+        severity: "warning"
+      },
+      // === CUCUMBER-SPECIFIC ERRORS ===
+      {
+        category: "Cucumber",
+        icon: "🥒",
+        regex: /undefined step|Step definition not found|no step definition/i,
+        title: "Undefined Step Definition",
+        explanation: "A Cucumber scenario has a step that doesn't have a corresponding Java method. The step definition is missing or the regex pattern doesn't match.",
+        fix: ["Add a step definition method for the undefined step", "Check the step text matches the regex pattern in the Java class", "Verify the step definition class is in the correct package", "Use Cucumber's glue path configuration to include all step classes"],
+        severity: "critical"
+      },
+      {
+        category: "Cucumber",
+        icon: "🥒",
+        regex: /ambiguous step|multiple step definitions/i,
+        title: "Ambiguous Step Definition",
+        explanation: "Multiple Java methods match the same Cucumber step. Cucumber can't determine which method to execute.",
+        fix: ["Make step definition regex patterns more specific", "Remove duplicate step definitions", "Use unique prefixes or context in step text", "Add @Given, @When, @Then annotations to distinguish similar steps"],
+        severity: "warning"
+      },
+      // === NEWMAN-SPECIFIC ERRORS ===
+      {
+        category: "Newman",
+        icon: "🔌",
+        regex: /certificate.*error|SSL|TLS|unable to get local issuer certificate|UNABLE_TO_GET_ISSUER_CERT/i,
+        title: "SSL/TLS Certificate Error",
+        explanation: "The Newman collection tried to connect to a server with an invalid or self-signed SSL certificate. The connection was rejected for security reasons.",
+        fix: ["For local development, disable SSL verification in Newman options", "Install the server's SSL certificate in the system trust store", "Use the --insecure-ssl flag in Newman command", "For production, ensure valid SSL certificates are installed"],
+        severity: "warning"
+      },
+      {
+        category: "Newman",
+        icon: "🔌",
+        regex: /newman.*error|collection.*not found|invalid.*collection/i,
+        title: "Newman Collection Error",
+        explanation: "The Newman collection file is invalid, missing, or has syntax errors. Newman cannot parse or execute the collection.",
+        fix: ["Verify the collection JSON file is valid JSON", "Check if the collection file exists at the specified path", "Validate the collection structure using Postman's validator", "Ensure all requests in the collection have valid URLs"],
+        severity: "critical"
+      },
+      // === KARATE-SPECIFIC ERRORS ===
+      {
+        category: "Karate",
+        icon: "🥋",
+        regex: /karate.*error|feature.*not found|classpath.*not found/i,
+        title: "Karate Feature Not Found",
+        explanation: "Karate tried to load a feature file that doesn't exist. The classpath or file path might be incorrect.",
+        fix: ["Verify the feature file exists in the correct location", "Check the classpath configuration in the test runner", "Ensure the feature file path matches the runner configuration", "For shared paths, verify the absolute path is correct"],
+        severity: "critical"
+      },
+      // === WDIO-SPECIFIC ERRORS ===
+      {
+        category: "WebdriverIO",
+        icon: "🌐",
+        regex: /wdio.*error|browser.*not found|capabilities.*error/i,
+        title: "WebdriverIO Configuration Error",
+        explanation: "WebdriverIO failed to start due to a configuration issue. The browser capabilities might be misconfigured or the WebDriver service is not running.",
+        fix: ["Check the wdio.conf.js file for correct browser capabilities", "Verify the WebDriver service is running and accessible", "Ensure all required npm packages are installed", "Check if the browser is installed on the system"],
+        severity: "critical"
+      },
+      // === GENERAL JAVA ERRORS ===
+      {
+        category: "Java",
+        icon: "☕",
+        regex: /NullPointerException|java\.lang\.NullPointerException/i,
+        title: "Null Pointer Exception",
+        explanation: "The test code tried to use an object reference that was null. This usually means a variable wasn't initialized or a method returned null unexpectedly.",
+        fix: ["Add null checks before using object references", "Verify all dependencies are properly injected", "Check if the method that returned null is expected to return a value", "Add logging to identify which variable is null"],
+        severity: "critical"
+      },
+      {
+        category: "Java",
+        icon: "☕",
+        regex: /IllegalArgumentException|IllegalStateException/i,
+        title: "Invalid Argument or State",
+        explanation: "The test passed an invalid argument to a method or tried to perform an operation in an invalid state. The input data or test setup might be incorrect.",
+        fix: ["Check the method parameters and ensure they are valid", "Verify the test setup creates the required state", "Add input validation before calling methods", "Review the method documentation for required preconditions"],
+        severity: "warning"
+      }
+    ],
+
+    analyze(run) {
+      const issues = [];
+      const logs = (run.logs || []).join('\n');
+      const error = run.error || '';
+      const details = run.summary && run.summary.details ? run.summary.details : [];
+      const detailErrors = details.map(d => d.errorMessage || '').join('\n');
+      const allText = logs + '\n' + error + '\n' + detailErrors;
+
+      // Track matched patterns to avoid duplicates
+      const matchedCategories = new Set();
+
+      for (const pattern of this.patterns) {
+        if (pattern.regex.test(allText)) {
+          // Avoid duplicate categories
+          const key = pattern.category + ':' + pattern.title;
+          if (matchedCategories.has(key)) continue;
+          matchedCategories.add(key);
+
+          // Find the matching log line
+          let matchingLog = null;
+          const logLines = run.logs || [];
+          for (const line of logLines) {
+            if (pattern.regex.test(line)) {
+              matchingLog = line;
+              break;
+            }
+          }
+
+          issues.push({
+            category: pattern.category,
+            icon: pattern.icon,
+            title: pattern.title,
+            explanation: pattern.explanation,
+            fix: pattern.fix,
+            severity: pattern.severity,
+            matchingLog: matchingLog
+          });
+        }
+      }
+
+      // Sort by severity: critical > warning > info
+      const severityOrder = { critical: 0, warning: 1, info: 2 };
+      issues.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+      return {
+        totalIssues: issues.length,
+        criticalCount: issues.filter(i => i.severity === 'critical').length,
+        warningCount: issues.filter(i => i.severity === 'warning').length,
+        infoCount: issues.filter(i => i.severity === 'info').length,
+        issues: issues
+      };
+    },
+
+    toText(result) {
+      let text = `QA AI Analysis Report\n`;
+      text += `=====================\n`;
+      text += `Total issues: ${result.totalIssues}\n`;
+      if (result.criticalCount > 0) text += `Critical: ${result.criticalCount}\n`;
+      if (result.warningCount > 0) text += `Warnings: ${result.warningCount}\n`;
+      if (result.infoCount > 0) text += `Info: ${result.infoCount}\n`;
+      text += `\n`;
+
+      result.issues.forEach((issue, i) => {
+        text += `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.icon} ${issue.title}\n`;
+        text += `   Category: ${issue.category}\n`;
+        text += `   ${issue.explanation}\n`;
+        text += `   Fix:\n`;
+        issue.fix.forEach(step => text += `   - ${step}\n`);
+        if (issue.matchingLog) text += `   Log: ${issue.matchingLog}\n`;
+        text += `\n`;
+      });
+
+      return text;
+    }
+  };
+
+  // AI Analysis Panel state
+  let currentAnalysis = null;
+  let analysisPanelOpen = false;
+
+  function toggleAnalysisPanel() {
+    analysisPanelOpen = !analysisPanelOpen;
+    const body = document.getElementById("aiPanelBody");
+    if (body) {
+      body.classList.toggle("show", analysisPanelOpen);
+    }
+  }
+
+  function renderAnalysisPanel(run) {
+    const latest = run;
+    const isFailed = latest && (latest.status === "FAILED" || (latest.summary && latest.summary.failed > 0));
+
+    if (!isFailed) {
+      // No analysis needed for successful runs
+      const existing = document.getElementById("aiAnalysisPanel");
+      if (existing) existing.remove();
+      return;
+    }
+
+    // Analyze the run
+    const result = ErrorAnalyzer.analyze(latest);
+    currentAnalysis = result;
+
+    // Build the panel HTML
+    let html = `<div class="ai-panel" id="aiAnalysisPanel">`;
+    html += `<div class="ai-panel-header" onclick="toggleAnalysisPanel()">`;
+    html += `<h3>🤖 AI Failure Analysis</h3>`;
+    html += `<span class="tag">${result.totalIssues} issue${result.totalIssues !== 1 ? 's' : ''} found</span>`;
+    html += `</div>`;
+    html += `<div class="ai-panel-body" id="aiPanelBody">`;
+
+    // Summary badges
+    html += `<div class="ai-summary">`;
+    if (result.criticalCount > 0) html += `<span class="ai-summary-item critical">🔴 ${result.criticalCount} Critical</span>`;
+    if (result.warningCount > 0) html += `<span class="ai-summary-item warning">🟡 ${result.warningCount} Warning${result.warningCount !== 1 ? 's' : ''}</span>`;
+    if (result.infoCount > 0) html += `<span class="ai-summary-item info">🔵 ${result.infoCount} Info</span>`;
+    html += `<button class="ai-copy-btn" onclick="copyAnalysis()">📋 Copy</button>`;
+    html += `</div>`;
+
+    if (result.issues.length === 0) {
+      html += `<div class="ai-no-issues">✅ No specific issues detected. Check the raw logs for more details.</div>`;
+    } else {
+      result.issues.forEach(issue => {
+        html += `<div class="ai-issue ${issue.severity}">`;
+        html += `<div class="ai-issue-header">`;
+        html += `<span class="ai-issue-icon">${issue.icon}</span>`;
+        html += `<span class="ai-issue-title">${escapeHtml(issue.title)}</span>`;
+        html += `<span class="ai-severity ${issue.severity}">${issue.severity}</span>`;
+        html += `</div>`;
+        html += `<div class="ai-issue-explanation">${escapeHtml(issue.explanation)}</div>`;
+        html += `<div class="ai-issue-fix">`;
+        html += `<strong>💡 Suggested Fix:</strong>`;
+        html += `<ul>`;
+        issue.fix.forEach(step => html += `<li>${escapeHtml(step)}</li>`);
+        html += `</ul>`;
+        html += `</div>`;
+        if (issue.matchingLog) {
+          html += `<div class="ai-issue-log">${escapeHtml(issue.matchingLog)}</div>`;
+        }
+        html += `</div>`;
+      });
+    }
+
+    html += `</div></div>`;
+
+    // Insert after the latest execution content
+    const latestDiv = document.getElementById("latest");
+    const existing = document.getElementById("aiAnalysisPanel");
+    if (existing) existing.remove();
+    if (latestDiv) {
+      latestDiv.insertAdjacentHTML('afterend', html);
+    }
+  }
+
+  function copyAnalysis() {
+    if (!currentAnalysis) return;
+    const text = ErrorAnalyzer.toText(currentAnalysis);
+    navigator.clipboard.writeText(text).then(() => {
+      notify("Analysis copied to clipboard!");
+    }).catch(() => {
+      notify("Failed to copy to clipboard.");
+    });
   }
 
 </script>

@@ -217,6 +217,39 @@ final class RunnerServer implements AutoCloseable {
             serveReport(exchange, requireRun(parts[3]));
             return;
         }
+        if (parts.length == 5 && parts[1].equals("api") && parts[2].equals("runs")
+                && parts[4].equals("analyze") && method.equals("POST")) {
+            // Return run data for AI analysis (client-side)
+            RunEntry entry = requireRun(parts[3]);
+            Map<String, Object> analyzeData = new LinkedHashMap<>();
+            analyzeData.put("id", entry.id);
+            analyzeData.put("kind", entry.kindName);
+            analyzeData.put("selection", entry.selection);
+            analyzeData.put("targetUrl", entry.targetUrl);
+            analyzeData.put("status", entry.status);
+            analyzeData.put("error", entry.error);
+            analyzeData.put("logs", entry.logs());
+            if (entry.result != null && entry.result.summary() != null) {
+                RunSummary summary = entry.result.summary();
+                Map<String, Object> summaryMap = new LinkedHashMap<>();
+                summaryMap.put("total", summary.total());
+                summaryMap.put("passed", summary.passed());
+                summaryMap.put("failed", summary.failed());
+                summaryMap.put("skipped", summary.skipped());
+                List<Map<String, Object>> detailsList = new ArrayList<>();
+                for (RunDetail detail : summary.details()) {
+                    Map<String, Object> detailMap = new LinkedHashMap<>();
+                    detailMap.put("name", detail.name());
+                    detailMap.put("status", detail.status());
+                    detailMap.put("errorMessage", detail.errorMessage());
+                    detailsList.add(detailMap);
+                }
+                summaryMap.put("details", detailsList);
+                analyzeData.put("summary", summaryMap);
+            }
+            sendJson(exchange, 200, analyzeData);
+            return;
+        }
         sendError(exchange, 404, "Not found.");
     }
 
