@@ -1146,6 +1146,56 @@
         fix: ["Check the wdio.conf.js file for correct browser capabilities", "Verify the WebDriver service is running and accessible", "Ensure all required npm packages are installed", "Check if the browser is installed on the system"],
         severity: "critical"
       },
+      // === SOAPUI-SPECIFIC ERRORS ===
+      {
+        category: "SoapUI",
+        icon: "🧪",
+        regex: /soapui.*error|project.*not found|test.*step.*failed/i,
+        title: "SoapUI Test Step Failed",
+        explanation: "A SoapUI test step failed to execute. The REST request might have failed, the project file might be corrupted, or the endpoint is unreachable.",
+        fix: ["Verify the SoapUI project file is valid XML", "Check if the target REST endpoint is accessible", "Review the test step configuration for correct URL and method", "Ensure authentication headers are properly configured"],
+        severity: "critical"
+      },
+      // === PLAYWRIGHT-SPECIFIC ERRORS ===
+      {
+        category: "Playwright",
+        icon: "🎭",
+        regex: /playwright.*error|browser.*context.*closed|page.*closed|selector.*not found/i,
+        title: "Playwright Browser Error",
+        explanation: "Playwright failed to interact with the browser. The page might have closed, the browser context was destroyed, or the selector didn't match any element.",
+        fix: ["Verify the page is still open before interacting", "Check if the selector matches an element on the page", "Add wait conditions before page interactions", "Ensure the browser is not closing prematurely"],
+        severity: "critical"
+      },
+      // === RESTASSURED-SPECIFIC ERRORS ===
+      {
+        category: "RestAssured",
+        icon: "⚡",
+        regex: /restassured.*error|invalid.*url|malformed.*url|URI.*malformed/i,
+        title: "RestAssured URL Error",
+        explanation: "RestAssured received an invalid or malformed URL. The base URL or endpoint path might be incorrectly formatted.",
+        fix: ["Verify the base URL is correctly formatted (e.g., https://api.example.com)", "Check if the endpoint path starts with a forward slash", "Ensure there are no missing slashes between base URL and path", "Validate the complete URL in a browser before testing"],
+        severity: "critical"
+      },
+      // === MAVEN BUILD ERRORS ===
+      {
+        category: "Build",
+        icon: "🔨",
+        regex: /BUILD FAILURE|BUILD ERROR|MojoFailureException|MojoExecutionException/i,
+        title: "Maven Build Failed",
+        explanation: "The Maven build failed during test execution. This could be due to compilation errors, missing dependencies, or test failures.",
+        fix: ["Check the Maven output for the specific error message", "Verify all dependencies are available in the pom.xml", "Run 'mvn clean install' to resolve dependency issues", "Check if the Java version matches the project requirements"],
+        severity: "critical"
+      },
+      // === NULL/EMPTY ERRORS ===
+      {
+        category: "Runtime",
+        icon: "⚠️",
+        regex: /ERROR: null|error.*null|response.*null|body.*null/i,
+        title: "Null Response or Error",
+        explanation: "The test received a null response or error message, making it difficult to diagnose the issue. This often indicates a network failure or unhandled exception.",
+        fix: ["Check the network connectivity to the target server", "Verify the API endpoint returns a valid response", "Add try-catch blocks to capture the actual error", "Enable verbose logging to see the full request/response"],
+        severity: "warning"
+      },
       // === GENERAL JAVA ERRORS ===
       {
         category: "Java",
@@ -1178,6 +1228,21 @@
       // Track matched patterns to avoid duplicates
       const matchedCategories = new Set();
 
+      // Framework-aware context
+      const kind = (run.kind || '').toLowerCase();
+      const targetUrl = run.targetUrl || '';
+      const browsers = run.browsers || [];
+      const frameworkLabels = {
+        cucumber: 'Cucumber/Selenium',
+        newman: 'Newman/Postman',
+        playwright: 'Playwright',
+        karate: 'Karate DSL',
+        wdio: 'WebdriverIO',
+        restassured: 'RestAssured',
+        soapui: 'SoapUI'
+      };
+      const frameworkLabel = frameworkLabels[kind] || kind;
+
       for (const pattern of this.patterns) {
         if (pattern.regex.test(allText)) {
           // Avoid duplicate categories
@@ -1195,14 +1260,36 @@
             }
           }
 
+          // Find which specific test(s) failed
+          const failedTests = details.filter(d => d.status === 'FAILED' || d.status === 'ERROR');
+          let affectedTests = null;
+          if (failedTests.length > 0) {
+            affectedTests = failedTests.map(d => d.name).join(', ');
+          }
+
+          // Enhance explanation with context
+          let enhancedExplanation = pattern.explanation;
+          if (kind && frameworkLabel) {
+            enhancedExplanation += ` (Framework: ${frameworkLabel})`;
+          }
+          if (targetUrl) {
+            enhancedExplanation += ` | Target: ${targetUrl}`;
+          }
+          if (browsers.length > 0) {
+            enhancedExplanation += ` | Browser(s): ${browsers.join(', ')}`;
+          }
+
           issues.push({
             category: pattern.category,
             icon: pattern.icon,
             title: pattern.title,
-            explanation: pattern.explanation,
+            explanation: enhancedExplanation,
             fix: pattern.fix,
             severity: pattern.severity,
-            matchingLog: matchingLog
+            matchingLog: matchingLog,
+            affectedTests: affectedTests,
+            framework: frameworkLabel,
+            targetUrl: targetUrl
           });
         }
       }
@@ -1216,13 +1303,20 @@
         criticalCount: issues.filter(i => i.severity === 'critical').length,
         warningCount: issues.filter(i => i.severity === 'warning').length,
         infoCount: issues.filter(i => i.severity === 'info').length,
-        issues: issues
+        issues: issues,
+        framework: frameworkLabel,
+        targetUrl: targetUrl,
+        browsers: browsers,
+        failedTests: failedTests
       };
     },
 
     toText(result) {
       let text = `QA AI Analysis Report\n`;
       text += `=====================\n`;
+      if (result.framework) text += `Framework: ${result.framework}\n`;
+      if (result.targetUrl) text += `Target URL: ${result.targetUrl}\n`;
+      if (result.browsers && result.browsers.length > 0) text += `Browsers: ${result.browsers.join(', ')}\n`;
       text += `Total issues: ${result.totalIssues}\n`;
       if (result.criticalCount > 0) text += `Critical: ${result.criticalCount}\n`;
       if (result.warningCount > 0) text += `Warnings: ${result.warningCount}\n`;
@@ -1233,11 +1327,23 @@
         text += `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.icon} ${issue.title}\n`;
         text += `   Category: ${issue.category}\n`;
         text += `   ${issue.explanation}\n`;
+        if (issue.affectedTests) text += `   Affected Tests: ${issue.affectedTests}\n`;
         text += `   Fix:\n`;
         issue.fix.forEach(step => text += `   - ${step}\n`);
         if (issue.matchingLog) text += `   Log: ${issue.matchingLog}\n`;
         text += `\n`;
       });
+
+      // If no issues found, include failed test details
+      if (result.issues.length === 0 && result.failedTests && result.failedTests.length > 0) {
+        text += `Failed Tests:\n`;
+        result.failedTests.forEach(ft => {
+          text += `  - ${ft.name}\n`;
+          if (ft.request) text += `    Request: ${ft.request}\n`;
+          if (ft.response) text += `    Response: ${ft.response.substring(0, 200)}\n`;
+          if (ft.errorMessage) text += `    Error: ${ft.errorMessage}\n`;
+        });
+      }
 
       return text;
     }
@@ -1278,6 +1384,17 @@
     html += `</div>`;
     html += `<div class="ai-panel-body" id="aiPanelBody">`;
 
+    // Context summary
+    if (result.framework || result.targetUrl) {
+      html += `<div class="ai-context" style="padding:12px;background:#f0f3f9;border-radius:8px;margin-bottom:12px;font-size:13px">`;
+      if (result.framework) html += `<strong>Framework:</strong> ${escapeHtml(result.framework)}<br>`;
+      if (result.targetUrl) html += `<strong>Target URL:</strong> ${escapeHtml(result.targetUrl)}<br>`;
+      if (result.browsers && result.browsers.length > 0) html += `<strong>Browsers:</strong> ${escapeHtml(result.browsers.join(', '))}<br>`;
+      if (latest.selection) html += `<strong>Test:</strong> ${escapeHtml(latest.selection)}<br>`;
+      if (latest.summary) html += `<strong>Results:</strong> ${latest.summary.passed} passed, ${latest.summary.failed} failed, ${latest.summary.skipped} skipped out of ${latest.summary.total} total<br>`;
+      html += `</div>`;
+    }
+
     // Summary badges
     html += `<div class="ai-summary">`;
     if (result.criticalCount > 0) html += `<span class="ai-summary-item critical">🔴 ${result.criticalCount} Critical</span>`;
@@ -1287,7 +1404,45 @@
     html += `</div>`;
 
     if (result.issues.length === 0) {
-      html += `<div class="ai-no-issues">✅ No specific issues detected. Check the raw logs for more details.</div>`;
+      // Show detailed fallback analysis even if no patterns matched
+      html += `<div class="ai-no-issues" style="padding:16px;background:#fff3cd;border-radius:8px;border:1px solid #ffc107">`;
+      html += `<strong>⚠️ Could not automatically detect the root cause</strong><br><br>`;
+      html += `<p>The AI analyzer could not match the error to known patterns. Here's what we know:</p>`;
+      
+      // Show failed test details
+      if (result.failedTests && result.failedTests.length > 0) {
+        html += `<div style="margin:12px 0;padding:12px;background:#f8d7da;border-radius:6px">`;
+        html += `<strong>Failed Tests:</strong><br>`;
+        result.failedTests.forEach(ft => {
+          html += `<div style="margin:4px 0;padding:4px 8px;background:white;border-radius:4px;font-family:monospace;font-size:12px">`;
+          html += `❌ ${escapeHtml(ft.name)}`;
+          if (ft.request) html += `<br><small>Request: ${escapeHtml(ft.request)}</small>`;
+          if (ft.response) html += `<br><small>Response: ${escapeHtml(ft.response.substring(0, 200))}</small>`;
+          if (ft.errorMessage) html += `<br><small style="color:#721c24">Error: ${escapeHtml(ft.errorMessage)}</small>`;
+          html += `</div>`;
+        });
+        html += `</div>`;
+      }
+      
+      // Show last 20 log lines
+      const logs = latest.logs || [];
+      if (logs.length > 0) {
+        const lastLogs = logs.slice(-20);
+        html += `<div style="margin:12px 0;padding:12px;background:#f8f9fa;border-radius:6px">`;
+        html += `<strong>Last ${lastLogs.length} log lines:</strong><br>`;
+        html += `<pre style="margin:8px 0;padding:8px;background:white;border-radius:4px;font-size:11px;max-height:200px;overflow-y:auto;white-space:pre-wrap">${escapeHtml(lastLogs.join('\n'))}</pre>`;
+        html += `</div>`;
+      }
+      
+      html += `<p style="margin-top:12px"><strong>Common causes to check:</strong></p>`;
+      html += `<ul style="font-size:13px">`;
+      html += `<li>Target server might not be running at ${escapeHtml(result.targetUrl || 'the configured URL')}</li>`;
+      html += `<li>Network connectivity issues or firewall blocking the connection</li>`;
+      html += `<li>Test data or configuration might be incorrect</li>`;
+      html += `<li>Browser driver version mismatch (for UI tests)</li>`;
+      html += `<li>API endpoint changed or returned unexpected response</li>`;
+      html += `</ul>`;
+      html += `</div>`;
     } else {
       result.issues.forEach(issue => {
         html += `<div class="ai-issue ${issue.severity}">`;
@@ -1297,6 +1452,14 @@
         html += `<span class="ai-severity ${issue.severity}">${issue.severity}</span>`;
         html += `</div>`;
         html += `<div class="ai-issue-explanation">${escapeHtml(issue.explanation)}</div>`;
+        
+        // Show affected tests if available
+        if (issue.affectedTests) {
+          html += `<div class="ai-issue-affected" style="margin:8px 0;padding:8px;background:#fff3cd;border-radius:6px;font-size:12px">`;
+          html += `<strong>🎯 Affected Tests:</strong> ${escapeHtml(issue.affectedTests)}`;
+          html += `</div>`;
+        }
+        
         html += `<div class="ai-issue-fix">`;
         html += `<strong>💡 Suggested Fix:</strong>`;
         html += `<ul>`;
