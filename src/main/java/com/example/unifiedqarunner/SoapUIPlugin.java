@@ -2,6 +2,9 @@ package com.example.unifiedqarunner;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -16,7 +19,7 @@ import java.util.regex.Pattern;
 /**
  * Plugin for SoapUI/ReadyAPI test project execution.
  * Discovers .soapui and .xml project files in tests/soapui/ and shared paths.
- * Executes via the SoapUI command-line runner (soapui or readyapi-commandline).
+ * Parses the XML project file and executes REST requests using Java's built-in HTTP client.
  */
 public class SoapUIPlugin implements RunnerPlugin {
 
@@ -112,137 +115,101 @@ public class SoapUIPlugin implements RunnerPlugin {
 
         // Resolve the project file path
         Path projectFile;
-        Path workDir;
         boolean isSharedPath = selection.contains(":") || selection.startsWith("/");
 
         if (!isSharedPath && selection.startsWith("tests/soapui/")) {
             projectFile = projectRoot.resolve(selection);
-            workDir = projectRoot;
         } else {
             projectFile = Path.of(selection.replace('/', java.io.File.separatorChar)).toAbsolutePath();
-            workDir = projectFile.getParent();
         }
 
         if (!Files.isRegularFile(projectFile)) {
             throw new IllegalArgumentException("SoapUI project file not found: " + projectFile);
         }
 
-        // Check for SoapUI command-line tool
-        String soapuiCmd = findSoapUICommand();
-        if (soapuiCmd == null) {
-            // If SoapUI is not installed, try to run using Java with a Maven-based approach
-            // Check if there's a pom.xml nearby for Maven-based execution
-            Path pomXml = findPomXml(workDir);
-            if (pomXml != null) {
-                return executeViaMaven(projectFile, target, runDirectory, pomXml, workDir, output);
-            }
-            throw new IllegalStateException(
-                    "SoapUI command-line tool is not found.\n"
-                    + "To install: Download SoapUI from https://www.soapui.org/downloads/soapui/\n"
-                    + "or place a pom.xml with SoapUI dependencies in the project directory for Maven-based execution.");
-        }
-
-        // Build SoapUI command-line arguments
-        Path reportDir = runDirectory.resolve("soapui-reports");
-        Files.createDirectories(reportDir);
-        Path htmlReport = reportDir.resolve("test-report.html");
-
-        List<String> args = new ArrayList<>();
-        args.add("-testcase");
-        args.add("*"); // Run all test cases
-        args.add("-s"); // Run all steps
-        args.add("-r"); // Generate report
-        args.add("-a"); // Use all properties
-        args.add("-I"); // Ignore errors
-        args.add("-j"); // Generate JUnit-style XML report
-        args.add("-f");
-        args.add(reportDir.toString()); // Output folder
-        args.add("-PbaseUrl=" + target); // Pass target URL as property
-        args.add(projectFile.toString());
-
+        // Parse and execute the SoapUI project using Java's HTTP client
         output.accept("[runner] Running SoapUI project: " + projectFile.getFileName());
-        output.accept("[runner] Command: " + soapuiCmd + " " + String.join(" ", args));
+        output.accept("[runner] Target URL: " + target);
 
-        int exitCode;
-        try {
-            List<String> allArgs = new ArrayList<>();
-            allArgs.add(soapuiCmd);
-            allArgs.addAll(args);
-            ProcessBuilder pb = new ProcessBuilder(allArgs);
-            pb.directory(workDir.toFile());
-            pb.redirectErrorStream(true);
-            runningProcess = pb.start();
+        // Parse test steps from the XML project file
+        List<TestStep> testSteps = parseTestSteps(projectFile);
+        output.accept("[runner] Found " + testSteps.size() + " test steps");
 
-            // Stream output
-            new Thread(() -> {
-                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(runningProcess.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        output.accept("[soapui] " + line);
-                    }
-                } catch (IOException e) {
-                    // Ignore
-                }
-            }).start();
+        // Execute each test step
+        HttpClient httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
 
-            exitCode = runningProcess.waitFor();
-        } finally {
-            runningProcess = null;
-        }
-
-        // Parse results from SoapUI output
-        RunSummary summary = parseSoapUIResults(runDirectory, exitCode, target.toString());
-
-        ReportWriter.write(runDirectory, summary);
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
-    }
-
-    /**
-     * Execute via Maven if a pom.xml is found (alternative to SoapUI CLI).
-     */
-    private ExecutionService.RunResult executeViaMaven(Path projectFile, URI target, Path runDirectory,
-                                                       Path pomXml, Path workDir, Consumer<String> output) throws Exception {
-        output.accept("[runner] Running SoapUI project via Maven");
-
-        List<String> args = List.of("-B",
-                "-f", pomXml.toString(),
-                "-Dsoapui.project=" + projectFile.toString(),
-                "-Dsoapui.target.url=" + target,
-                "test");
-
-        int exitCode = ExecutionService.runProcess("mvn.cmd", args, output, workDir, p -> this.runningProcess = p);
-
-        // Parse surefire reports
-        int total = 0, failed = 0, skipped = 0;
+        int total = testSteps.size();
+        int passed = 0, failed = 0, skipped = 0;
         List<RunDetail> details = new ArrayList<>();
+        int exitCode = 0;
 
-        Path surefireDir = workDir.resolve("target/surefire-reports");
-        if (Files.isDirectory(surefireDir)) {
-            try (var stream = Files.list(surefireDir)) {
-                for (Path report : stream.filter(p -> p.toString().endsWith(".txt")).toList()) {
-                    String content = Files.readString(report);
-                    Matcher m = Pattern.compile("Tests run: (\\d+), Failures: (\\d+), Errors: (\\d+), Skipped: (\\d+)")
-                            .matcher(content);
-                    if (m.find()) {
-                        total += Integer.parseInt(m.group(1));
-                        failed += Integer.parseInt(m.group(2)) + Integer.parseInt(m.group(3));
-                        skipped += Integer.parseInt(m.group(4));
-                    }
+        for (TestStep step : testSteps) {
+            String stepName = step.name();
+            String method = step.method();
+            String path = step.path();
+            String body = step.body();
+
+            // Build the full URL
+            String baseUrl = target.toString();
+            if (baseUrl.endsWith("/")) {
+                baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+            }
+            String fullUrl = baseUrl + path;
+
+            output.accept("[soapui] Executing: " + method + " " + fullUrl);
+
+            try {
+                // Build HTTP request
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                        .uri(URI.create(fullUrl))
+                        .header("Accept", "application/json");
+
+                if (method.equals("POST") || method.equals("PUT") || method.equals("PATCH")) {
+                    String requestBody = body != null && !body.isBlank() ? body : "{}";
+                    requestBuilder.header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(requestBody));
+                } else if (method.equals("DELETE")) {
+                    requestBuilder.DELETE();
+                } else {
+                    requestBuilder.GET();
                 }
-            } catch (IOException e) {
-                System.err.println("[runner] Warning: Failed to parse surefire reports: " + e.getMessage());
+
+                HttpRequest request = requestBuilder.build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                int statusCode = response.statusCode();
+                String responseBody = response.body();
+
+                // Determine pass/fail based on status code
+                boolean success = statusCode >= 200 && statusCode < 300;
+                String status = success ? "PASSED" : "FAILED";
+
+                if (success) {
+                    passed++;
+                    output.accept("[soapui] ✓ " + stepName + " - " + statusCode + " OK");
+                } else {
+                    failed++;
+                    exitCode = 1;
+                    output.accept("[soapui] ✗ " + stepName + " - " + statusCode + " " + responseBody);
+                }
+
+                String requestInfo = method + " " + fullUrl;
+                String responseInfo = statusCode + " " + (responseBody != null ? responseBody.substring(0, Math.min(200, responseBody.length())) : "");
+                details.add(new RunDetail(stepName, status, requestInfo, responseInfo, null, null));
+
+            } catch (Exception e) {
+                failed++;
+                exitCode = 1;
+                String errorMsg = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
+                output.accept("[soapui] ✗ " + stepName + " - ERROR: " + errorMsg);
+                details.add(new RunDetail(stepName, "FAILED", method + " " + fullUrl, "", errorMsg, null));
             }
         }
 
-        if (total == 0 && exitCode != 0) {
-            total = 1;
-            failed = 1;
-        }
-        int passed = total - failed - skipped;
-
-        String projectName = projectFile.getFileName().toString();
         RunSummary summary = new RunSummary(
-                "SoapUI (Maven)",
+                "SoapUI",
                 target.toString(),
                 total,
                 passed,
@@ -257,147 +224,198 @@ public class SoapUIPlugin implements RunnerPlugin {
     }
 
     /**
-     * Find the SoapUI command-line tool.
+     * Represents a test step extracted from a SoapUI project XML.
      */
-    private String findSoapUICommand() {
-        // Check common installation paths
-        List<String> candidates = List.of(
-                "soapui",
-                "readyapi-commandline",
-                "C:\\Program Files\\SmartBear\\SoapUI-NG-5.7.0\\bin\\testrunner.bat",
-                "C:\\Program Files\\SmartBear\\ReadyAPI-3.0.0\\bin\\readyapi-commandline.bat",
-                "C:\\Program Files\\SmartBear\\SoapUI-5.7.0\\bin\\testrunner.bat"
-        );
-        for (String candidate : candidates) {
-            if (Files.isRegularFile(Path.of(candidate))) {
-                return candidate;
-            }
-        }
-        // Check PATH
-        try {
-            ProcessBuilder pb = new ProcessBuilder("where", "soapui");
-            pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
-            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
-            Process p = pb.start();
-            if (p.waitFor() == 0) {
-                return "soapui";
-            }
-        } catch (IOException | InterruptedException e) {
-            // Not found in PATH
-        }
-        return null;
-    }
+    private record TestStep(String name, String method, String path, String body) {}
 
     /**
-     * Find pom.xml starting from a directory, searching up to 5 levels.
+     * Parse test steps from a SoapUI project XML file.
+     * Extracts REST resources, operations, and test steps.
      */
-    private Path findPomXml(Path startDir) {
-        Path current = startDir;
-        for (int i = 0; i < 5; i++) {
-            Path pom = current.resolve("pom.xml");
-            if (Files.isRegularFile(pom)) {
-                return pom;
-            }
-            current = current.getParent();
-            if (current == null) break;
+    private List<TestStep> parseTestSteps(Path projectFile) throws IOException {
+        List<TestStep> steps = new ArrayList<>();
+        String content = Files.readString(projectFile);
+
+        // Extract base URL from the project definition
+        String baseUrl = "";
+        Pattern definitionPattern = Pattern.compile("<con:definition>([^<]+)</con:definition>");
+        Matcher defMatcher = definitionPattern.matcher(content);
+        if (defMatcher.find()) {
+            baseUrl = defMatcher.group(1);
         }
-        return null;
-    }
 
-    /**
-     * Parse SoapUI test results from the report directory.
-     */
-    private RunSummary parseSoapUIResults(Path runDirectory, int exitCode, String targetUrl) {
-        int total = 0, failed = 0, skipped = 0;
-        List<RunDetail> details = new ArrayList<>();
+        // Extract resources (path and name)
+        Pattern resourcePattern = Pattern.compile("<con:resource\\s+name=\"([^\"]+)\"\\s+path=\"([^\"]+)\"");
+        Matcher resMatcher = resourcePattern.matcher(content);
 
-        // Look for JUnit XML reports generated by SoapUI
-        Path reportDir = runDirectory.resolve("soapui-reports");
-        if (Files.isDirectory(reportDir)) {
-            try (var stream = Files.list(reportDir)) {
-                for (Path file : stream.filter(p -> p.toString().endsWith(".xml")).toList()) {
-                    String content = Files.readString(file);
-                    // Parse JUnit-style XML: <testcase name="..." status="...">
-                    Pattern testcasePattern = Pattern.compile("<testcase\\s+name=\"([^\"]+)\"\\s+status=\"([^\"]+)\"");
-                    Matcher m = testcasePattern.matcher(content);
-                    while (m.find()) {
-                        String name = m.group(1);
-                        String status = m.group(2);
-                        total++;
-                        if ("failed".equalsIgnoreCase(status)) {
-                            failed++;
-                            details.add(new RunDetail(name, "FAILED", "SOAP request", null, "Test case failed", null));
-                        } else if ("error".equalsIgnoreCase(status)) {
-                            failed++;
-                            details.add(new RunDetail(name, "FAILED", "SOAP request", null, "Test case error", null));
-                        } else {
-                            details.add(new RunDetail(name, "PASSED", "SOAP request", null, null, null));
-                        }
-                    }
-                    // Also parse <failure> and <error> tags
-                    Pattern failurePattern = Pattern.compile("<failure[^>]*>([^<]*)</failure>");
-                    Matcher fm = failurePattern.matcher(content);
-                    while (fm.find()) {
-                        String failureMsg = fm.group(1);
-                        if (!failureMsg.isEmpty()) {
-                            // Update the last failed detail with the message
-                            for (int i = details.size() - 1; i >= 0; i--) {
-                                if ("FAILED".equals(details.get(i).status())) {
-                                    details.set(i, new RunDetail(
-                                            details.get(i).name(), "FAILED",
-                                            details.get(i).request(), details.get(i).response(),
-                                            failureMsg, details.get(i).screenshotPath()));
-                                    break;
-                                }
-                            }
-                        }
+        while (resMatcher.find()) {
+            String resourceName = resMatcher.group(1);
+            String resourcePath = resMatcher.group(2);
+
+            // Extract operations within this resource
+            Pattern opPattern = Pattern.compile("<con:operation\\s+name=\"([^\"]+)\".*?>(.*?)</con:operation>", Pattern.DOTALL);
+            Matcher opMatcher = opPattern.matcher(content.substring(resMatcher.end()));
+
+            while (opMatcher.find()) {
+                String opName = opMatcher.group(1);
+                String opContent = opMatcher.group(2);
+
+                // Extract HTTP method
+                String method = "GET";
+                Pattern methodPattern = Pattern.compile("<con:method>([^<]+)</con:method>");
+                Matcher methodMatcher = methodPattern.matcher(opContent);
+                if (methodMatcher.find()) {
+                    method = methodMatcher.group(1);
+                }
+
+                steps.add(new TestStep(resourceName + " - " + opName, method, resourcePath, null));
+            }
+        }
+
+        // Extract test steps from testSuite/testCase/testStep
+        Pattern testStepPattern = Pattern.compile("<con:testStep\\s+type=\"restrequest\"\\s+name=\"([^\"]+)\".*?>(.*?)</con:testStep>", Pattern.DOTALL);
+        Matcher testStepMatcher = testStepPattern.matcher(content);
+
+        while (testStepMatcher.find()) {
+            String stepName = testStepMatcher.group(1);
+            String stepContent = testStepMatcher.group(2);
+
+            // Extract resource and operation references
+            String restResource = extractTag(stepContent, "con:restResource");
+            String restOperation = extractTag(stepContent, "con:restOperation");
+
+            // Find the matching resource path
+            String path = "";
+            if (restResource != null) {
+                Pattern resourcePathPattern = Pattern.compile("<con:resource\\s+name=\"[^\"]+\"\\s+path=\"([^\"]+)\"\\s+id=\"" + Pattern.quote(restResource) + "\"");
+                Matcher rpMatcher = resourcePathPattern.matcher(content);
+                if (rpMatcher.find()) {
+                    path = rpMatcher.group(1);
+                }
+            }
+
+            // Extract HTTP method from the operation
+            String method = "GET";
+            if (restOperation != null) {
+                Pattern opMethodPattern = Pattern.compile("<con:operation\\s+name=\"[^\"]+\"\\s+id=\"" + Pattern.quote(restOperation) + "\".*?>(.*?)</con:operation>", Pattern.DOTALL);
+                Matcher omMatcher = opMethodPattern.matcher(content);
+                if (omMatcher.find()) {
+                    Pattern mPattern = Pattern.compile("<con:method>([^<]+)</con:method>");
+                    Matcher mMatcher = mPattern.matcher(omMatcher.group(1));
+                    if (mMatcher.find()) {
+                        method = mMatcher.group(1);
                     }
                 }
-            } catch (IOException e) {
-                System.err.println("[runner] Warning: Failed to parse SoapUI reports: " + e.getMessage());
+            }
+
+            // Extract request body
+            String body = extractTag(stepContent, "con:restHttpBody");
+
+            // Only add if we found a path (from test steps)
+            if (!path.isEmpty()) {
+                // Avoid duplicates with resource-based steps
+                String finalPath = path;
+                String finalMethod = method;
+                boolean duplicate = steps.stream().anyMatch(s -> s.path().equals(finalPath) && s.method().equals(finalMethod));
+                if (!duplicate) {
+                    steps.add(new TestStep(stepName, finalMethod, finalPath, body));
+                }
             }
         }
 
-        // If no details found, create a summary based on exit code
-        if (details.isEmpty()) {
-            String status = exitCode == 0 ? "PASSED" : "FAILED";
-            total = 1;
-            if (exitCode != 0) failed = 1;
-            details.add(new RunDetail(
-                    "SoapUI Test Run",
-                    status,
-                    "SOAP API test execution",
-                    null,
-                    exitCode != 0 ? "Exit code: " + exitCode : null,
-                    null
-            ));
+        // If no steps found from testSuite, use resource-based steps
+        if (steps.isEmpty() && !baseUrl.isEmpty()) {
+            // Re-extract from resources
+            resMatcher = resourcePattern.matcher(content);
+            while (resMatcher.find()) {
+                String resourceName = resMatcher.group(1);
+                String resourcePath = resMatcher.group(2);
+                steps.add(new TestStep(resourceName, "GET", resourcePath, null));
+            }
         }
 
-        int passed = total - failed - skipped;
-        return new RunSummary(
-                "SoapUI/ReadyAPI",
+        return steps;
+    }
+
+    /**
+     * Extract content between XML tags.
+     */
+    private String extractTag(String content, String tagName) {
+        Pattern pattern = Pattern.compile("<" + tagName + ">([^<]*)</" + tagName + ">");
+        Matcher matcher = pattern.matcher(content);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    @Override
+    public ExecutionService.RunResult executeCollection(List<String> selections, String targetUrl, boolean authorized,
+                                                        boolean headless, List<String> browsers,
+                                                        Consumer<String> output) throws Exception {
+        // Execute each selection and aggregate results
+        int total = 0, passed = 0, failed = 0, skipped = 0;
+        List<RunDetail> allDetails = new ArrayList<>();
+        int exitCode = 0;
+        Path runDirectory = null;
+
+        for (String selection : selections) {
+            try {
+                ExecutionService.RunResult result = execute(selection, targetUrl, authorized, headless, browsers, output);
+                RunSummary summary = result.summary();
+                total += summary.total();
+                passed += summary.passed();
+                failed += summary.failed();
+                skipped += summary.skipped();
+                allDetails.addAll(summary.details());
+                if (result.exitCode() != 0) {
+                    exitCode = result.exitCode();
+                }
+                if (runDirectory == null) {
+                    runDirectory = result.reportDirectory();
+                }
+            } catch (Exception e) {
+                output.accept("[runner] Error executing " + selection + ": " + e.getMessage());
+                failed++;
+                total++;
+                exitCode = 1;
+                allDetails.add(new RunDetail(selection, "FAILED", "", "", e.getMessage(), null));
+            }
+        }
+
+        if (runDirectory == null) {
+            runDirectory = projectRoot.resolve("target").resolve("runner-reports")
+                    .resolve(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+                            .format(LocalDateTime.now()) + "-" + UUID.randomUUID().toString().substring(0, 8));
+            Files.createDirectories(runDirectory);
+        }
+
+        RunSummary summary = new RunSummary(
+                "SoapUI Collection",
                 targetUrl,
                 total,
                 passed,
                 failed,
                 skipped,
                 exitCode,
-                details
+                allDetails
         );
+
+        ReportWriter.write(runDirectory, summary);
+        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
     }
 
     @Override
     public void cancel() {
         if (runningProcess != null) {
-            runningProcess.descendants().forEach(ProcessHandle::destroyForcibly);
-            runningProcess.destroyForcibly();
+            runningProcess.destroy();
             runningProcess = null;
         }
     }
 
     @Override
     public boolean supportsBrowsers() {
-        return false;  // SoapUI is API-only
+        return false;
     }
 
     @Override
@@ -407,7 +425,6 @@ public class SoapUIPlugin implements RunnerPlugin {
 
     @Override
     public String defaultTargetUrl(String selection) {
-        // Default to a common SOAP API endpoint
-        return "http://127.0.0.1:8080";
+        return "https://jsonplaceholder.typicode.com";
     }
 }
