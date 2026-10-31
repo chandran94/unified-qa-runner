@@ -82,6 +82,20 @@
     .ai-analyze-btn{font-size:12px;padding:6px 14px;background:#805ad5;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:700;margin-top:10px}
     .ai-analyze-btn:hover{background:#6b46c1}
     .ai-no-issues{padding:16px;text-align:center;color:#16845b;background:#e5f7ef;border-radius:8px;font-size:13px}
+    /* Screenshots & Videos Panels */
+    .media-panel{margin-top:16px;border:1px solid var(--line);border-radius:13px;background:#fff;overflow:hidden}
+    .media-panel-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f0f3f9;cursor:pointer;user-select:none}
+    .media-panel-header h3{font-size:14px;margin:0;display:flex;align-items:center;gap:8px}
+    .media-panel-body{padding:16px;display:none}
+    .media-panel-body.show{display:block}
+    .media-item{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s}
+    .media-item:hover{background:#f0f3f9}
+    .media-item img{width:100px;height:70px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+    .media-item video{width:100px;height:70px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:#000}
+    .media-item-info{flex:1;min-width:0}
+    .media-item-name{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .media-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+    .media-empty{text-align:center;color:var(--muted);padding:20px;font-size:13px}
     .collection-bar{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;background:#f0f3f9;border-radius:8px;flex-wrap:wrap}
     .collection-bar label{font-size:12px;font-weight:700;margin:0;cursor:pointer;display:flex;align-items:center;gap:6px}
     .collection-count{font-size:12px;color:var(--muted);margin-left:auto}
@@ -101,6 +115,17 @@
     <a class="nav" href="#runner">Test execution</a>
     <a class="nav" href="#assets">Project test assets</a>
     <a class="nav" href="#history">Execution reports</a>
+    <div style="margin-top:20px;padding:0 8px">
+      <div style="font-size:11px;color:#667085;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px">Media</div>
+      <div id="sidebarScreenshots" class="side-note" style="margin:0 0 10px 0;cursor:pointer" onclick="toggleScreenshotsPanel()">
+        <b>📸 Screenshots</b>
+        <br><span id="screenshotCount" class="muted">0 screenshots</span>
+      </div>
+      <div id="sidebarVideos" class="side-note" style="margin:0 0 10px 0;cursor:pointer" onclick="toggleVideosPanel()">
+        <b>🎥 Video Recordings</b>
+        <br><span id="videoCount" class="muted">0 recordings</span>
+      </div>
+    </div>
     <div class="side-note"><b>Local execution</b><br><br>Runs checked-in project tests through the existing Maven and Newman runners.</div>
   </aside>
   <main id="dashboard">
@@ -245,6 +270,26 @@
         </section>
       </div>
     </div>
+    <!-- Screenshots Panel -->
+    <section class="media-panel" id="screenshotsPanel">
+      <div class="media-panel-header" onclick="toggleScreenshotsPanel()">
+        <h3>📸 Screenshots <span id="screenshotsPanelCount" class="tag"></span></h3>
+        <span id="screenshotsToggleIcon" style="font-size:18px">▼</span>
+      </div>
+      <div class="media-panel-body show" id="screenshotsPanelBody">
+        <div id="screenshotsList"><div class="media-empty">No screenshots yet. Run a UI test to capture screenshots.</div></div>
+      </div>
+    </section>
+    <!-- Videos Panel -->
+    <section class="media-panel" id="videosPanel">
+      <div class="media-panel-header" onclick="toggleVideosPanel()">
+        <h3>🎥 Video Recordings <span id="videosPanelCount" class="tag"></span></h3>
+        <span id="videosToggleIcon" style="font-size:18px">▼</span>
+      </div>
+      <div class="media-panel-body" id="videosPanelBody">
+        <div id="videosList"><div class="media-empty">No recordings yet. Enable video recording in your test config.</div></div>
+      </div>
+    </section>
   </main>
 </div>
 <div class="screenshot-modal" id="screenshotModal" onclick="closeScreenshotModal()">
@@ -339,6 +384,9 @@
       renderSharedPaths(body.sharedPaths || []);
       // Render imports
       renderImports(body.imports || []);
+      // Load media (screenshots and videos)
+      loadScreenshots();
+      loadVideos();
     } catch (error) {
       document.getElementById("connectionStatus").textContent = "Runner connection failed";
       notify(error.message);
@@ -1492,6 +1540,114 @@
     }).catch(() => {
       notify("Failed to copy to clipboard.");
     });
+  }
+
+  // === Screenshots & Videos Panel Functions ===
+
+  async function loadScreenshots() {
+    try {
+      const screenshots = await api("/api/screenshots");
+      const list = document.getElementById("screenshotsList");
+      const countEl = document.getElementById("screenshotCount");
+      const panelCount = document.getElementById("screenshotsPanelCount");
+      countEl.textContent = `${screenshots.length} screenshots`;
+      panelCount.textContent = screenshots.length ? `(${screenshots.length})` : '';
+      if (!screenshots.length) {
+        list.innerHTML = '<div class="media-empty">No screenshots yet. Run a UI test to capture screenshots.</div>';
+        return;
+      }
+      list.innerHTML = screenshots.map(s => `
+        <div class="media-item" onclick="viewScreenshot('${escapeHtml(s.file)}')">
+          <img src="/screenshots/${escapeHtml(s.file)}" alt="${escapeHtml(s.name)}" loading="lazy">
+          <div class="media-item-info">
+            <div class="media-item-name">${escapeHtml(s.name)}</div>
+            <div class="media-item-meta">${formatFileSize(s.size)} • ${formatDate(s.modified)}</div>
+          </div>
+        </div>
+      `).join("");
+    } catch (e) {
+      console.error("Failed to load screenshots:", e);
+    }
+  }
+
+  async function loadVideos() {
+    try {
+      const videos = await api("/api/videos");
+      const list = document.getElementById("videosList");
+      const countEl = document.getElementById("videoCount");
+      const panelCount = document.getElementById("videosPanelCount");
+      countEl.textContent = `${videos.length} recordings`;
+      panelCount.textContent = videos.length ? `(${videos.length})` : '';
+      if (!videos.length) {
+        list.innerHTML = '<div class="media-empty">No recordings yet. Enable video recording in your test config.</div>';
+        return;
+      }
+      list.innerHTML = videos.map(v => `
+        <div class="media-item" onclick="playVideo('${escapeHtml(v.file)}')">
+          <video src="/videos/${escapeHtml(v.file)}" preload="metadata"></video>
+          <div class="media-item-info">
+            <div class="media-item-name">${escapeHtml(v.name)}</div>
+            <div class="media-item-meta">${formatFileSize(v.size)} • ${formatDate(v.modified)}</div>
+          </div>
+        </div>
+      `).join("");
+    } catch (e) {
+      console.error("Failed to load videos:", e);
+    }
+  }
+
+  function toggleScreenshotsPanel() {
+    const body = document.getElementById("screenshotsPanelBody");
+    const icon = document.getElementById("screenshotsToggleIcon");
+    body.classList.toggle("show");
+    icon.textContent = body.classList.contains("show") ? "▼" : "▶";
+  }
+
+  function toggleVideosPanel() {
+    const body = document.getElementById("videosPanelBody");
+    const icon = document.getElementById("videosToggleIcon");
+    body.classList.toggle("show");
+    icon.textContent = body.classList.contains("show") ? "▼" : "▶";
+  }
+
+  function viewScreenshot(fileName) {
+    const modal = document.getElementById("screenshotModal");
+    const img = document.getElementById("screenshotFull");
+    img.src = `/screenshots/${fileName}`;
+    modal.classList.add("show");
+  }
+
+  function playVideo(fileName) {
+    // Create a modal for video playback
+    let modal = document.getElementById("videoModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "videoModal";
+      modal.className = "screenshot-modal";
+      modal.onclick = () => modal.classList.remove("show");
+      modal.innerHTML = `<video id="videoFull" controls autoplay style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.5)"></video>`;
+      document.body.appendChild(modal);
+    }
+    const video = document.getElementById("videoFull");
+    video.src = `/videos/${fileName}`;
+    modal.classList.add("show");
+    video.play();
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function formatDate(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    if (diff < 60000) return "Just now";
+    if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+    return date.toLocaleDateString();
   }
 
 </script>

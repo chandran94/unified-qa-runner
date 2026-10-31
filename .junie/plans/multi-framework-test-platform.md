@@ -270,3 +270,18 @@ Add server-side analyze endpoint and verify the full analysis flow.
 - Test against known failure scenarios: connection refused, element not found, HTTP 404, missing driver.
 - Verify analysis appears correctly in the UI with proper categorization and fix suggestions.
 - Push changes to GitHub.
+
+### ✓ Step 11: Enhance AI analysis with context-aware diagnostics
+Make the AI Failure Analysis more specific and detailed with framework-aware context.
+- Added 6 new error patterns: SoapUI, Playwright, RestAssured, Maven build failures, null/empty errors.
+- Made analyzer framework-aware: explanations now include framework name, target URL, and browser(s).
+- Added "Affected Tests" section showing which specific tests failed for each issue.
+- Enhanced fallback analysis when no patterns match:
+  - Shows failed test details with request/response/error messages
+  - Displays last 20 log lines for manual inspection
+  - Lists common causes to check based on context
+- Updated copy analysis to include framework context and affected tests.
+- Analysis panel now shows context summary (framework, URL, browser, test name, results).
+- More specific, actionable fix suggestions based on the execution context.
+- Verified with failing Cucumber test (ERR_CONNECTION_REFUSED) — analysis correctly detected and explained the issue.
+- Pushed changes to GitHub.

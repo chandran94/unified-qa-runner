@@ -109,6 +109,8 @@ final class RunnerServer implements AutoCloseable {
                     handleApi(exchange, path);
                 } else if (path.startsWith("/screenshots/")) {
                     serveScreenshot(exchange, path);
+                } else if (path.startsWith("/videos/")) {
+                    serveVideo(exchange, path);
                 } else {
                     sendError(exchange, 404, "Not found.");
                 }
@@ -225,6 +227,15 @@ final class RunnerServer implements AutoCloseable {
             requireSameOrigin(exchange);
             String id = path.substring("/api/imports/".length(), path.length() - "/scan".length());
             scanImport(exchange, id);
+            return;
+        }
+        // === Screenshots & Videos Endpoints ===
+        if (path.equals("/api/screenshots") && method.equals("GET")) {
+            sendJson(exchange, 200, listScreenshots());
+            return;
+        }
+        if (path.equals("/api/videos") && method.equals("GET")) {
+            sendJson(exchange, 200, listVideos());
             return;
         }
         if (path.equals("/api/runs") && method.equals("POST")) {
@@ -1019,5 +1030,97 @@ final class RunnerServer implements AutoCloseable {
         private List<String> logs() {
             return List.copyOf(output);
         }
+    }
+
+    private List<Map<String, Object>> listScreenshots() {
+        Path screenshotsDir = projectRoot.resolve("target").resolve("screenshots");
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (!Files.isDirectory(screenshotsDir)) {
+            return result;
+        }
+        try (var stream = Files.list(screenshotsDir)) {
+            List<Path> files = stream
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".png"))
+                    .sorted(Comparator.comparingLong((Path p) -> {
+                        try { return p.toFile().lastModified(); } catch (Exception e) { return 0L; }
+                    }).reversed())
+                    .toList();
+            for (Path p : files) {
+                String fileName = p.getFileName().toString();
+                String testCaseName = fileName.replaceAll("\\.png$", "");
+                int dashIndex = testCaseName.lastIndexOf("-");
+                if (dashIndex > 0 && dashIndex < testCaseName.length() - 10) {
+                    testCaseName = testCaseName.substring(0, dashIndex).replaceAll("_", " ");
+                }
+                result.add(Map.of(
+                        "name", testCaseName,
+                        "file", fileName,
+                        "size", Files.size(p),
+                        "modified", p.toFile().lastModified()
+                ));
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to list screenshots: " + e.getMessage());
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> listVideos() {
+        Path videosDir = projectRoot.resolve("target").resolve("videos");
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (!Files.isDirectory(videosDir)) {
+            return result;
+        }
+        try (var stream = Files.list(videosDir)) {
+            List<Path> files = stream
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".webm") || p.getFileName().toString().endsWith(".mp4"))
+                    .sorted(Comparator.comparingLong((Path p) -> {
+                        try { return p.toFile().lastModified(); } catch (Exception e) { return 0L; }
+                    }).reversed())
+                    .toList();
+            for (Path p : files) {
+                String fileName = p.getFileName().toString();
+                String testCaseName = fileName.replaceAll("\\.(webm|mp4)$", "");
+                int dashIndex = testCaseName.lastIndexOf("-");
+                if (dashIndex > 0 && dashIndex < testCaseName.length() - 10) {
+                    testCaseName = testCaseName.substring(0, dashIndex).replaceAll("_", " ");
+                }
+                result.add(Map.of(
+                        "name", testCaseName,
+                        "file", fileName,
+                        "size", Files.size(p),
+                        "modified", p.toFile().lastModified()
+                ));
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to list videos: " + e.getMessage());
+        }
+        return result;
+    }
+
+    private void serveVideo(HttpExchange exchange, String path) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) {
+            sendError(exchange, 405, "Method not allowed.");
+            return;
+        }
+        String fileName = path.substring("/videos/".length());
+        if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+            sendError(exchange, 400, "Invalid video path.");
+            return;
+        }
+        Path videosDir = projectRoot.resolve("target").resolve("videos");
+        Path video = videosDir.resolve(fileName).normalize();
+        if (!video.startsWith(videosDir) || !Files.isRegularFile(video)) {
+            sendError(exchange, 404, "Video not found.");
+            return;
+        }
+        String contentType = fileName.endsWith(".webm") ? "video/webm" : "video/mp4";
+        byte[] content = Files.readAllBytes(video);
+        exchange.getResponseHeaders().set("Content-Type", contentType);
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(200, content.length);
+        exchange.getResponseBody().write(content);
     }
 }
