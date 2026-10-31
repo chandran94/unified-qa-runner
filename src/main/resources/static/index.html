@@ -274,7 +274,10 @@
     <section class="media-panel" id="screenshotsPanel">
       <div class="media-panel-header" onclick="toggleScreenshotsPanel()">
         <h3>📸 Screenshots <span id="screenshotsPanelCount" class="tag"></span></h3>
-        <span id="screenshotsToggleIcon" style="font-size:18px">▼</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn" style="font-size:11px;padding:4px 10px;background:#ef4444;color:#fff;border:0;border-radius:6px;cursor:pointer" onclick="event.stopPropagation();deleteAllScreenshots()" title="Delete all screenshots">🗑️ Delete All</button>
+          <span id="screenshotsToggleIcon" style="font-size:18px">▼</span>
+        </div>
       </div>
       <div class="media-panel-body show" id="screenshotsPanelBody">
         <div id="screenshotsList"><div class="media-empty">No screenshots yet. Run a UI test to capture screenshots.</div></div>
@@ -284,7 +287,10 @@
     <section class="media-panel" id="videosPanel">
       <div class="media-panel-header" onclick="toggleVideosPanel()">
         <h3>🎥 Video Recordings <span id="videosPanelCount" class="tag"></span></h3>
-        <span id="videosToggleIcon" style="font-size:18px">▼</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn" style="font-size:11px;padding:4px 10px;background:#ef4444;color:#fff;border:0;border-radius:6px;cursor:pointer" onclick="event.stopPropagation();deleteAllVideos()" title="Delete all videos">🗑️ Delete All</button>
+          <span id="videosToggleIcon" style="font-size:18px">▼</span>
+        </div>
       </div>
       <div class="media-panel-body" id="videosPanelBody">
         <div id="videosList"><div class="media-empty">No recordings yet. Enable video recording in your test config.</div></div>
@@ -1557,11 +1563,12 @@
         return;
       }
       list.innerHTML = screenshots.map(s => `
-        <div class="media-item" onclick="viewScreenshot('${escapeHtml(s.file)}')">
-          <img src="/screenshots/${escapeHtml(s.file)}" alt="${escapeHtml(s.name)}" loading="lazy">
-          <div class="media-item-info">
+        <div class="media-item">
+          <img src="/screenshots/${escapeHtml(s.file)}" alt="${escapeHtml(s.name)}" loading="lazy" onclick="viewScreenshot('${escapeHtml(s.file)}')" style="cursor:pointer">
+          <div class="media-item-info" style="position:relative">
             <div class="media-item-name">${escapeHtml(s.name)}</div>
             <div class="media-item-meta">${formatFileSize(s.size)} • ${formatDate(s.modified)}</div>
+            <button class="btn" style="position:absolute;top:4px;right:4px;font-size:11px;padding:3px 8px;background:#ef4444;color:#fff;border:0;border-radius:6px;cursor:pointer" onclick="event.stopPropagation();deleteScreenshot('${escapeHtml(s.file)}')" title="Delete this screenshot">🗑️</button>
           </div>
         </div>
       `).join("");
@@ -1583,11 +1590,12 @@
         return;
       }
       list.innerHTML = videos.map(v => `
-        <div class="media-item" onclick="playVideo('${escapeHtml(v.file)}')">
-          <video src="/videos/${escapeHtml(v.file)}" preload="metadata"></video>
-          <div class="media-item-info">
+        <div class="media-item">
+          <video src="/videos/${escapeHtml(v.file)}" preload="metadata" onclick="playVideo('${escapeHtml(v.file)}')" style="cursor:pointer"></video>
+          <div class="media-item-info" style="position:relative">
             <div class="media-item-name">${escapeHtml(v.name)}</div>
             <div class="media-item-meta">${formatFileSize(v.size)} • ${formatDate(v.modified)}</div>
+            <button class="btn" style="position:absolute;top:4px;right:4px;font-size:11px;padding:3px 8px;background:#ef4444;color:#fff;border:0;border-radius:6px;cursor:pointer" onclick="event.stopPropagation();deleteVideo('${escapeHtml(v.file)}')" title="Delete this video">🗑️</button>
           </div>
         </div>
       `).join("");
@@ -1648,6 +1656,52 @@
     if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
     if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
     return date.toLocaleDateString();
+  }
+
+  // === Delete Screenshot/Video Functions ===
+
+  async function deleteScreenshot(fileName) {
+    if (!confirm(`Delete screenshot "${fileName}"?`)) return;
+    try {
+      await api(`/api/screenshots/${encodeURIComponent(fileName)}`, {method: "DELETE"});
+      notify("Screenshot deleted");
+      loadScreenshots();
+    } catch (e) {
+      notify("Delete failed: " + e.message);
+    }
+  }
+
+  async function deleteAllScreenshots() {
+    if (!confirm("Delete ALL screenshots? This cannot be undone.")) return;
+    try {
+      const result = await api("/api/screenshots", {method: "DELETE"});
+      notify(result.message || "All screenshots deleted");
+      loadScreenshots();
+    } catch (e) {
+      notify("Delete failed: " + e.message);
+    }
+  }
+
+  async function deleteVideo(fileName) {
+    if (!confirm(`Delete video "${fileName}"?`)) return;
+    try {
+      await api(`/api/videos/${encodeURIComponent(fileName)}`, {method: "DELETE"});
+      notify("Video deleted");
+      loadVideos();
+    } catch (e) {
+      notify("Delete failed: " + e.message);
+    }
+  }
+
+  async function deleteAllVideos() {
+    if (!confirm("Delete ALL videos? This cannot be undone.")) return;
+    try {
+      const result = await api("/api/videos", {method: "DELETE"});
+      notify(result.message || "All videos deleted");
+      loadVideos();
+    } catch (e) {
+      notify("Delete failed: " + e.message);
+    }
   }
 
 </script>

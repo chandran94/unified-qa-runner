@@ -234,8 +234,30 @@ final class RunnerServer implements AutoCloseable {
             sendJson(exchange, 200, listScreenshots());
             return;
         }
+        if (path.equals("/api/screenshots") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            deleteAllScreenshots(exchange);
+            return;
+        }
+        if (path.startsWith("/api/screenshots/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String fileName = path.substring("/api/screenshots/".length());
+            deleteScreenshot(exchange, fileName);
+            return;
+        }
         if (path.equals("/api/videos") && method.equals("GET")) {
             sendJson(exchange, 200, listVideos());
+            return;
+        }
+        if (path.equals("/api/videos") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            deleteAllVideos(exchange);
+            return;
+        }
+        if (path.startsWith("/api/videos/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String fileName = path.substring("/api/videos/".length());
+            deleteVideo(exchange, fileName);
             return;
         }
         if (path.equals("/api/runs") && method.equals("POST")) {
@@ -1098,6 +1120,80 @@ final class RunnerServer implements AutoCloseable {
             System.err.println("Failed to list videos: " + e.getMessage());
         }
         return result;
+    }
+
+    // === Screenshot Delete Methods ===
+
+    private void deleteScreenshot(HttpExchange exchange, String fileName) throws IOException {
+        if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+            sendError(exchange, 400, "Invalid screenshot path.");
+            return;
+        }
+        Path screenshotsDir = projectRoot.resolve("target").resolve("screenshots");
+        Path screenshot = screenshotsDir.resolve(fileName).normalize();
+        if (!screenshot.startsWith(screenshotsDir) || !Files.isRegularFile(screenshot)) {
+            sendError(exchange, 404, "Screenshot not found: " + fileName);
+            return;
+        }
+        Files.delete(screenshot);
+        sendJson(exchange, 200, Map.of("message", "Screenshot deleted: " + fileName));
+    }
+
+    private void deleteAllScreenshots(HttpExchange exchange) throws IOException {
+        Path screenshotsDir = projectRoot.resolve("target").resolve("screenshots");
+        if (!Files.isDirectory(screenshotsDir)) {
+            sendJson(exchange, 200, Map.of("message", "No screenshots to delete."));
+            return;
+        }
+        int count = 0;
+        try (var stream = Files.list(screenshotsDir)) {
+            for (Path p : stream.filter(Files::isRegularFile).toList()) {
+                try {
+                    Files.delete(p);
+                    count++;
+                } catch (IOException e) {
+                    System.err.println("Failed to delete screenshot: " + p + " - " + e.getMessage());
+                }
+            }
+        }
+        sendJson(exchange, 200, Map.of("message", count + " screenshot(s) deleted."));
+    }
+
+    // === Video Delete Methods ===
+
+    private void deleteVideo(HttpExchange exchange, String fileName) throws IOException {
+        if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+            sendError(exchange, 400, "Invalid video path.");
+            return;
+        }
+        Path videosDir = projectRoot.resolve("target").resolve("videos");
+        Path video = videosDir.resolve(fileName).normalize();
+        if (!video.startsWith(videosDir) || !Files.isRegularFile(video)) {
+            sendError(exchange, 404, "Video not found: " + fileName);
+            return;
+        }
+        Files.delete(video);
+        sendJson(exchange, 200, Map.of("message", "Video deleted: " + fileName));
+    }
+
+    private void deleteAllVideos(HttpExchange exchange) throws IOException {
+        Path videosDir = projectRoot.resolve("target").resolve("videos");
+        if (!Files.isDirectory(videosDir)) {
+            sendJson(exchange, 200, Map.of("message", "No videos to delete."));
+            return;
+        }
+        int count = 0;
+        try (var stream = Files.list(videosDir)) {
+            for (Path p : stream.filter(Files::isRegularFile).toList()) {
+                try {
+                    Files.delete(p);
+                    count++;
+                } catch (IOException e) {
+                    System.err.println("Failed to delete video: " + p + " - " + e.getMessage());
+                }
+            }
+        }
+        sendJson(exchange, 200, Map.of("message", count + " video(s) deleted."));
     }
 
     private void serveVideo(HttpExchange exchange, String path) throws IOException {
