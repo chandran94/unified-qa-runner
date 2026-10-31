@@ -60,6 +60,7 @@ final class ExecutionService {
         pluginRegistry.register(new KaratePlugin(projectRoot));
         pluginRegistry.register(new WebdriverIOPlugin(projectRoot));
         pluginRegistry.register(new RestAssuredPlugin(projectRoot));
+        pluginRegistry.register(new SoapUIPlugin(projectRoot));
     }
 
     /**
