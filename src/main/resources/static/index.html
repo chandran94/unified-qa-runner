@@ -99,6 +99,10 @@
     .dep-tool-status{font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px}
     .dep-tool-status.ok{background:#e5f7ef;color:#16845b}
     .dep-tool-status.missing{background:#ffebee;color:#b32b3b}
+    .dep-install-btn{background:#4a90d9;color:#fff;border:0;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600}
+    .dep-install-btn:hover{background:#357abd}
+    .dep-install-all-btn{background:#27ae60;color:#fff;border:0;border-radius:10px;padding:10px 20px;font-size:14px;cursor:pointer;font-weight:700;margin-bottom:16px;width:100%}
+    .dep-install-all-btn:hover{background:#219a52}
     .dep-framework{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden}
     .dep-framework-header{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f4f6fb;cursor:pointer;user-select:none}
     .dep-framework-icon{font-size:20px}
@@ -1798,6 +1802,8 @@
     tools.forEach(tool => {
       const info = deps[tool.key] || {available: false};
       const ok = info.available === true;
+      const installBtn = !ok && tool.key !== 'java' && tool.key !== 'git'
+        ? `<button class="dep-install-btn" onclick="installDependency('${tool.key}')">📥 Install</button>` : '';
       html += `<div class="dep-tool">
         <div class="dep-tool-icon">${tool.icon}</div>
         <div class="dep-tool-info">
@@ -1805,6 +1811,7 @@
           <div class="dep-tool-version">${ok ? escapeHtml(info.version || 'installed') : 'Not found'}</div>
         </div>
         <span class="dep-tool-status ${ok ? 'ok' : 'missing'}">${ok ? '✅ Installed' : '❌ Missing'}</span>
+        ${installBtn}
       </div>`;
     });
 
@@ -1812,6 +1819,8 @@
     html += '<div class="dep-section-title">🔌 Optional Tools</div>';
     // JMeter
     const jmeter = deps.jmeter || {available: false};
+    const jmeterInstallBtn = !jmeter.available
+      ? `<button class="dep-install-btn" onclick="installDependency('jmeter')">📥 Install</button>` : '';
     html += `<div class="dep-tool">
       <div class="dep-tool-icon">⏱️</div>
       <div class="dep-tool-info">
@@ -1819,13 +1828,13 @@
         <div class="dep-tool-version">${jmeter.available ? escapeHtml(jmeter.version || 'bundled') : 'Not installed'}</div>
       </div>
       <span class="dep-tool-status ${jmeter.available ? 'ok' : 'missing'}">${jmeter.available ? '✅ Installed' : '❌ Missing'}</span>
+      ${jmeterInstallBtn}
     </div>`;
-    if (!jmeter.available && jmeter.installHint) {
-      html += `<div class="dep-framework-hint" style="margin-left:52px">${escapeHtml(jmeter.installHint)}</div>`;
-    }
 
     // Appium
     const appium = deps.appium || {available: false};
+    const appiumInstallBtn = !appium.available
+      ? `<button class="dep-install-btn" onclick="installDependency('appium')">📥 Install</button>` : '';
     html += `<div class="dep-tool">
       <div class="dep-tool-icon">📱</div>
       <div class="dep-tool-info">
@@ -1833,10 +1842,8 @@
         <div class="dep-tool-version">${appium.available ? 'Running on port 4723' : 'Not running'}</div>
       </div>
       <span class="dep-tool-status ${appium.available ? 'ok' : 'missing'}">${appium.available ? '✅ Running' : '❌ Offline'}</span>
+      ${appiumInstallBtn}
     </div>`;
-    if (!appium.available && appium.installHint) {
-      html += `<div class="dep-framework-hint" style="margin-left:52px">${escapeHtml(appium.installHint)}</div>`;
-    }
 
     // Frameworks section
     html += '<div class="dep-section-title">🧪 Framework Readiness</div>';
@@ -1881,6 +1888,54 @@
     });
 
     body.innerHTML = html;
+
+    // Add "Install All Missing" button at the top
+    const installAllBtn = document.createElement('button');
+    installAllBtn.className = 'dep-install-all-btn';
+    installAllBtn.textContent = '📥 Install All Missing Dependencies';
+    installAllBtn.onclick = () => installAllDependencies();
+    const bodyEl = document.getElementById("depModalBody");
+    bodyEl.insertBefore(installAllBtn, bodyEl.firstChild);
+  }
+
+  // === Dependency Installer ===
+
+  async function installDependency(tool) {
+    try {
+      notify("⏳ Installing " + tool + "...");
+      const result = await api("/api/dependencies/install", {
+        method: "POST",
+        body: JSON.stringify({tools: [tool]})
+      });
+      if (result.logs) {
+        notify("✅ " + tool + " installation completed");
+      }
+      // Refresh the modal
+      const deps = await api("/api/dependencies");
+      renderDependencyModal(deps);
+    } catch (e) {
+      notify("❌ Install failed: " + e.message);
+    }
+  }
+
+  async function installAllDependencies() {
+    try {
+      notify("⏳ Installing all missing dependencies...");
+      const result = await api("/api/dependencies/install", {
+        method: "POST",
+        body: JSON.stringify({tools: []})
+      });
+      if (result.logs) {
+        // Show install log in a notification
+        const successCount = Object.keys(result.results || {}).filter(k => result.results[k] === 'installed').length;
+        notify("✅ Installation completed: " + successCount + " tool(s) installed");
+      }
+      // Refresh the modal
+      const deps = await api("/api/dependencies");
+      renderDependencyModal(deps);
+    } catch (e) {
+      notify("❌ Install failed: " + e.message);
+    }
   }
 
 </script>

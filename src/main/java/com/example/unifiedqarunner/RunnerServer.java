@@ -292,6 +292,13 @@ final class RunnerServer implements AutoCloseable {
             sendJson(exchange, 200, checkDependencies());
             return;
         }
+        // === Dependency Install Endpoint ===
+        if (parts.length == 4 && parts[1].equals("api") && parts[2].equals("dependencies")
+                && parts[3].equals("install") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            installDependencies(exchange);
+            return;
+        }
         if (parts.length == 5 && parts[1].equals("api") && parts[2].equals("runs")
                 && parts[4].equals("analyze") && method.equals("POST")) {
             // Return run data for AI analysis (client-side)
@@ -1387,6 +1394,340 @@ final class RunnerServer implements AutoCloseable {
         r.put("version", "offline");
         r.put("installHint", "Install Appium: npm install -g appium, then start with 'appium' command");
         return r;
+    }
+
+    // === Dependency Installer ===
+
+    /**
+     * Install missing dependencies automatically.
+     * Reads the request body for a list of tools to install, or installs all missing tools.
+     */
+    private void installDependencies(HttpExchange exchange) throws IOException {
+        List<String> toolsToInstall = new ArrayList<>();
+        try {
+            byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+            if (body.length > 0 && body.length <= MAX_REQUEST_BYTES) {
+                Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+                if (parsed instanceof Map<?, ?> values) {
+                    Object tools = values.get("tools");
+                    if (tools instanceof List<?> toolList) {
+                        for (Object t : toolList) {
+                            if (t instanceof String ts && !ts.isBlank()) {
+                                toolsToInstall.add(ts);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // No body or invalid JSON — install all missing tools
+        }
+
+        Map<String, Object> deps = checkDependencies();
+        Map<String, Object> results = new LinkedHashMap<>();
+        List<String> logs = new ArrayList<>();
+
+        // Determine what to install
+        if (toolsToInstall.isEmpty()) {
+            // Install all missing tools
+            if (!Boolean.TRUE.equals((deps.get("maven") instanceof Map ? ((Map<?,?>)deps.get("maven")).get("available") : false))) {
+                toolsToInstall.add("maven");
+            }
+            if (!Boolean.TRUE.equals((deps.get("npm") instanceof Map ? ((Map<?,?>)deps.get("npm")).get("available") : false))) {
+                toolsToInstall.add("npm");
+            }
+            if (!Boolean.TRUE.equals((deps.get("node") instanceof Map ? ((Map<?,?>)deps.get("node")).get("available") : false))) {
+                toolsToInstall.add("node");
+            }
+            if (!Boolean.TRUE.equals((deps.get("jmeter") instanceof Map ? ((Map<?,?>)deps.get("jmeter")).get("available") : false))) {
+                toolsToInstall.add("jmeter");
+            }
+            if (!Boolean.TRUE.equals((deps.get("appium") instanceof Map ? ((Map<?,?>)deps.get("appium")).get("available") : false))) {
+                toolsToInstall.add("appium");
+            }
+        }
+
+        for (String tool : toolsToInstall) {
+            String result = installTool(tool, logs);
+            results.put(tool, result);
+        }
+
+        // Also run npm install for Newman if node/npm is available
+        try {
+            Map<String, Object> npmStatus = (Map<String, Object>) deps.get("npm");
+            Map<String, Object> nodeStatus = (Map<String, Object>) deps.get("node");
+            if (Boolean.TRUE.equals(npmStatus.get("available")) && Boolean.TRUE.equals(nodeStatus.get("available"))) {
+                logs.add("[runner] Installing npm packages (Newman, WDIO, Cypress)...");
+                ProcessBuilder pb = new ProcessBuilder("npm", "install");
+                pb.directory(projectRoot.toFile());
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(p.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        logs.add("[npm] " + line);
+                    }
+                }
+                int exitCode = p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS) ? p.exitValue() : -1;
+                if (exitCode == 0) {
+                    results.put("npm-packages", "installed");
+                    logs.add("[runner] ✅ npm packages installed successfully");
+                } else {
+                    results.put("npm-packages", "failed");
+                    logs.add("[runner] ❌ npm install failed with exit code " + exitCode);
+                }
+            }
+        } catch (Exception e) {
+            results.put("npm-packages", "error: " + e.getMessage());
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("results", results);
+        response.put("logs", logs);
+        sendJson(exchange, 200, response);
+    }
+
+    /**
+     * Install a single tool and return the result.
+     */
+    private String installTool(String tool, List<String> logs) {
+        switch (tool) {
+            case "maven":
+                return installMaven(logs);
+            case "node":
+                return installNode(logs);
+            case "npm":
+                return "npm is bundled with Node.js — install Node.js first";
+            case "jmeter":
+                return installJMeter(logs);
+            case "appium":
+                return installAppium(logs);
+            default:
+                return "unknown tool: " + tool;
+        }
+    }
+
+    /**
+     * Download and install Apache Maven.
+     */
+    private String installMaven(List<String> logs) {
+        Path mavenDir = projectRoot.resolve("apache-maven");
+        Path mavenZip = projectRoot.resolve("temp").resolve("apache-maven.zip");
+        String mavenVersion = "3.9.9";
+        String url = "https://archive.apache.org/dist/maven/maven-3/" + mavenVersion + "/binaries/apache-maven-" + mavenVersion + "-bin.zip";
+
+        try {
+            logs.add("[runner] Downloading Maven " + mavenVersion + "...");
+            Files.createDirectories(mavenDir);
+            Files.createDirectories(projectRoot.resolve("temp"));
+
+            // Download Maven
+            downloadFile(url, mavenZip, logs);
+
+            // Extract using Java's ZipFile
+            logs.add("[runner] Extracting Maven...");
+            extractZip(mavenZip, mavenDir);
+
+            // Find the actual maven directory (apache-maven-X.Y.Z)
+            Path extractedDir = null;
+            try (var stream = Files.list(mavenDir)) {
+                for (Path p : stream.filter(Files::isDirectory).toList()) {
+                    if (p.getFileName().toString().startsWith("apache-maven-")) {
+                        extractedDir = p;
+                        break;
+                    }
+                }
+            }
+
+            if (extractedDir != null) {
+                // Move contents to mavenDir
+                Path mavenBin = extractedDir.resolve("bin").resolve("mvn.cmd");
+                if (Files.exists(mavenBin)) {
+                    logs.add("[runner] ✅ Maven installed at: " + mavenDir);
+                    // Clean up
+                    Files.deleteIfExists(mavenZip);
+                    return "installed";
+                }
+            }
+
+            // If extraction didn't work as expected, try alternative approach
+            logs.add("[runner] Maven extracted to: " + mavenDir);
+            Files.deleteIfExists(mavenZip);
+            return "installed (check PATH)";
+
+        } catch (Exception e) {
+            logs.add("[runner] ❌ Maven install failed: " + e.getMessage());
+            return "error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Download and install Node.js (Windows binary).
+     */
+    private String installNode(List<String> logs) {
+        Path nodeDir = projectRoot.resolve("nodejs");
+        Path nodeZip = projectRoot.resolve("temp").resolve("nodejs.zip");
+        String url = "https://nodejs.org/dist/v20.11.0/node-v20.11.0-win-x64.zip";
+
+        try {
+            logs.add("[runner] Downloading Node.js v20.11.0...");
+            Files.createDirectories(nodeDir);
+            Files.createDirectories(projectRoot.resolve("temp"));
+
+            downloadFile(url, nodeZip, logs);
+            logs.add("[runner] Extracting Node.js...");
+            extractZip(nodeZip, nodeDir);
+
+            Path nodeExe = nodeDir.resolve("node.exe");
+            if (Files.exists(nodeExe)) {
+                logs.add("[runner] ✅ Node.js installed at: " + nodeDir);
+                Files.deleteIfExists(nodeZip);
+                return "installed";
+            }
+
+            logs.add("[runner] ❌ Node.js install failed — node.exe not found");
+            Files.deleteIfExists(nodeZip);
+            return "error: node.exe not found after extraction";
+
+        } catch (Exception e) {
+            logs.add("[runner] ❌ Node.js install failed: " + e.getMessage());
+            return "error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Download and install Apache JMeter.
+     */
+    private String installJMeter(List<String> logs) {
+        Path jmeterDir = projectRoot.resolve("apache-jmeter-5.6.3");
+        if (Files.exists(jmeterDir.resolve("bin").resolve("jmeter.bat"))) {
+            return "already installed";
+        }
+
+        Path jmeterZip = projectRoot.resolve("temp").resolve("jmeter.zip");
+        String url = "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip";
+
+        try {
+            logs.add("[runner] Downloading Apache JMeter 5.6.3...");
+            Files.createDirectories(projectRoot.resolve("temp"));
+
+            downloadFile(url, jmeterZip, logs);
+            logs.add("[runner] Extracting JMeter...");
+            extractZip(jmeterZip, projectRoot);
+
+            if (Files.exists(jmeterDir.resolve("bin").resolve("jmeter.bat"))) {
+                logs.add("[runner] ✅ JMeter installed at: " + jmeterDir);
+                Files.deleteIfExists(jmeterZip);
+                return "installed";
+            }
+
+            logs.add("[runner] ❌ JMeter install failed");
+            Files.deleteIfExists(jmeterZip);
+            return "error: jmeter.bat not found";
+
+        } catch (Exception e) {
+            logs.add("[runner] ❌ JMeter install failed: " + e.getMessage());
+            return "error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Install Appium via npm.
+     */
+    private String installAppium(List<String> logs) {
+        try {
+            // Check if npm is available
+            ProcessBuilder pb = new ProcessBuilder("npm", "--version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished || p.exitValue() != 0) {
+                return "npm not found — install Node.js first";
+            }
+
+            logs.add("[runner] Installing Appium via npm...");
+            pb = new ProcessBuilder("npm", "install", "-g", "appium@latest");
+            pb.redirectErrorStream(true);
+            p = pb.start();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    logs.add("[npm] " + line);
+                }
+            }
+            boolean done = p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS);
+            if (done && p.exitValue() == 0) {
+                logs.add("[runner] ✅ Appium installed successfully");
+                return "installed";
+            }
+            logs.add("[runner] ❌ Appium install failed");
+            return "error: npm install failed";
+
+        } catch (Exception e) {
+            logs.add("[runner] ❌ Appium install failed: " + e.getMessage());
+            return "error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Download a file from a URL to a local path.
+     */
+    private void downloadFile(String url, Path dest, List<String> logs) throws Exception {
+        var client = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofMinutes(5))
+                .build();
+        var request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(url))
+                .timeout(java.time.Duration.ofMinutes(10))
+                .build();
+
+        Files.createDirectories(dest.getParent());
+
+        // Download with progress
+        java.net.http.HttpResponse<java.nio.file.Path> response =
+                client.send(request, java.net.http.HttpResponse.BodyHandlers.ofFile(dest));
+
+        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            long size = Files.size(dest);
+            logs.add("[runner] Downloaded " + dest.getFileName() + " (" + formatSize(size) + ")");
+        } else {
+            Files.deleteIfExists(dest);
+            throw new Exception("Download failed with status " + response.statusCode());
+        }
+    }
+
+    /**
+     * Extract a ZIP file to a target directory.
+     */
+    private void extractZip(Path zipFile, Path targetDir) throws Exception {
+        Files.createDirectories(targetDir);
+        try (var zipfs = java.nio.file.FileSystems.newFileSystem(zipFile, (java.lang.ClassLoader) null)) {
+            for (var entry : zipfs.getRootDirectories()) {
+                copyDirectory(entry, targetDir);
+            }
+        }
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        Files.createDirectories(target);
+        try (var stream = Files.list(source)) {
+            for (Path entry : stream.toList()) {
+                Path targetEntry = target.resolve(entry.getFileName().toString());
+                if (Files.isDirectory(entry)) {
+                    copyDirectory(entry, targetEntry);
+                } else {
+                    Files.copy(entry, targetEntry, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+    }
+
+    private String formatSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
     }
 
     private Map<String, Object> frameworkDep(String id, String name, String icon,
