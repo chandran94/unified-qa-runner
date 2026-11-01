@@ -450,6 +450,7 @@ final class RunnerServer implements AutoCloseable {
                 case "cypress": fw.put("label", "Cypress"); fw.put("icon", "🌲"); break;
                 case "gatling": fw.put("label", "Gatling"); fw.put("icon", "🔥"); break;
                 case "database": fw.put("label", "Database"); fw.put("icon", "🗄️"); break;
+                case "testng": fw.put("label", "TestNG"); fw.put("icon", "🔶"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
            }
             fw.put("count", String.valueOf(fc.getValue()));
@@ -595,6 +596,7 @@ final class RunnerServer implements AutoCloseable {
                 case "cypress": fw.put("label", "Cypress"); fw.put("icon", "🌲"); break;
                 case "gatling": fw.put("label", "Gatling"); fw.put("icon", "🔥"); break;
                 case "database": fw.put("label", "Database"); fw.put("icon", "🗄️"); break;
+                case "testng": fw.put("label", "TestNG"); fw.put("icon", "🔶"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
            }
             fw.put("count", String.valueOf(fc.getValue()));
@@ -1303,6 +1305,9 @@ final class RunnerServer implements AutoCloseable {
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             frameworks.add(frameworkDep("database", "Database", "🗄️", List.of(),
                     "Supports H2 (embedded), MySQL, PostgreSQL, DB2, and Snowflake. JDBC drivers are bundled — no extra installation needed. Configure connection in database.properties or via target URL.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("testng", "TestNG + Selenium", "🔶", List.of("maven"),
+                    "TestNG data-driven testing with Selenium + Page Object Model. Maven is required to compile and run TestNG test classes with DataProviders.",
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             result.put("frameworks", frameworks);
             return result;

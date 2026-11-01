@@ -67,6 +67,7 @@ final class ExecutionService {
         pluginRegistry.register(new CypressPlugin(projectRoot));
         pluginRegistry.register(new GatlingPlugin(projectRoot));
         pluginRegistry.register(new DatabasePlugin(projectRoot));
+        pluginRegistry.register(new TestNGPlugin(projectRoot));
     }
 
     /**
