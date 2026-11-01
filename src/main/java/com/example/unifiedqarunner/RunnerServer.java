@@ -1254,7 +1254,7 @@ final class RunnerServer implements AutoCloseable {
             Map<String, Object> result = new LinkedHashMap<>();
             Map<String, Object> mavenStatus = findMavenCLI();
             Map<String, Object> nodeStatus = checkCommand("node");
-            Map<String, Object> npmStatus = checkCommand("npm");
+            Map<String, Object> npmStatus = findNpm();
             Map<String, Object> jmeterStatus = findJMeterCLI();
             Map<String, Object> appiumStatus = checkAppiumServer();
 
@@ -1352,6 +1352,60 @@ final class RunnerServer implements AutoCloseable {
             r.put("version", "not found");
             return r;
         }
+    }
+
+    /**
+     * Find npm — checks Node.js installation directory first, then system PATH.
+     * npm comes bundled with Node.js, so if Node.js is found, npm should be nearby.
+     */
+    private Map<String, Object> findNpm() {
+        // Try to find npm.cmd next to node.exe
+        String[] nodePathsToCheck = {
+            "C:\\Program Files\\nodejs\\npm.cmd",
+            "C:\\Program Files (x86)\\nodejs\\npm.cmd"
+        };
+        for (String path : nodePathsToCheck) {
+            Path npmPath = Path.of(path);
+            if (Files.isRegularFile(npmPath)) {
+                try {
+                    ProcessBuilder pb = new ProcessBuilder(npmPath.toString(), "--version");
+                    pb.redirectErrorStream(true);
+                    Process p = pb.start();
+                    boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                    if (finished) {
+                        StringBuilder sb = new StringBuilder();
+                        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                                new java.io.InputStreamReader(p.getInputStream()))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                sb.append(line).append("\n");
+                            }
+                        }
+                        String version = sb.toString().trim();
+                        if (version.isEmpty()) version = "installed";
+                        Map<String, Object> r = new LinkedHashMap<>();
+                        r.put("available", true);
+                        r.put("version", "v" + version + " (local)");
+                        return r;
+                    }
+                } catch (Exception ignored) {
+                    // Fall through
+                }
+            }
+        }
+        // Also check the directory where node.exe is located
+        String nodeExe = System.getenv("NODE_PATH");
+        if (nodeExe != null) {
+            Path npmInNodeDir = Path.of(nodeExe).resolve("npm.cmd");
+            if (Files.isRegularFile(npmInNodeDir)) {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("available", true);
+                r.put("version", "installed (local)");
+                return r;
+            }
+        }
+        // Fall back to system PATH
+        return checkCommand("npm");
     }
 
     /**
