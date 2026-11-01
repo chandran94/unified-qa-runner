@@ -19,16 +19,27 @@ Transform the Unified QA Runner from a Maven/Newman-only test executor into a **
 - Collection runs across frameworks
 
 **Out of Scope:**
-- Mobile testing (Appium, Espresso)
-- Performance/load testing (JMeter, Gatling)
-- Distributed/parallel execution across machines
-- CI/CD pipeline integration (GitHub Actions, Jenkins plugins)
+- Native mobile app development
+- Real device cloud integration (BrowserStack, Sauce Labs)
+- Custom CI/CD server — uses existing GitHub Actions and Jenkins
+- WebSocket-based real-time streaming (uses polling for now)
+
+### Expansion Goals (Phase 2)
+The following areas are planned for the next phase:
+1. **Mobile testing** — Appium for Android/iOS native and hybrid apps
+2. **Performance/load testing** — Full JMeter CLI integration (replacing HTTP-only JMeter plugin)
+3. **Distributed/parallel execution** — Run tests across multiple machines simultaneously
+4. **CI/CD pipeline integration** — GitHub Actions and Jenkins templates for automated test runs
 
 ### User Stories
 1. As a QA engineer, I want to drop Playwright test files into `tests/playwright/` so they appear in the UI dashboard automatically.
 2. As a tester, I want to select a framework (e.g., Karate) and run its tests from the UI without knowing Maven or Node.js commands.
 3. As a team lead, I want to see pass/fail results from all frameworks in a unified report with screenshots for failures.
 4. As a developer, I want to add a new test framework by implementing a single `RunnerPlugin` class without modifying core runner code.
+5. As a mobile tester, I want to drop Appium test scripts into `tests/appium/` so they appear in the UI and run on my connected device or emulator.
+6. As a performance engineer, I want to upload a JMeter `.jmx` file and run a full load test with thread groups, timers, and listeners — not just HTTP samplers.
+7. As a team lead, I want to distribute test execution across 3 machines so a full regression suite runs in 10 minutes instead of 30.
+8. As a DevOps engineer, I want a GitHub Actions workflow that runs the QA Runner on every PR merge.
 
 ### Functional Requirements
 - **Framework discovery**: Each plugin scans its designated folder for test scripts and returns a list of runnable assets.
@@ -37,6 +48,33 @@ Transform the Unified QA Runner from a Maven/Newman-only test executor into a **
 - **UI framework selector**: A dropdown or tab to switch between frameworks when browsing assets.
 - **Collection runs**: Ability to select multiple tests across the same framework and run them together.
 - **Browser selection**: Chrome/Firefox checkboxes (existing) extended to frameworks that support browsers.
+
+### Expansion Functional Requirements
+
+#### Mobile Testing (Appium)
+- Discover `.java` test files in `tests/appium/` and shared paths
+- Support Android and iOS platforms
+- Device selection in UI (emulator/simulator or real device)
+- App capability configuration (app path, platform version, device name)
+- Screenshot capture on mobile failures
+
+#### Performance Testing (JMeter CLI)
+- Execute full JMeter test plans via CLI (`jmeter -n -t <file> -l <results> -e -o <output>`)
+- Parse JMeter results (`.jtl` CSV) and HTML reports
+- Display performance metrics: response time, throughput, error rate, percentiles
+- Thread group visualization in results
+
+#### Distributed Execution
+- Node registration API — machines register as execution nodes
+- Test distribution — split test suite across available nodes
+- Result aggregation — merge results from all nodes into one report
+- Node health monitoring — detect offline or busy nodes
+
+#### CI/CD Integration
+- GitHub Actions workflow YAML templates
+- Jenkins pipeline script (Groovy)
+- Pre-built Docker image for containerized execution
+- Badge generation for test status in README
 
 ### Non-Functional Requirements
 - **Extensibility**: Adding a new framework requires only a new plugin class and optional config — no changes to core server or UI.
@@ -166,6 +204,153 @@ Each plugin will be validated by running a sample test through the UI and verify
 - Run cancelled mid-execution → plugin's `cancel()` stops the process.
 - Report file missing after run → fallback to exit-code-based summary.
 
+# Expansion Technical Design (Phase 2)
+
+### Current State
+- **8 frameworks** already working: Cucumber, Newman, Playwright, Karate, WebdriverIO, RestAssured, SoapUI, JMeter (HTTP-only)
+- **Plugin architecture** in place — adding new frameworks = new `RunnerPlugin` class
+- **Shared paths** support — scripts from external directories are auto-discovered
+- **GitHub/ZIP import** — remote repos and ZIP files can be imported
+- **AI Failure Analysis** — 28 error patterns with fix suggestions
+- **Fixed port 8081** — always at `http://localhost:8081/`
+
+### Key Decisions
+1. **AppiumPlugin as RunnerPlugin**: Follows the same pattern — discovers tests, executes via Maven with Appium dependencies, parses JUnit XML reports. Device selection is passed via `execute()` parameters.
+2. **JMeter CLI replaces HTTP-only JMeter**: The current `JMeterPlugin` only parses HTTP samplers. A new `JMeterCLIPlugin` will invoke the actual JMeter CLI for full test plan execution including thread groups, timers, assertions, and listeners.
+3. **DistributedExecutor as coordinator**: A new `DistributedExecutor` class manages node registration, test distribution, and result aggregation. Nodes are other instances of the QA Runner running on different machines.
+4. **CI/CD as templates**: GitHub Actions and Jenkins integration are provided as YAML/Groovy templates that users copy into their projects. No server-side CI/CD code needed.
+
+### Architecture Diagram
+```
+graph LR
+  UI[UI Dashboard] --> Server[RunnerServer]
+  Server --> Registry[PluginRegistry]
+  Registry --> Cucumber[CucumberPlugin]
+  Registry --> Newman[NewmanPlugin]
+  Registry --> Playwright[PlaywrightPlugin]
+  Registry --> Karate[KaratePlugin]
+  Registry --> WDIO[WebdriverIOPlugin]
+  Registry --> RestAssured[RestAssuredPlugin]
+  Registry --> SoapUI[SoapUIPlugin]
+  Registry --> JMeter[JMeterPlugin]
+  Registry --> Appium[AppiumPlugin NEW]
+  Registry --> JMeterCLI[JMeterCLIPlugin NEW]
+  Server --> Distributor[DistributedExecutor NEW]
+  Server --> CI[CI/CD Templates NEW]
+  Appium --> Devices[Android/iOS Devices]
+  JMeterCLI --> JM[Apache JMeter CLI]
+  Distributor --> Node1[Node 1]
+  Distributor --> Node2[Node 2]
+  Distributor --> Node3[Node 3]
+  Node1 --> Result1[Results]
+  Node2 --> Result2[Results]
+  Node3 --> Result3[Results]
+  Result1 --> Aggregator[Result Aggregator]
+  Result2 --> Aggregator
+  Result3 --> Aggregator
+  Aggregator --> Summary[Unified RunSummary]
+```
+
+### Proposed Changes
+
+#### 1. Appium Plugin (new files)
+- **`AppiumPlugin.java`** — discovers `.java` test files in `tests/appium/` and shared paths
+- Executes via Maven with Appium dependencies
+- Parses JUnit XML reports
+- Supports device selection via `execute()` parameters (platform, device name, app path)
+- **`tests/appium/`** — sample directory with `pom.xml` and a demo test
+- **UI updates**: Device selector dropdown (Android/iOS, emulator/real device), app path input
+
+#### 2. JMeter CLI Plugin (new file)
+- **`JMeterCLIPlugin.java`** — replaces current `JMeterPlugin` for full JMeter support
+- Invokes `jmeter -n -t <file> -l <results.jtl> -e -o <output-dir>`
+- Parses `.jtl` CSV results for per-sample metrics
+- Parses JMeter HTML report for summary metrics
+- Displays: response time (min/avg/max/p95/p99), throughput, error rate, thread group stats
+- **UI updates**: Performance metrics panel with charts, thread group visualization
+
+#### 3. Distributed Execution (new files)
+- **`DistributedExecutor.java`** — coordinates test distribution across nodes
+- **`NodeRegistry.java`** — manages registered execution nodes
+- **`NodeConfig.java`** — persists node configuration in `qa-runner-nodes.json`
+- **RunnerServer.java**: Added endpoints:
+  - `POST /api/nodes/register` — register a new execution node
+  - `GET /api/nodes` — list all registered nodes
+  - `DELETE /api/nodes/{id}` — remove a node
+  - `POST /api/runs/distributed` — start distributed test run
+- **UI updates**: Node management panel, distributed run button, progress per node
+
+#### 4. CI/CD Integration (new files)
+- **`.github/workflows/qa-runner.yml`** — GitHub Actions workflow template
+- **`Jenkinsfile`** — Jenkins pipeline script
+- **`Dockerfile`** — Containerized QA Runner image
+- **`scripts/build-docker.sh`** — Docker build script
+- **README.md**: Updated with CI/CD setup instructions
+
+### File Structure
+```
+src/main/java/com/example/unifiedqarunner/
+  AppiumPlugin.java              (new — mobile testing)
+  JMeterCLIPlugin.java           (new — full JMeter CLI)
+  DistributedExecutor.java       (new — distributed coordination)
+  NodeRegistry.java              (new — node management)
+  NodeConfig.java                (new — node persistence)
+  RunnerServer.java              (updated — node + distributed endpoints)
+  ExecutionService.java          (updated — register new plugins)
+
+src/main/resources/static/
+  index.html                     (updated — mobile, performance, distributed UI)
+
+tests/
+  appium/                        (new — Appium test scripts)
+    pom.xml                      (new — Appium dependencies)
+    DemoQAMobileTest.java        (new — sample mobile test)
+
+.github/workflows/
+  qa-runner.yml                  (new — GitHub Actions workflow)
+
+Jenkinsfile                      (new — Jenkins pipeline)
+Dockerfile                       (new — containerized runner)
+scripts/build-docker.sh          (new — Docker build helper)
+qa-runner-nodes.json             (new — node configuration)
+```
+
+### Risks
+- **Appium setup complexity**: Requires Android SDK, Xcode (for iOS), and Appium server. Provide clear setup instructions.
+- **JMeter CLI dependency**: Users need JMeter installed or in PATH. Provide download link and configuration.
+- **Network latency for distributed execution**: Nodes on different networks may have high latency. Add timeout and retry logic.
+- **Node security**: API tokens for node authentication. Store tokens securely.
+
+---
+
+## Expansion Testing
+
+### Validation Approach
+Each new feature is validated by running a sample test through the UI and verifying results.
+
+### Key Scenarios
+1. **AppiumPlugin**: Run a sample Android test → results appear in dashboard with pass/fail counts.
+2. **JMeterCLIPlugin**: Run a JMeter test plan with thread groups → performance metrics displayed correctly.
+3. **Distributed execution**: Register 2 nodes, run distributed test → results aggregated from both nodes.
+4. **GitHub Actions**: Push code → workflow triggers → tests run in GitHub Actions.
+5. **Jenkins**: Trigger pipeline → tests run via QA Runner.
+
+### Edge Cases
+- No mobile device connected → clear error message with setup instructions.
+- JMeter CLI not found → fallback to HTTP-only mode with warning.
+- Node goes offline during run → mark tests as failed, continue with remaining nodes.
+- CI/CD secrets missing → clear error message with setup instructions.
+
+---
+
+## Expansion Delivery Steps
+
+### ✓ Step 12: Implement Appium Plugin
+### ✓ Step 13: Implement JMeter CLI Plugin
+### ✓ Step 14: Implement Distributed Execution
+### ✓ Step 15: Add CI/CD Integration
+### ✓ Step 16: Final Integration and Polish
+
 # Delivery Steps
 
 ### ✓ Step 1: Create plugin infrastructure
@@ -285,3 +470,5 @@ Make the AI Failure Analysis more specific and detailed with framework-aware con
 - More specific, actionable fix suggestions based on the execution context.
 - Verified with failing Cucumber test (ERR_CONNECTION_REFUSED) — analysis correctly detected and explained the issue.
 - Pushed changes to GitHub.
+
+---

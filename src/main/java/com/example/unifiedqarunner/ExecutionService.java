@@ -62,6 +62,8 @@ final class ExecutionService {
         pluginRegistry.register(new RestAssuredPlugin(projectRoot));
         pluginRegistry.register(new SoapUIPlugin(projectRoot));
         pluginRegistry.register(new JMeterPlugin(projectRoot));
+        pluginRegistry.register(new JMeterCLIPlugin(projectRoot));
+        pluginRegistry.register(new AppiumPlugin(projectRoot));
     }
 
     /**

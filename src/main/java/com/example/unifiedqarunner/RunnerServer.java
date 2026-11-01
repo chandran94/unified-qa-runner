@@ -433,6 +433,8 @@ final class RunnerServer implements AutoCloseable {
                 case "restassured": fw.put("label", "RestAssured"); fw.put("icon", "⚡"); break;
                 case "soapui": fw.put("label", "SoapUI/ReadyAPI"); fw.put("icon", "🧪"); break;
                 case "jmeter": fw.put("label", "Apache JMeter"); fw.put("icon", "⏱️"); break;
+                case "jmetercli": fw.put("label", "JMeter CLI"); fw.put("icon", "⏱️"); break;
+                case "appium": fw.put("label", "Appium Mobile"); fw.put("icon", "📱"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
             }
             fw.put("count", String.valueOf(fc.getValue()));
@@ -573,6 +575,8 @@ final class RunnerServer implements AutoCloseable {
                 case "restassured": fw.put("label", "RestAssured"); fw.put("icon", "⚡"); break;
                 case "soapui": fw.put("label", "SoapUI/ReadyAPI"); fw.put("icon", "🧪"); break;
                 case "jmeter": fw.put("label", "Apache JMeter"); fw.put("icon", "⏱️"); break;
+                case "jmetercli": fw.put("label", "JMeter CLI"); fw.put("icon", "⏱️"); break;
+                case "appium": fw.put("label", "Appium Mobile"); fw.put("icon", "📱"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
             }
             fw.put("count", String.valueOf(fc.getValue()));
