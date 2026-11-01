@@ -441,6 +441,7 @@ final class RunnerServer implements AutoCloseable {
                 case "jmetercli": fw.put("label", "JMeter CLI"); fw.put("icon", "⏱️"); break;
                 case "appium": fw.put("label", "Appium Mobile"); fw.put("icon", "📱"); break;
                 case "cypress": fw.put("label", "Cypress"); fw.put("icon", "🌲"); break;
+                case "gatling": fw.put("label", "Gatling"); fw.put("icon", "🔥"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
            }
             fw.put("count", String.valueOf(fc.getValue()));
@@ -584,6 +585,7 @@ final class RunnerServer implements AutoCloseable {
                 case "jmetercli": fw.put("label", "JMeter CLI"); fw.put("icon", "⏱️"); break;
                 case "appium": fw.put("label", "Appium Mobile"); fw.put("icon", "📱"); break;
                 case "cypress": fw.put("label", "Cypress"); fw.put("icon", "🌲"); break;
+                case "gatling": fw.put("label", "Gatling"); fw.put("icon", "🔥"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
            }
             fw.put("count", String.valueOf(fc.getValue()));
@@ -1286,6 +1288,9 @@ final class RunnerServer implements AutoCloseable {
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             frameworks.add(frameworkDep("appium", "Appium", "📱", List.of("maven", "appium"),
                     "Appium server and Android SDK are required for real device testing. Simulation mode works without them.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("gatling", "Gatling", "🔥", List.of("maven"),
+                    "Maven is required to run Gatling simulations. Place a pom.xml with Gatling Maven plugin in the project directory.",
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             result.put("frameworks", frameworks);
             return result;

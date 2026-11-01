@@ -66,18 +66,32 @@ public class CypressPlugin implements RunnerPlugin {
         if (!Files.isDirectory(dir)) {
             return;
         }
-        try (var files = Files.walk(dir)) {
-            for (Path file : files.filter(Files::isRegularFile).toList()) {
-                String fileName = file.getFileName().toString();
-                if (fileName.endsWith(".cy.js") || fileName.endsWith(".cy.ts")) {
-                    // Skip node_modules and hidden directories
-                    if (file.toString().contains("node_modules") || fileName.startsWith(".")) {
-                        continue;
+        try {
+            Files.walkFileTree(dir, new java.nio.file.SimpleFileVisitor<Path>() {
+                @Override
+                public java.nio.file.FileVisitResult preVisitDirectory(Path d, java.nio.file.attribute.BasicFileAttributes attrs) {
+                    String pathStr = d.toString();
+                    if (pathStr.contains("node_modules") || pathStr.contains("/target/") ||
+                            pathStr.contains("\\target\\") || pathStr.contains(".git")) {
+                        return java.nio.file.FileVisitResult.SKIP_SUBTREE;
                     }
-                    String relativePath = dir.relativize(file).toString().replace('\\', '/');
-                    selections.add(dir.toString().replace('\\', '/') + "/" + relativePath);
+                    String name = d.getFileName().toString();
+                    if (name.startsWith(".")) {
+                        return java.nio.file.FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return java.nio.file.FileVisitResult.CONTINUE;
                 }
-            }
+
+                @Override
+                public java.nio.file.FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) {
+                    String fileName = file.getFileName().toString();
+                    if (fileName.endsWith(".cy.js") || fileName.endsWith(".cy.ts")) {
+                        String relativePath = dir.relativize(file).toString().replace('\\', '/');
+                        selections.add(dir.toString().replace('\\', '/') + "/" + relativePath);
+                    }
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+            });
         } catch (IOException e) {
             System.err.println("[runner] Warning: Failed to scan shared path for Cypress specs: " + e.getMessage());
         }

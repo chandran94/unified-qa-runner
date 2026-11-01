@@ -65,6 +65,7 @@ final class ExecutionService {
         pluginRegistry.register(new JMeterCLIPlugin(projectRoot));
         pluginRegistry.register(new AppiumPlugin(projectRoot));
         pluginRegistry.register(new CypressPlugin(projectRoot));
+        pluginRegistry.register(new GatlingPlugin(projectRoot));
     }
 
     /**
