@@ -15,7 +15,8 @@ import java.util.function.Consumer;
 /**
  * Plugin for database testing.
  * Discovers SQL script files (.sql) and database test files in tests/database/ and shared paths.
- * Executes SQL scripts against an embedded H2 database or a configured JDBC connection.
+ * Executes SQL scripts against any JDBC-compatible database: H2, MySQL, PostgreSQL, DB2, Snowflake.
+ * Auto-detects database type from JDBC URL and loads the appropriate JDBC driver.
  * Parses results into RunSummary with per-statement pass/fail details.
  */
 public class DatabasePlugin implements RunnerPlugin {
@@ -23,8 +24,56 @@ public class DatabasePlugin implements RunnerPlugin {
     private final Path projectRoot;
     private volatile Process runningProcess;
 
+    // Supported database types and their JDBC driver classes
+    private static final String[] JDBC_DRIVERS = {
+        "org.h2.Driver",                          // H2
+        "com.mysql.cj.jdbc.Driver",               // MySQL
+        "org.postgresql.Driver",                  // PostgreSQL
+        "com.ibm.db2.jcc.DB2Driver",              // DB2 (optional - needs manual install)
+        "net.snowflake.client.jdbc.SnowflakeDriver" // Snowflake
+    };
+
     public DatabasePlugin(Path projectRoot) {
         this.projectRoot = projectRoot;
+    }
+
+    /**
+     * Detect database type from JDBC URL.
+     */
+    private String detectDatabaseType(String jdbcUrl) {
+        if (jdbcUrl.contains(":mysql:")) return "MySQL";
+        if (jdbcUrl.contains(":postgresql:")) return "PostgreSQL";
+        if (jdbcUrl.contains(":h2:")) return "H2";
+        if (jdbcUrl.contains(":db2:")) return "DB2";
+        if (jdbcUrl.contains(":snowflake:")) return "Snowflake";
+        return "Unknown";
+    }
+
+    /**
+     * Load the appropriate JDBC driver for the given URL.
+     */
+    private void loadJdbcDriver(String jdbcUrl, Consumer<String> output) {
+        String dbType = detectDatabaseType(jdbcUrl);
+        output.accept("[runner] Detected database type: " + dbType);
+
+        for (String driverClass : JDBC_DRIVERS) {
+            try {
+                Class.forName(driverClass);
+                if (driverClass.contains("mysql") && dbType.equals("MySQL")) {
+                    output.accept("[runner] Loaded MySQL JDBC driver");
+                } else if (driverClass.contains("postgresql") && dbType.equals("PostgreSQL")) {
+                    output.accept("[runner] Loaded PostgreSQL JDBC driver");
+                } else if (driverClass.contains("h2") && dbType.equals("H2")) {
+                    output.accept("[runner] Loaded H2 JDBC driver");
+                } else if (driverClass.contains("db2") && dbType.equals("DB2")) {
+                    output.accept("[runner] Loaded DB2 JDBC driver");
+                } else if (driverClass.contains("snowflake") && dbType.equals("Snowflake")) {
+                    output.accept("[runner] Loaded Snowflake JDBC driver");
+                }
+            } catch (ClassNotFoundException e) {
+                // Driver not available, try next
+            }
+        }
     }
 
     @Override
@@ -146,6 +195,9 @@ public class DatabasePlugin implements RunnerPlugin {
 
         output.accept("[runner] JDBC URL: " + jdbcUrl);
 
+        // Load the appropriate JDBC driver
+        loadJdbcDriver(jdbcUrl, output);
+
         // Read and parse SQL file
         String sqlContent = Files.readString(sqlFile);
         List<String> statements = parseSqlStatements(sqlContent);
@@ -156,8 +208,20 @@ public class DatabasePlugin implements RunnerPlugin {
         int passed = 0, failed = 0, skipped = 0;
 
         try (Connection conn = DriverManager.getConnection(jdbcUrl, user, password)) {
+            String dbType = detectDatabaseType(jdbcUrl);
+            output.accept("[runner] Connected to " + dbType + " database successfully");
+            
+            // Check if the database supports scrollable result sets
+            boolean supportsScrollable = true;
+            try {
+                DatabaseMetaData metaData = conn.getMetaData();
+                output.accept("[runner] Database: " + metaData.getDatabaseProductName() + " " + metaData.getDatabaseProductVersion());
+                output.accept("[runner] Driver: " + metaData.getDriverName() + " " + metaData.getDriverVersion());
+            } catch (SQLException e) {
+                // Ignore metadata errors
+            }
+            
             conn.setAutoCommit(false);
-            output.accept("[runner] Connected to database successfully");
 
             for (int i = 0; i < statements.size(); i++) {
                 String statement = statements.get(i).trim();
@@ -166,14 +230,35 @@ public class DatabasePlugin implements RunnerPlugin {
                 String label = extractLabel(statement, i);
                 output.accept("[runner] Executing: " + label);
 
-                try (Statement stmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY)) {
+                try {
+                    // Try scrollable statement first, fall back to forward-only for databases that don't support it
+                    Statement stmt;
+                    try {
+                        stmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+                    } catch (SQLException e) {
+                        // Fall back to forward-only for databases that don't support scrollable
+                        stmt = conn.createStatement();
+                        supportsScrollable = false;
+                    }
+                    
                     boolean hasResults = stmt.execute(statement);
                     String status;
 
                     if (hasResults) {
                         // SELECT query
                         try (ResultSet rs = stmt.getResultSet()) {
-                            int rowCount = countRows(rs);
+                            int rowCount;
+                            if (supportsScrollable) {
+                                rs.last();
+                                rowCount = rs.getRow();
+                                rs.beforeFirst();
+                            } else {
+                                // Count rows by iterating forward-only
+                                rowCount = 0;
+                                while (rs.next()) {
+                                    rowCount++;
+                                }
+                            }
                             status = "PASSED";
                             passed++;
                             details.add(new RunDetail(
@@ -201,6 +286,7 @@ public class DatabasePlugin implements RunnerPlugin {
                         ));
                         output.accept("[runner] ✓ " + label + " - " + updateCount + " rows affected");
                     }
+                    stmt.close();
                 } catch (SQLException e) {
                     failed++;
                     String errorMsg = e.getMessage();
@@ -352,16 +438,6 @@ public class DatabasePlugin implements RunnerPlugin {
     }
 
     /**
-     * Count rows in a ResultSet.
-     */
-    private int countRows(ResultSet rs) throws SQLException {
-        rs.last();
-        int count = rs.getRow();
-        rs.beforeFirst();
-        return count;
-    }
-
-    /**
      * Find a database config file in the given directory.
      */
     private Path findConfigFile(Path dir) {
@@ -504,6 +580,13 @@ public class DatabasePlugin implements RunnerPlugin {
 
     @Override
     public String defaultTargetUrl(String selection) {
+        // Auto-detect from selection filename
+        if (selection != null) {
+            if (selection.toLowerCase().contains("mysql")) return "jdbc:mysql://localhost:3306/testdb";
+            if (selection.toLowerCase().contains("postgres")) return "jdbc:postgresql://localhost:5432/testdb";
+            if (selection.toLowerCase().contains("db2")) return "jdbc:db2://localhost:50000/testdb";
+            if (selection.toLowerCase().contains("snowflake")) return "jdbc:snowflake://<account>.snowflakecomputing.com";
+        }
         return "jdbc:h2:mem:testdb";
     }
 }

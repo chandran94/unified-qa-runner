@@ -1295,7 +1295,7 @@ final class RunnerServer implements AutoCloseable {
                     "Maven is required to run Gatling simulations. Place a pom.xml with Gatling Maven plugin in the project directory.",
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             frameworks.add(frameworkDep("database", "Database", "🗄️", List.of(),
-                    "Uses embedded H2 database by default. No external dependencies needed. Supports any JDBC-compatible database.",
+                    "Supports H2 (embedded), MySQL, PostgreSQL, DB2, and Snowflake. JDBC drivers are bundled — no extra installation needed. Configure connection in database.properties or via target URL.",
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             result.put("frameworks", frameworks);
             return result;
