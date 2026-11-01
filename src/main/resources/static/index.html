@@ -239,7 +239,7 @@
             <strong>⚠️ Warning:</strong> Please use an <strong>absolute path</strong> (e.g., <code>C:\shared\tests</code> or <code>/home/user/tests</code>). Relative paths are not supported.
           </div>
           <div id="sharedPathList"><div class="empty">No shared paths configured.</div></div>
-          <div class="hint">Scripts dropped in shared paths appear in the asset picker automatically. Supported formats: .feature files (Cucumber), .json collections (Newman), .java files with pom.xml (Playwright, RestAssured, Karate), .xml/.soapui project files (SoapUI/ReadyAPI).</div>
+          <div class="hint">Scripts dropped in shared paths appear in the asset picker automatically. Supported formats: .feature files (Cucumber), .json collections (Newman), .java files with pom.xml (Playwright, RestAssured, Karate), .xml/.soapui project files (SoapUI/ReadyAPI), .jmx test plans (JMeter).</div>
         </section>
         <section class="panel">
           <div class="panel-head"><h2>Import from GitHub or ZIP</h2><span class="tag">Remote imports</span></div>
@@ -309,7 +309,8 @@
     {name: "karate", label: "Karate DSL", icon: "🥋"},
     {name: "wdio", label: "WebdriverIO", icon: "🌐"},
     {name: "restassured", label: "RestAssured", icon: "⚡"},
-    {name: "soapui", label: "SoapUI/ReadyAPI", icon: "🧪"}
+    {name: "soapui", label: "SoapUI/ReadyAPI", icon: "🧪"},
+    {name: "jmeter", label: "Apache JMeter", icon: "⏱️"}
   ];
   let mode = "frontend", selectedFramework = "all", assets = [], runs = [], activeRunId = null, pollTimer = null, runnerEnabled = true;
 
@@ -399,7 +400,7 @@
     }
   }
   function renderAssetOptions() {
-    const availableKinds = mode === "frontend" ? ["cucumber", "playwright", "wdio"] : ["newman", "karate", "restassured", "soapui"];
+    const availableKinds = mode === "frontend" ? ["cucumber", "playwright", "wdio"] : ["newman", "karate", "restassured", "soapui", "jmeter"];
     let choices = assets.filter(asset => availableKinds.includes(asset.kind));
     if (selectedFramework !== "all") {
       choices = choices.filter(asset => asset.kind === selectedFramework);
@@ -504,7 +505,7 @@
     const asset = allAssets[index];
     if (!asset) return;
     const isFrontend = ["cucumber", "playwright", "wdio"].includes(asset.kind);
-    // soapui, newman, karate, restassured are backend API
+    // soapui, newman, karate, restassured, jmeter are backend API
     chooseMode(isFrontend ? "frontend" : "backend");
     document.getElementById("assetSelect").value = `${asset.kind}|${asset.selection}`;
     autoFillTargetUrl();
@@ -1293,7 +1294,8 @@
         karate: 'Karate DSL',
         wdio: 'WebdriverIO',
         restassured: 'RestAssured',
-        soapui: 'SoapUI'
+        soapui: 'SoapUI',
+        jmeter: 'JMeter'
       };
       const frameworkLabel = frameworkLabels[kind] || kind;
 

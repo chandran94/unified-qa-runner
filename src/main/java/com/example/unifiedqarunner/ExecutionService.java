@@ -61,6 +61,7 @@ final class ExecutionService {
         pluginRegistry.register(new WebdriverIOPlugin(projectRoot));
         pluginRegistry.register(new RestAssuredPlugin(projectRoot));
         pluginRegistry.register(new SoapUIPlugin(projectRoot));
+        pluginRegistry.register(new JMeterPlugin(projectRoot));
     }
 
     /**
