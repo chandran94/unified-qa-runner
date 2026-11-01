@@ -169,16 +169,36 @@ public class JMeterCLIPlugin implements RunnerPlugin {
      * Find JMeter CLI executable.
      */
     private String findJMeterCLI() {
+        // Check project directory for bundled JMeter (apache-jmeter-*)
+        Path projectDir = projectRoot;
+        try (var files = Files.list(projectDir)) {
+            for (Path entry : files.filter(Files::isDirectory).toList()) {
+                String name = entry.getFileName().toString().toLowerCase();
+                if (name.startsWith("apache-jmeter-")) {
+                    Path jmeterBat = entry.resolve("bin").resolve("jmeter.bat");
+                    Path jmeterSh = entry.resolve("bin").resolve("jmeter");
+                    if (Files.isRegularFile(jmeterBat)) {
+                        return jmeterBat.toString();
+                    }
+                    if (Files.isRegularFile(jmeterSh)) {
+                        return jmeterSh.toString();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            // Ignore
+        }
+
         // Check JMETER_HOME environment variable
         String jmeterHome = System.getenv("JMETER_HOME");
         if (jmeterHome != null && !jmeterHome.isEmpty()) {
             Path jmeterBin = Path.of(jmeterHome, "bin");
             Path jmeterBat = jmeterBin.resolve("jmeter.bat");
             Path jmeterSh = jmeterBin.resolve("jmeter");
-            if (Files.isExecutable(jmeterBat)) {
+            if (Files.isRegularFile(jmeterBat)) {
                 return jmeterBat.toString();
             }
-            if (Files.isExecutable(jmeterSh)) {
+            if (Files.isRegularFile(jmeterSh)) {
                 return jmeterSh.toString();
             }
         }
@@ -189,10 +209,10 @@ public class JMeterCLIPlugin implements RunnerPlugin {
             for (String dir : path.split(";")) {
                 Path jmeterBat = Path.of(dir.trim()).resolve("jmeter.bat");
                 Path jmeterSh = Path.of(dir.trim()).resolve("jmeter");
-                if (Files.isExecutable(jmeterBat)) {
+                if (Files.isRegularFile(jmeterBat)) {
                     return jmeterBat.toString();
                 }
-                if (Files.isExecutable(jmeterSh)) {
+                if (Files.isRegularFile(jmeterSh)) {
                     return jmeterSh.toString();
                 }
             }
@@ -214,16 +234,36 @@ public class JMeterCLIPlugin implements RunnerPlugin {
 
     /**
      * Parse JMeter results from .jtl CSV and HTML reports.
+     * JMeter 5.x .jtl CSV format:
+     * timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
      */
     private RunSummary parseJMeterResults(Path jtlFile, Path htmlReportDir, Path runDirectory, Consumer<String> output) throws Exception {
         int total = 0, passed = 0, failed = 0, skipped = 0;
         List<RunDetail> details = new ArrayList<>();
+        List<Long> elapsedTimes = new ArrayList<>();
 
         if (Files.isRegularFile(jtlFile)) {
             output.accept("[runner] Parsing JMeter results: " + jtlFile.getFileName());
             List<String> lines = Files.readAllLines(jtlFile);
-            if (lines.isEmpty()) {
+            if (lines.size() < 2) {
                 return new RunSummary("jmetercli", "", 0, 0, 0, 0, 1, List.of());
+            }
+
+            // Parse header to find column indices
+            String[] header = lines.get(0).split(",", -1);
+            int idxElapsed = -1, idxLabel = -1, idxResponseCode = -1, idxResponseMessage = -1;
+            int idxSuccess = -1, idxFailureMessage = -1, idxUrl = -1;
+            for (int c = 0; c < header.length; c++) {
+                String col = header[c].trim().toLowerCase();
+                switch (col) {
+                    case "elapsed": idxElapsed = c; break;
+                    case "label": idxLabel = c; break;
+                    case "responsecode": idxResponseCode = c; break;
+                    case "responsemessage": idxResponseMessage = c; break;
+                    case "success": idxSuccess = c; break;
+                    case "failuremessage": idxFailureMessage = c; break;
+                    case "url": idxUrl = c; break;
+                }
             }
 
             // Skip header line
@@ -231,20 +271,23 @@ public class JMeterCLIPlugin implements RunnerPlugin {
                 String line = lines.get(i).trim();
                 if (line.isEmpty()) continue;
 
-                // Parse CSV: elapsed, label, responseCode, responseMessage, success, bytes, etc.
                 String[] parts = line.split(",", -1);
                 if (parts.length < 5) continue;
 
                 total++;
-                String label = parts.length > 1 ? parts[1] : "Unknown";
-                String success = parts.length > 4 ? parts[4].trim() : "false";
-                String responseCode = parts.length > 2 ? parts[2].trim() : "";
-                String responseMessage = parts.length > 3 ? parts[3].trim() : "";
+                String label = idxLabel >= 0 && idxLabel < parts.length ? parts[idxLabel] : "Unknown";
+                String responseCode = idxResponseCode >= 0 && idxResponseCode < parts.length ? parts[idxResponseCode].trim() : "";
+                String responseMessage = idxResponseMessage >= 0 && idxResponseMessage < parts.length ? parts[idxResponseMessage].trim() : "";
+                String success = idxSuccess >= 0 && idxSuccess < parts.length ? parts[idxSuccess].trim() : "false";
+                String failureMessage = idxFailureMessage >= 0 && idxFailureMessage < parts.length ? parts[idxFailureMessage].trim() : "";
                 long elapsed = 0;
-                try {
-                    elapsed = Long.parseLong(parts[0].trim());
-                } catch (NumberFormatException e) {
-                    // Ignore
+                if (idxElapsed >= 0 && idxElapsed < parts.length) {
+                    try {
+                        elapsed = Long.parseLong(parts[idxElapsed].trim());
+                        elapsedTimes.add(elapsed);
+                    } catch (NumberFormatException e) {
+                        // Ignore
+                    }
                 }
 
                 boolean isSuccess = "true".equalsIgnoreCase(success);
@@ -254,7 +297,7 @@ public class JMeterCLIPlugin implements RunnerPlugin {
                             label,
                             "PASSED",
                             "HTTP Request",
-                            responseCode + " (" + elapsed + "ms)",
+                            responseCode + " " + responseMessage + " (" + elapsed + "ms)",
                             null,
                             null
                     ));
@@ -264,24 +307,41 @@ public class JMeterCLIPlugin implements RunnerPlugin {
                             label,
                             "FAILED",
                             "HTTP Request",
-                            responseCode + " (" + elapsed + "ms)",
-                            responseMessage,
+                            responseCode + " " + responseMessage + " (" + elapsed + "ms)",
+                            failureMessage.isEmpty() ? ("Response: " + responseCode) : failureMessage,
                             null
                     ));
                 }
             }
         }
 
-        output.accept("[runner] JMeter results: " + total + " total, " + passed + " passed, " + failed + " failed");
-
-        // Calculate performance metrics if available
+        // Calculate performance metrics
         double avgResponseTime = 0;
         double p95ResponseTime = 0;
+        double minResponseTime = 0;
+        double maxResponseTime = 0;
         double throughput = 0;
-        if (total > 0) {
-            // Simple calculations based on parsed data
-            avgResponseTime = (double) total / Math.max(1, passed);
-            throughput = total; // Simplified
+        if (!elapsedTimes.isEmpty()) {
+            long sum = 0;
+            minResponseTime = Long.MAX_VALUE;
+            maxResponseTime = Long.MIN_VALUE;
+            for (long t : elapsedTimes) {
+                sum += t;
+                if (t < minResponseTime) minResponseTime = t;
+                if (t > maxResponseTime) maxResponseTime = t;
+            }
+            avgResponseTime = (double) sum / elapsedTimes.size();
+            // Calculate p95
+            elapsedTimes.sort(Long::compareTo);
+            int p95Idx = (int) Math.ceil(elapsedTimes.size() * 0.95) - 1;
+            p95ResponseTime = elapsedTimes.get(Math.max(0, Math.min(p95Idx, elapsedTimes.size() - 1)));
+            throughput = elapsedTimes.size(); // requests per test run
+        }
+
+        output.accept("[runner] JMeter results: " + total + " total, " + passed + " passed, " + failed + " failed");
+        if (!elapsedTimes.isEmpty()) {
+            output.accept("[runner] Performance: Avg=" + String.format("%.0fms", avgResponseTime) +
+                    " Min=" + (long)minResponseTime + "ms Max=" + (long)maxResponseTime + "ms P95=" + (long)p95ResponseTime + "ms");
         }
 
         return new RunSummary("jmetercli", "", total, passed, failed, skipped, 0, details);
