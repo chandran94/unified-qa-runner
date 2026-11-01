@@ -1790,6 +1790,21 @@
     const body = document.getElementById("depModalBody");
     let html = '';
 
+    // Install All button with note
+    html += `<div style="margin-bottom:16px">
+      <button class="dep-install-all-btn" onclick="installAllDependencies()">📥 Install All Missing Dependencies</button>
+      <div style="background:#fff8e1;border:1px solid #ffcc00;border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12px;color:#666;line-height:1.5">
+        <strong>💡 Note:</strong> This button installs only the dependencies needed for the frameworks you're using:
+        <ul style="margin:6px 0 0 0;padding-left:16px">
+          <li><b>Maven</b> — Required for Cucumber, Playwright, Karate, RestAssured, Appium, Gatling</li>
+          <li><b>Node.js + npm</b> — Required for Newman, WebdriverIO, Cypress, Appium</li>
+          <li><b>JMeter</b> — Required for JMeter CLI performance tests (already bundled ✅)</li>
+          <li><b>Appium</b> — Required for mobile testing (needs Node.js first)</li>
+        </ul>
+        Already-installed tools are skipped automatically.
+      </div>
+    </div>`;
+
     // Core tools section
     html += '<div class="dep-section-title">🔧 Core Tools</div>';
     const tools = [
@@ -1888,14 +1903,6 @@
     });
 
     body.innerHTML = html;
-
-    // Add "Install All Missing" button at the top
-    const installAllBtn = document.createElement('button');
-    installAllBtn.className = 'dep-install-all-btn';
-    installAllBtn.textContent = '📥 Install All Missing Dependencies';
-    installAllBtn.onclick = () => installAllDependencies();
-    const bodyEl = document.getElementById("depModalBody");
-    bodyEl.insertBefore(installAllBtn, bodyEl.firstChild);
   }
 
   // === Dependency Installer ===
