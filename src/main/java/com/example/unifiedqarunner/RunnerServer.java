@@ -451,6 +451,7 @@ final class RunnerServer implements AutoCloseable {
                 case "gatling": fw.put("label", "Gatling"); fw.put("icon", "🔥"); break;
                 case "database": fw.put("label", "Database"); fw.put("icon", "🗄️"); break;
                 case "testng": fw.put("label", "TestNG"); fw.put("icon", "🔶"); break;
+                case "pytest": fw.put("label", "Pytest"); fw.put("icon", "🐍"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
            }
             fw.put("count", String.valueOf(fc.getValue()));
@@ -597,6 +598,7 @@ final class RunnerServer implements AutoCloseable {
                 case "gatling": fw.put("label", "Gatling"); fw.put("icon", "🔥"); break;
                 case "database": fw.put("label", "Database"); fw.put("icon", "🗄️"); break;
                 case "testng": fw.put("label", "TestNG"); fw.put("icon", "🔶"); break;
+                case "pytest": fw.put("label", "Pytest"); fw.put("icon", "🐍"); break;
                 default: fw.put("label", fc.getKey()); fw.put("icon", "📁");
            }
             fw.put("count", String.valueOf(fc.getValue()));
@@ -1308,6 +1310,9 @@ final class RunnerServer implements AutoCloseable {
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             frameworks.add(frameworkDep("testng", "TestNG + Selenium", "🔶", List.of("maven"),
                     "TestNG data-driven testing with Selenium + Page Object Model. Maven is required to compile and run TestNG test classes with DataProviders.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("pytest", "Pytest Python", "🐍", List.of("python"),
+                    "Python Pytest with Selenium for UI/API testing. Python 3.8+ and pytest are required. Install with: pip install pytest selenium webdriver-manager.",
                     mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
             result.put("frameworks", frameworks);
             return result;

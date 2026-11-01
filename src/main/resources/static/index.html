@@ -368,7 +368,8 @@
     {name: "cypress", label: "Cypress", icon: "🌲"},
     {name: "gatling", label: "Gatling", icon: "🔥"},
     {name: "database", label: "Database", icon: "🗄️"},
-    {name: "testng", label: "TestNG", icon: "🔶"}
+    {name: "testng", label: "TestNG", icon: "🔶"},
+    {name: "pytest", label: "Pytest", icon: "🐍"}
   ];
   let mode = "frontend", selectedFramework = "all", assets = [], runs = [], activeRunId = null, pollTimer = null, runnerEnabled = true;
 
@@ -562,7 +563,7 @@
     }
     const asset = allAssets[index];
     if (!asset) return;
-    const isFrontend = ["cucumber", "playwright", "wdio", "appium", "cypress", "testng"].includes(asset.kind);
+    const isFrontend = ["cucumber", "playwright", "wdio", "appium", "cypress", "testng", "pytest"].includes(asset.kind);
     // soapui, newman, karate, restassured, jmeter are backend API
     chooseMode(isFrontend ? "frontend" : "backend");
     document.getElementById("assetSelect").value = `${asset.kind}|${asset.selection}`;

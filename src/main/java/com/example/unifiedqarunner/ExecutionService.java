@@ -68,6 +68,7 @@ final class ExecutionService {
         pluginRegistry.register(new GatlingPlugin(projectRoot));
         pluginRegistry.register(new DatabasePlugin(projectRoot));
         pluginRegistry.register(new TestNGPlugin(projectRoot));
+        pluginRegistry.register(new PytestPlugin(projectRoot));
     }
 
     /**
@@ -365,6 +366,47 @@ final class ExecutionService {
     private int runProcess(String executable, List<String> arguments,
                            Consumer<String> output) throws IOException, InterruptedException {
         return runProcess(executable, arguments, output, projectRoot, p -> this.runningProcess = p);
+    }
+
+    /**
+     * Run a process with custom environment variables.
+     * Used by plugins that need to pass environment config (e.g., Pytest).
+     */
+    static int runProcess(String executable, List<String> arguments,
+                           Consumer<String> output, Path projectRoot,
+                           java.util.function.Consumer<Process> processCallback,
+                           Map<String, String> extraEnv)
+                           throws IOException, InterruptedException {
+        ProcessBuilder builder;
+        if (executable.equals("mvn.cmd")) {
+            String command = "$a = ConvertFrom-Json -InputObject $env:QA_RUNNER_ARGS; "
+                    + "& $env:QA_RUNNER_EXE @a; exit $LASTEXITCODE";
+            builder = new ProcessBuilder("powershell.exe", "-NoLogo", "-NoProfile",
+                    "-NonInteractive", "-Command", command);
+            builder.environment().put("QA_RUNNER_EXE", executable);
+            builder.environment().put("QA_RUNNER_ARGS", JsonParser.encodeStringArray(arguments));
+        } else {
+            List<String> command = new ArrayList<>();
+            command.add(executable);
+            command.addAll(arguments);
+            builder = new ProcessBuilder(command);
+        }
+        if (extraEnv != null) {
+            builder.environment().putAll(extraEnv);
+        }
+        builder.directory(projectRoot.toFile()).redirectErrorStream(true);
+        Process process = builder.start();
+        if (processCallback != null) {
+            processCallback.accept(process);
+        }
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.accept(redact(line));
+            }
+        }
+        return process.waitFor();
     }
 
     private static String redact(String line) {
