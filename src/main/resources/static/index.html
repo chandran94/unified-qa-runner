@@ -82,6 +82,39 @@
     .ai-analyze-btn{font-size:12px;padding:6px 14px;background:#805ad5;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:700;margin-top:10px}
     .ai-analyze-btn:hover{background:#6b46c1}
     .ai-no-issues{padding:16px;text-align:center;color:#16845b;background:#e5f7ef;border-radius:8px;font-size:13px}
+    /* Dependency Modal */
+    .dep-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:center}
+    .dep-modal-overlay.show{display:flex}
+    .dep-modal{background:#fff;border-radius:16px;width:90%;max-width:700px;max-height:85vh;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.3)}
+    .dep-modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#10182b;color:#fff}
+    .dep-modal-header h2{font-size:16px;margin:0;display:flex;align-items:center;gap:8px}
+    .dep-modal-close{background:none;border:0;color:#fff;font-size:24px;cursor:pointer;padding:0 4px;line-height:1}
+    .dep-modal-close:hover{color:#ff6b6b}
+    .dep-modal-body{padding:20px;overflow-y:auto;max-height:calc(85vh - 70px)}
+    .dep-tool{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+    .dep-tool-icon{font-size:24px;width:40px;text-align:center}
+    .dep-tool-info{flex:1}
+    .dep-tool-name{font-weight:700;font-size:14px}
+    .dep-tool-version{font-size:12px;color:var(--muted);margin-top:2px}
+    .dep-tool-status{font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px}
+    .dep-tool-status.ok{background:#e5f7ef;color:#16845b}
+    .dep-tool-status.missing{background:#ffebee;color:#b32b3b}
+    .dep-framework{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden}
+    .dep-framework-header{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f4f6fb;cursor:pointer;user-select:none}
+    .dep-framework-icon{font-size:20px}
+    .dep-framework-name{font-weight:700;font-size:14px;flex:1}
+    .dep-framework-ready{font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px}
+    .dep-framework-ready.ok{background:#e5f7ef;color:#16845b}
+    .dep-framework-ready.partial{background:#fff4df;color:#a96500}
+    .dep-framework-ready.missing{background:#ffebee;color:#b32b3b}
+    .dep-framework-body{padding:12px 14px;display:none}
+    .dep-framework-body.show{display:block}
+    .dep-framework-hint{font-size:12px;color:#4a5568;padding:8px 12px;background:#f7fafc;border-radius:6px;border-left:3px solid var(--blue);margin-top:8px}
+    .dep-dep-item{display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0}
+    .dep-dep-check{font-size:16px}
+    .dep-section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+    .dep-check-btn{font-size:12px;padding:6px 14px;background:#10182b;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:700}
+    .dep-check-btn:hover{background:#24304c}
     /* Screenshots & Videos Panels */
     .media-panel{margin-top:16px;border:1px solid var(--line);border-radius:13px;background:#fff;overflow:hidden}
     .media-panel-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f0f3f9;cursor:pointer;user-select:none}
@@ -127,6 +160,9 @@
       </div>
     </div>
     <div class="side-note"><b>Local execution</b><br><br>Runs checked-in project tests through the existing Maven and Newman runners.</div>
+    <div style="margin:20px 8px 0">
+      <button class="dep-check-btn" style="width:100%" onclick="openDependencyModal()">⚙️ Check Dependencies</button>
+    </div>
   </aside>
   <main id="dashboard">
     <header class="top">
@@ -300,6 +336,18 @@
 </div>
 <div class="screenshot-modal" id="screenshotModal" onclick="closeScreenshotModal()">
   <img id="screenshotFull" src="" alt="Screenshot">
+</div>
+<!-- Dependency Modal -->
+<div class="dep-modal-overlay" id="depModalOverlay" onclick="closeDependencyModal()">
+  <div class="dep-modal" onclick="event.stopPropagation()">
+    <div class="dep-modal-header">
+      <h2>⚙️ Dependency Status</h2>
+      <button class="dep-modal-close" onclick="closeDependencyModal()">&times;</button>
+    </div>
+    <div class="dep-modal-body" id="depModalBody">
+      <div class="empty">Checking dependencies...</div>
+    </div>
+  </div>
 </div>
 <script>
   const frameworks = [
@@ -1708,6 +1756,126 @@
     } catch (e) {
       notify("Delete failed: " + e.message);
     }
+  }
+
+  // === Dependency Modal ===
+
+  async function openDependencyModal() {
+    const overlay = document.getElementById("depModalOverlay");
+    const body = document.getElementById("depModalBody");
+    overlay.classList.add("show");
+    body.innerHTML = '<div class="empty">⏳ Checking dependencies...</div>';
+    try {
+      const deps = await api("/api/dependencies");
+      renderDependencyModal(deps);
+    } catch (e) {
+      body.innerHTML = `<div class="empty">Failed to check dependencies: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  function closeDependencyModal() {
+    document.getElementById("depModalOverlay").classList.remove("show");
+  }
+
+  function renderDependencyModal(deps) {
+    const body = document.getElementById("depModalBody");
+    let html = '';
+
+    // Core tools section
+    html += '<div class="dep-section-title">🔧 Core Tools</div>';
+    const tools = [
+      {key: "maven", icon: "📦", name: "Maven"},
+      {key: "node", icon: "🟢", name: "Node.js"},
+      {key: "npm", icon: "📦", name: "npm"},
+      {key: "git", icon: "🔗", name: "Git"},
+      {key: "java", icon: "☕", name: "Java"}
+    ];
+    tools.forEach(tool => {
+      const info = deps[tool.key] || {available: false};
+      const ok = info.available === true;
+      html += `<div class="dep-tool">
+        <div class="dep-tool-icon">${tool.icon}</div>
+        <div class="dep-tool-info">
+          <div class="dep-tool-name">${tool.name}</div>
+          <div class="dep-tool-version">${ok ? escapeHtml(info.version || 'installed') : 'Not found'}</div>
+        </div>
+        <span class="dep-tool-status ${ok ? 'ok' : 'missing'}">${ok ? '✅ Installed' : '❌ Missing'}</span>
+      </div>`;
+    });
+
+    // Special tools
+    html += '<div class="dep-section-title">🔌 Optional Tools</div>';
+    // JMeter
+    const jmeter = deps.jmeter || {available: false};
+    html += `<div class="dep-tool">
+      <div class="dep-tool-icon">⏱️</div>
+      <div class="dep-tool-info">
+        <div class="dep-tool-name">Apache JMeter</div>
+        <div class="dep-tool-version">${jmeter.available ? escapeHtml(jmeter.version || 'bundled') : 'Not installed'}</div>
+      </div>
+      <span class="dep-tool-status ${jmeter.available ? 'ok' : 'missing'}">${jmeter.available ? '✅ Installed' : '❌ Missing'}</span>
+    </div>`;
+    if (!jmeter.available && jmeter.installHint) {
+      html += `<div class="dep-framework-hint" style="margin-left:52px">${escapeHtml(jmeter.installHint)}</div>`;
+    }
+
+    // Appium
+    const appium = deps.appium || {available: false};
+    html += `<div class="dep-tool">
+      <div class="dep-tool-icon">📱</div>
+      <div class="dep-tool-info">
+        <div class="dep-tool-name">Appium Server</div>
+        <div class="dep-tool-version">${appium.available ? 'Running on port 4723' : 'Not running'}</div>
+      </div>
+      <span class="dep-tool-status ${appium.available ? 'ok' : 'missing'}">${appium.available ? '✅ Running' : '❌ Offline'}</span>
+    </div>`;
+    if (!appium.available && appium.installHint) {
+      html += `<div class="dep-framework-hint" style="margin-left:52px">${escapeHtml(appium.installHint)}</div>`;
+    }
+
+    // Frameworks section
+    html += '<div class="dep-section-title">🧪 Framework Readiness</div>';
+    const frameworks = deps.frameworks || [];
+    frameworks.forEach(fw => {
+      const depCount = fw.dependencies ? fw.dependencies.length : 0;
+      const readyCount = fw.dependencies ? fw.dependencies.filter(d => d.available).length : 0;
+      let statusClass = 'ok';
+      let statusText = '✅ Ready';
+      if (depCount === 0) {
+        statusClass = 'ok';
+        statusText = '✅ No deps needed';
+      } else if (readyCount === 0) {
+        statusClass = 'missing';
+        statusText = '❌ Not ready';
+      } else if (readyCount < depCount) {
+        statusClass = 'partial';
+        statusText = '⚠️ Partial';
+      }
+      html += `<div class="dep-framework">
+        <div class="dep-framework-header" onclick="this.nextElementSibling.classList.toggle('show')">
+          <span class="dep-framework-icon">${fw.icon}</span>
+          <span class="dep-framework-name">${escapeHtml(fw.name)}</span>
+          <span class="dep-framework-ready ${statusClass}">${statusText}</span>
+          <span style="font-size:14px">▼</span>
+        </div>
+        <div class="dep-framework-body">`;
+      if (fw.dependencies && fw.dependencies.length > 0) {
+        fw.dependencies.forEach(dep => {
+          html += `<div class="dep-dep-item">
+            <span class="dep-dep-check">${dep.available ? '✅' : '❌'}</span>
+            <span>${escapeHtml(dep.name)}</span>
+          </div>`;
+        });
+      } else {
+        html += '<div class="dep-dep-item" style="color:var(--muted)">No external dependencies required</div>';
+      }
+      if (fw.installHint) {
+        html += `<div class="dep-framework-hint">${escapeHtml(fw.installHint)}</div>`;
+      }
+      html += `</div></div>`;
+    });
+
+    body.innerHTML = html;
   }
 
 </script>

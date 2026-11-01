@@ -287,6 +287,11 @@ final class RunnerServer implements AutoCloseable {
             serveReport(exchange, requireRun(parts[3]));
             return;
         }
+        // === Dependency Check Endpoint ===
+        if (path.equals("/api/dependencies") && method.equals("GET")) {
+            sendJson(exchange, 200, checkDependencies());
+            return;
+        }
         if (parts.length == 5 && parts[1].equals("api") && parts[2].equals("runs")
                 && parts[4].equals("analyze") && method.equals("POST")) {
             // Return run data for AI analysis (client-side)
@@ -1224,5 +1229,187 @@ final class RunnerServer implements AutoCloseable {
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.sendResponseHeaders(200, content.length);
         exchange.getResponseBody().write(content);
+    }
+
+    // === Dependency Check ===
+
+    /**
+     * Check local environment for required dependencies and return status for each framework.
+     */
+    private Map<String, Object> checkDependencies() {
+        try {
+            Map<String, Object> result = new LinkedHashMap<>();
+            Map<String, Object> mavenStatus = checkCommand("mvn");
+            Map<String, Object> nodeStatus = checkCommand("node");
+            Map<String, Object> npmStatus = checkCommand("npm");
+            Map<String, Object> jmeterStatus = findJMeterCLI();
+            Map<String, Object> appiumStatus = checkAppiumServer();
+
+            result.put("maven", mavenStatus);
+            result.put("node", nodeStatus);
+            result.put("npm", npmStatus);
+            result.put("git", checkCommand("git"));
+            result.put("jmeter", jmeterStatus);
+            result.put("appium", appiumStatus);
+            result.put("java", Map.of("available", true, "version", System.getProperty("java.version")));
+
+            // Framework-specific requirements
+            List<Map<String, Object>> frameworks = new ArrayList<>();
+            frameworks.add(frameworkDep("cucumber", "Cucumber", "🥒", List.of("maven"),
+                    "Maven is required to run Cucumber/Selenium tests.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("newman", "Newman", "🔌", List.of("node", "npm"),
+                    "Node.js and npm are required. Run 'npm install' to install Newman.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("playwright", "Playwright", "🎭", List.of("maven"),
+                    "Maven is required. Ensure pom.xml has Playwright dependencies.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("karate", "Karate", "🥋", List.of("maven"),
+                    "Maven is required. Ensure pom.xml has Karate dependencies.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("wdio", "WebdriverIO", "🌐", List.of("node", "npm"),
+                    "Node.js and npm are required. Run 'npm install' in the WDIO project folder.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("restassured", "RestAssured", "⚡", List.of("maven"),
+                    "Maven is required to run RestAssured API tests.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("soapui", "SoapUI", "🧪", List.of(),
+                    "No external dependencies needed — runs with built-in HTTP client.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("jmeter", "JMeter", "⏱️", List.of(),
+                    "No JMeter CLI needed — runs with built-in HTTP sampler parser.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("jmetercli", "JMeter CLI", "⏱️", List.of("jmeter"),
+                    "Apache JMeter CLI is required for full load testing.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            frameworks.add(frameworkDep("appium", "Appium", "📱", List.of("maven", "appium"),
+                    "Appium server and Android SDK are required for real device testing. Simulation mode works without them.",
+                    mavenStatus, nodeStatus, npmStatus, jmeterStatus, appiumStatus));
+            result.put("frameworks", frameworks);
+            return result;
+        } catch (Exception e) {
+            System.err.println("checkDependencies failed: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> fallback = new LinkedHashMap<>();
+            fallback.put("maven", Map.of("available", false, "version", null));
+            fallback.put("node", Map.of("available", false, "version", null));
+            fallback.put("npm", Map.of("available", false, "version", null));
+            fallback.put("git", Map.of("available", false, "version", null));
+            fallback.put("jmeter", Map.of("available", false, "version", null));
+            fallback.put("appium", Map.of("available", false, "version", null));
+            fallback.put("java", Map.of("available", true, "version", System.getProperty("java.version")));
+            fallback.put("frameworks", List.of());
+            return fallback;
+        }
+    }
+
+    private Map<String, Object> checkCommand(String cmd) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(cmd, "--version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            boolean finished = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                p.destroyForcibly();
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("available", false);
+                r.put("version", "not found");
+                return r;
+            }
+            StringBuilder sb = new StringBuilder();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line).append("\n");
+                }
+            }
+            String version = sb.toString().trim();
+            if (version.isEmpty()) version = "installed";
+            return Map.of("available", true, "version", version);
+        } catch (Exception e) {
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("available", false);
+            r.put("version", "not found");
+            return r;
+        }
+    }
+
+    private Map<String, Object> findJMeterCLI() {
+        // Check bundled JMeter first
+        Path bundled = projectRoot.resolve("apache-jmeter-5.6.3").resolve("bin").resolve("jmeter.bat");
+        if (Files.isRegularFile(bundled)) {
+            return Map.of("available", true, "path", bundled.toString(), "version", "5.6.3");
+        }
+        // Check JMETER_HOME
+        String jmeterHome = System.getenv("JMETER_HOME");
+        if (jmeterHome != null) {
+            Path jmeterBat = Path.of(jmeterHome).resolve("bin").resolve("jmeter.bat");
+            if (Files.isRegularFile(jmeterBat)) {
+                return Map.of("available", true, "path", jmeterBat.toString(), "version", "bundled");
+            }
+        }
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("available", false);
+        r.put("path", "not found");
+        r.put("installHint", "Download from https://jmeter.apache.org/download_jmeter.cgi");
+        return r;
+    }
+
+    private Map<String, Object> checkAppiumServer() {
+        try {
+            var client = java.net.http.HttpClient.newHttpClient();
+            var request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("http://127.0.0.1:4723/wd/hub/status"))
+                    .timeout(java.time.Duration.ofSeconds(3))
+                    .build();
+            var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                return Map.of("available", true, "version", "running");
+            }
+        } catch (Exception e) {
+            // Appium not running
+        }
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("available", false);
+        r.put("version", "offline");
+        r.put("installHint", "Install Appium: npm install -g appium, then start with 'appium' command");
+        return r;
+    }
+
+    private Map<String, Object> frameworkDep(String id, String name, String icon,
+                                              List<String> deps, String installHint,
+                                              Map<String, Object> mavenStatus, Map<String, Object> nodeStatus,
+                                              Map<String, Object> npmStatus, Map<String, Object> jmeterStatus,
+                                              Map<String, Object> appiumStatus) {
+        Map<String, Object> dep = new LinkedHashMap<>();
+        dep.put("id", id);
+        dep.put("name", name);
+        dep.put("icon", icon);
+        dep.put("installHint", installHint);
+        List<Map<String, Object>> depStatus = new ArrayList<>();
+        boolean allAvailable = true;
+        for (String d : deps) {
+            Map<String, Object> status = new LinkedHashMap<>();
+            status.put("name", d);
+            boolean available = false;
+            if (d.equals("maven")) {
+                available = Boolean.TRUE.equals(mavenStatus.get("available"));
+            } else if (d.equals("node")) {
+                available = Boolean.TRUE.equals(nodeStatus.get("available"));
+            } else if (d.equals("npm")) {
+                available = Boolean.TRUE.equals(npmStatus.get("available"));
+            } else if (d.equals("jmeter")) {
+                available = Boolean.TRUE.equals(jmeterStatus.get("available"));
+            } else if (d.equals("appium")) {
+                available = Boolean.TRUE.equals(appiumStatus.get("available"));
+            }
+            status.put("available", available);
+            if (!available) allAvailable = false;
+            depStatus.add(status);
+        }
+        dep.put("dependencies", depStatus);
+        dep.put("ready", allAvailable);
+        return dep;
     }
 }
