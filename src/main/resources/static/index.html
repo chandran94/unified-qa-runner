@@ -279,7 +279,7 @@
             <strong>⚠️ Warning:</strong> Please use an <strong>absolute path</strong> (e.g., <code>C:\shared\tests</code> or <code>/home/user/tests</code>). Relative paths are not supported.
           </div>
           <div id="sharedPathList"><div class="empty">No shared paths configured.</div></div>
-          <div class="hint">Scripts dropped in shared paths appear in the asset picker automatically. Supported formats: .feature files (Cucumber), .json collections (Newman), .java files with pom.xml (Playwright, RestAssured, Karate, Appium), .xml/.soapui project files (SoapUI/ReadyAPI), .jmx test plans (JMeter), .cy.js/.cy.ts spec files (Cypress), .scala simulation files (Gatling), .sql scripts (Database).</div>
+          <div class="hint">Scripts dropped in shared paths appear in the asset picker automatically. Supported formats: .feature files (Cucumber), .json collections (Newman), .java files with pom.xml (Playwright, RestAssured, Karate, Appium, TestNG), .xml/.soapui project files (SoapUI/ReadyAPI), .jmx test plans (JMeter), .cy.js/.cy.ts spec files (Cypress), .scala simulation files (Gatling), .sql scripts (Database), .py test files (Pytest), .robot test files (Robot Framework).</div>
         </section>
         <section class="panel">
           <div class="panel-head"><h2>Import from GitHub or ZIP</h2><span class="tag">Remote imports</span></div>
@@ -369,7 +369,8 @@
     {name: "gatling", label: "Gatling", icon: "🔥"},
     {name: "database", label: "Database", icon: "🗄️"},
     {name: "testng", label: "TestNG", icon: "🔶"},
-    {name: "pytest", label: "Pytest", icon: "🐍"}
+    {name: "pytest", label: "Pytest", icon: "🐍"},
+    {name: "robot", label: "Robot Framework", icon: "🤖"}
   ];
   let mode = "frontend", selectedFramework = "all", assets = [], runs = [], activeRunId = null, pollTimer = null, runnerEnabled = true;
 
@@ -563,7 +564,7 @@
     }
     const asset = allAssets[index];
     if (!asset) return;
-    const isFrontend = ["cucumber", "playwright", "wdio", "appium", "cypress", "testng", "pytest"].includes(asset.kind);
+    const isFrontend = ["cucumber", "playwright", "wdio", "appium", "cypress", "testng", "pytest", "robot"].includes(asset.kind);
     // soapui, newman, karate, restassured, jmeter are backend API
     chooseMode(isFrontend ? "frontend" : "backend");
     document.getElementById("assetSelect").value = `${asset.kind}|${asset.selection}`;

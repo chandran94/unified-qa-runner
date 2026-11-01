@@ -69,6 +69,7 @@ final class ExecutionService {
         pluginRegistry.register(new DatabasePlugin(projectRoot));
         pluginRegistry.register(new TestNGPlugin(projectRoot));
         pluginRegistry.register(new PytestPlugin(projectRoot));
+        pluginRegistry.register(new RobotPlugin(projectRoot));
     }
 
     /**
