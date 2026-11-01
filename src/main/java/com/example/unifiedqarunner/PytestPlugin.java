@@ -190,7 +190,7 @@ public class PytestPlugin implements RunnerPlugin {
      */
     private String findPython() {
         // Try common Python locations
-        String[] candidates = {"python", "python3", "py"};
+        String[] candidates = {"py", "python", "python3"};
         for (String candidate : candidates) {
             try {
                 ProcessBuilder pb = new ProcessBuilder(candidate, "--version");
