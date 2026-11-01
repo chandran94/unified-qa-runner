@@ -134,16 +134,23 @@ public class PytestPlugin implements RunnerPlugin {
             }
         }
 
-        output.accept("[runner] Running Pytest test: " + testFile.getFileName());
-        output.accept("[runner] Target URL: " + target);
+        // Collect logs for parsing
+        java.util.List<String> logLines = new java.util.ArrayList<>();
+        java.util.function.Consumer<String> logCollector = line -> {
+            output.accept(line);
+            logLines.add(line);
+        };
+
+        logCollector.accept("[runner] Running Pytest test: " + testFile.getFileName());
+        logCollector.accept("[runner] Target URL: " + target);
 
         // Check if Python is available
         String pythonCmd = findPython();
         if (pythonCmd == null) {
-            output.accept("[runner] Python is not installed. To install:");
-            output.accept("[runner] 1. Download Python from https://www.python.org/downloads/");
-            output.accept("[runner] 2. Make sure 'python' is in your system PATH");
-            output.accept("[runner] 3. Install pytest: pip install pytest pytest-selenium");
+            logCollector.accept("[runner] Python is not installed. To install:");
+            logCollector.accept("[runner] 1. Download Python from https://www.python.org/downloads/");
+            logCollector.accept("[runner] 2. Make sure 'python' is in your system PATH");
+            logCollector.accept("[runner] 3. Install pytest: pip install pytest pytest-selenium");
             throw new IOException("Python is not installed or not in PATH");
         }
 
@@ -154,11 +161,6 @@ public class PytestPlugin implements RunnerPlugin {
         args.add(testFile.toString());
         args.add("--tb=short");
         args.add("-v");
-        
-        // Pass target URL as environment variable
-        if (target != null) {
-            args.add("--override-ini=basetemp=" + runDirectory.toString());
-        }
 
         // Create environment with target URL
         java.util.Map<String, String> env = new java.util.HashMap<>(System.getenv());
@@ -170,12 +172,16 @@ public class PytestPlugin implements RunnerPlugin {
             env.put("BROWSER", "chrome");
         }
 
-        int exitCode = ExecutionService.runProcess(pythonCmd, args, output, workDir, 
+        int exitCode = ExecutionService.runProcess(pythonCmd, args, logCollector, workDir, 
                 p -> this.runningProcess = p, env);
-        output.accept("[runner] Pytest exit code: " + exitCode);
+        logCollector.accept("[runner] Pytest exit code: " + exitCode);
 
-        // Parse results from log output
-        RunSummary summary = parsePytestOutput(output, exitCode, runDirectory);
+        // Save logs to file for parsing
+        Path logFile = runDirectory.resolve("output.txt");
+        Files.writeString(logFile, String.join("\n", logLines));
+
+        // Parse results from collected logs
+        RunSummary summary = parsePytestOutput(logLines, exitCode, runDirectory);
         return new ExecutionService.RunResult(runDirectory, exitCode, summary);
     }
 
@@ -215,56 +221,84 @@ public class PytestPlugin implements RunnerPlugin {
     }
 
     /**
-     * Parse pytest output to extract pass/fail counts.
+     * Parse pytest output to extract pass/fail counts and per-test details.
      */
-    private RunSummary parsePytestOutput(Consumer<String> output, int exitCode, Path runDirectory) {
+    private RunSummary parsePytestOutput(List<String> logLines, int exitCode, Path runDirectory) {
         int total = 0, passed = 0, failed = 0, skipped = 0;
         List<RunDetail> details = new ArrayList<>();
 
-        // Try to read pytest JSON report if available
-        Path jsonReport = runDirectory.resolve("pytest.json");
-        if (Files.exists(jsonReport)) {
-            try {
-                String json = Files.readString(jsonReport);
-                // Simple JSON parsing for pytest report
-                if (json.contains("\"passed\":")) {
-                    passed = extractJsonNumber(json, "passed");
-                    failed = extractJsonNumber(json, "failed");
-                    skipped = extractJsonNumber(json, "skipped");
-                    total = passed + failed + skipped;
+        // Combine all log lines for error type detection
+        String allLogs = String.join("\n", logLines);
+
+        // Parse individual test results from log lines like:
+        // test_demoqa.py::TestDemoQAHomePage::test_home_page_loads PASSED          [ 12%]
+        // test_demoqa.py::TestDemoQATextBox::test_text_box_input FAILED            [ 50%]
+        for (String line : logLines) {
+            String trimmed = line.trim();
+            if (trimmed.contains("PASSED") && trimmed.contains("::")) {
+                String testName = extractTestName(trimmed);
+                details.add(new RunDetail(testName, "PASSED", null, "Passed", null, null));
+                passed++;
+                total++;
+            } else if (trimmed.contains("FAILED") && trimmed.contains("::")) {
+                String testName = extractTestName(trimmed);
+                String error = "Test failed";
+                // Check for specific error types in the full log
+                if (allLogs.contains("ElementClickInterceptedException")) {
+                    error = "ElementClickInterceptedException: Element is not clickable";
+                } else if (allLogs.contains("TimeoutException")) {
+                    error = "TimeoutException: Element not found within timeout";
+                } else if (allLogs.contains("NoSuchElementException")) {
+                    error = "NoSuchElementException: Element not found";
+                } else if (allLogs.contains("AssertionError")) {
+                    error = "AssertionError: Expected value did not match";
                 }
-            } catch (Exception e) {
-                // Fall back to log parsing
+                details.add(new RunDetail(testName, "FAILED", null, null, error, null));
+                failed++;
+                total++;
+            } else if (trimmed.contains("SKIPPED") && trimmed.contains("::")) {
+                String testName = extractTestName(trimmed);
+                details.add(new RunDetail(testName, "SKIPPED", null, "Skipped", null, null));
+                skipped++;
+                total++;
             }
         }
 
-        // If no JSON report, parse from log output
+        // Fallback: if no individual tests found, use exit code
         if (total == 0) {
-            // Look for patterns like "5 passed, 2 failed, 1 skipped in 10.5s"
-            String logPattern = "\\d+ passed.*?\\d+ failed.*?\\d+ skipped";
-            // Simple fallback based on exit code
             if (exitCode == 0) {
                 passed = 1;
                 total = 1;
+                details.add(new RunDetail("Pytest test", "PASSED", null, "All tests passed", null, null));
             } else {
                 failed = 1;
                 total = 1;
-            }
-        }
-
-        // Create details for each test
-        if (passed > 0) {
-            for (int i = 0; i < passed; i++) {
-                details.add(new RunDetail("Test " + (i + 1), "PASSED", null, "Passed", null, null));
-            }
-        }
-        if (failed > 0) {
-            for (int i = 0; i < failed; i++) {
-                details.add(new RunDetail("Test " + (passed + i + 1), "FAILED", null, null, "Assertion failed", null));
+                details.add(new RunDetail("Pytest test", "FAILED", null, null, "Test execution failed", null));
             }
         }
 
         return new RunSummary("Pytest", "python", total, passed, failed, skipped, exitCode, List.copyOf(details));
+    }
+
+    /**
+     * Extract test name from a pytest log line.
+     * Example: "test_demoqa.py::TestDemoQAHomePage::test_home_page_loads PASSED [ 12%]"
+     * Returns: "test_home_page_loads"
+     */
+    private String extractTestName(String line) {
+        // Find the last "::" segment before PASSED/FAILED/SKIPPED
+        int statusIndex = line.indexOf("PASSED");
+        if (statusIndex < 0) statusIndex = line.indexOf("FAILED");
+        if (statusIndex < 0) statusIndex = line.indexOf("SKIPPED");
+        if (statusIndex > 0) {
+            String beforeStatus = line.substring(0, statusIndex).trim();
+            int lastColon = beforeStatus.lastIndexOf("::");
+            if (lastColon >= 0) {
+                return beforeStatus.substring(lastColon + 2).trim();
+            }
+            return beforeStatus;
+        }
+        return line.substring(0, Math.min(50, line.length()));
     }
 
     /**
