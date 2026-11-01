@@ -360,7 +360,8 @@
     {name: "soapui", label: "SoapUI/ReadyAPI", icon: "🧪"},
     {name: "jmeter", label: "Apache JMeter", icon: "⏱️"},
     {name: "jmetercli", label: "JMeter CLI", icon: "⏱️"},
-    {name: "appium", label: "Appium Mobile", icon: "📱"}
+    {name: "appium", label: "Appium Mobile", icon: "📱"},
+    {name: "cypress", label: "Cypress", icon: "🌲"}
   ];
   let mode = "frontend", selectedFramework = "all", assets = [], runs = [], activeRunId = null, pollTimer = null, runnerEnabled = true;
 
@@ -554,7 +555,7 @@
     }
     const asset = allAssets[index];
     if (!asset) return;
-    const isFrontend = ["cucumber", "playwright", "wdio", "appium"].includes(asset.kind);
+    const isFrontend = ["cucumber", "playwright", "wdio", "appium", "cypress"].includes(asset.kind);
     // soapui, newman, karate, restassured, jmeter are backend API
     chooseMode(isFrontend ? "frontend" : "backend");
     document.getElementById("assetSelect").value = `${asset.kind}|${asset.selection}`;

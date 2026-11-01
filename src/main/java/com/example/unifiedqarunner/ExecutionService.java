@@ -64,6 +64,7 @@ final class ExecutionService {
         pluginRegistry.register(new JMeterPlugin(projectRoot));
         pluginRegistry.register(new JMeterCLIPlugin(projectRoot));
         pluginRegistry.register(new AppiumPlugin(projectRoot));
+        pluginRegistry.register(new CypressPlugin(projectRoot));
     }
 
     /**
@@ -840,5 +841,83 @@ final class ExecutionService {
         server.setExecutor(java.util.concurrent.Executors.newSingleThreadExecutor());
         server.start();
         return server;
+    }
+
+    /**
+     * Parse Cypress JSON results into RunSummary.
+     * Cypress JSON reporter outputs an array of test results.
+     */
+    static RunSummary parseCypressJson(String json, Path reportDir) throws Exception {
+        List<RunDetail> details = new ArrayList<>();
+        int total = 0;
+        int passed = 0;
+        int failed = 0;
+        int skipped = 0;
+
+        // Simple JSON parsing for Cypress output
+        // Cypress JSON reporter outputs: [{ "name": "...", "state": "passed"/"failed", "tests": [...] }]
+        if (json.contains("\"state\"")) {
+            // Parse each test suite
+            int idx = 0;
+            while (idx < json.length()) {
+                int nameIdx = json.indexOf("\"name\"", idx);
+                if (nameIdx == -1) break;
+                String name = extractJsonString(json, nameIdx + 6);
+
+                int stateIdx = json.indexOf("\"state\"", nameIdx);
+                String state = stateIdx != -1 ? extractJsonString(json, stateIdx + 7) : "unknown";
+
+                int durationIdx = json.indexOf("\"duration\"", nameIdx);
+                String duration = durationIdx != -1 ? extractJsonString(json, durationIdx + 10) : "0";
+
+                total++;
+                if ("passed".equals(state)) {
+                    passed++;
+                    details.add(new RunDetail(name, "PASSED", null, duration + "ms", null, null));
+                } else if ("failed".equals(state)) {
+                    failed++;
+                    details.add(new RunDetail(name, "FAILED", null, duration + "ms", "Test failed", null));
+                } else {
+                    skipped++;
+                    details.add(new RunDetail(name, "SKIPPED", null, null, null, null));
+                }
+                idx = Math.max(nameIdx, stateIdx) + 20;
+            }
+        }
+
+        if (total == 0) {
+            // Fallback: count "passed"/"failed" occurrences
+            int passCount = countOccurrences(json, "\"passed\"");
+            int failCount = countOccurrences(json, "\"failed\"");
+            total = passCount + failCount;
+            passed = passCount;
+            failed = failCount;
+        }
+
+        return new RunSummary("Cypress", "http://127.0.0.1:8080", total, passed, failed, skipped, 0, details);
+    }
+
+    private static String extractJsonString(String json, int afterColon) {
+        if (afterColon >= json.length()) return "";
+        int start = json.indexOf('"', afterColon);
+        if (start == -1) return "";
+        int end = start + 1;
+        while (end < json.length()) {
+            if (json.charAt(end) == '"') {
+                if (json.charAt(end - 1) != '\\') break;
+            }
+            end++;
+        }
+        return end < json.length() ? json.substring(start + 1, end) : "";
+    }
+
+    private static int countOccurrences(String text, String pattern) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf(pattern, idx)) != -1) {
+            count++;
+            idx += pattern.length();
+        }
+        return count;
     }
 }
