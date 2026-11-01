@@ -1252,7 +1252,7 @@ final class RunnerServer implements AutoCloseable {
     private Map<String, Object> checkDependencies() {
         try {
             Map<String, Object> result = new LinkedHashMap<>();
-            Map<String, Object> mavenStatus = checkCommand("mvn");
+            Map<String, Object> mavenStatus = findMavenCLI();
             Map<String, Object> nodeStatus = checkCommand("node");
             Map<String, Object> npmStatus = checkCommand("npm");
             Map<String, Object> jmeterStatus = findJMeterCLI();
@@ -1352,6 +1352,46 @@ final class RunnerServer implements AutoCloseable {
             r.put("version", "not found");
             return r;
         }
+    }
+
+    /**
+     * Find Maven — checks local apache-maven directory first, then system PATH.
+     */
+    private Map<String, Object> findMavenCLI() {
+        // Check local apache-maven directory first
+        Path mavenDir = projectRoot.resolve("apache-maven");
+        if (Files.isDirectory(mavenDir)) {
+            // Find the extracted apache-maven-X.Y.Z subdirectory
+            try (var stream = Files.list(mavenDir)) {
+                for (Path p : stream.filter(Files::isDirectory).toList()) {
+                    String name = p.getFileName().toString();
+                    if (name.startsWith("apache-maven-")) {
+                        Path mvnCmd = p.resolve("bin").resolve("mvn.cmd");
+                        Path mvnSh = p.resolve("bin").resolve("mvn");
+                        if (Files.exists(mvnCmd) || Files.exists(mvnSh)) {
+                            // Extract version from directory name: apache-maven-3.9.9 -> 3.9.9
+                            String version = name.substring("apache-maven-".length());
+                            Map<String, Object> r = new LinkedHashMap<>();
+                            r.put("available", true);
+                            r.put("version", "Apache Maven " + version + " (local)");
+                            return r;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // Fall through to check direct mvn.cmd in apache-maven/bin
+            }
+            // Check if mvn.cmd is directly in apache-maven/bin (flat extraction)
+            Path directMvn = mavenDir.resolve("bin").resolve("mvn.cmd");
+            if (Files.exists(directMvn)) {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("available", true);
+                r.put("version", "installed (local)");
+                return r;
+            }
+        }
+        // Fall back to system PATH
+        return checkCommand("mvn");
     }
 
     private Map<String, Object> findJMeterCLI() {
