@@ -42,6 +42,8 @@ final class RunnerServer implements AutoCloseable {
     private String activeRunId;
     private final AtomicBoolean runnerEnabled = new AtomicBoolean(true);
 
+    private final TestCaseManager testCaseManager = new TestCaseManager();
+
     RunnerServer(Path projectRoot) throws IOException {
         this.projectRoot = projectRoot;
         this.executionService = new ExecutionService(projectRoot);
@@ -299,6 +301,162 @@ final class RunnerServer implements AutoCloseable {
             installDependencies(exchange);
             return;
         }
+        // === CI/CD Config Endpoints ===
+        if (path.equals("/api/cicd/config") && method.equals("GET")) {
+            sendJson(exchange, 200, getCiCdConfig());
+            return;
+        }
+        if (path.equals("/api/cicd/config") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            saveCiCdConfig(exchange);
+            return;
+        }
+        if (parts.length == 4 && parts[1].equals("api") && parts[2].equals("cicd")
+                && parts[3].equals("test-connection") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            testCiCdConnection(exchange);
+            return;
+        }
+        if (path.equals("/api/cicd/generate") && method.equals("GET")) {
+            generateWorkflow(exchange);
+            return;
+        }
+        if (path.equals("/api/cicd/status") && method.equals("GET")) {
+            sendJson(exchange, 200, getCiCdStatus());
+            return;
+        }
+        if (parts.length == 4 && parts[1].equals("api") && parts[2].equals("cicd")
+                && parts[3].equals("commit") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            commitWorkflow(exchange);
+            return;
+        }
+        // === Test Case Management Endpoints ===
+        if (path.equals("/api/testcases") && method.equals("GET")) {
+            sendJson(exchange, 200, testCaseManager.list().stream()
+                    .map(this::testCaseToMap)
+                    .toList());
+            return;
+        }
+        if (path.equals("/api/testcases") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            createTestCase(exchange);
+            return;
+        }
+        if (path.equals("/api/testcases/stats") && method.equals("GET")) {
+            sendJson(exchange, 200, testCaseManager.stats());
+            return;
+        }
+        if (path.equals("/api/testcases/sync") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            syncTestCases(exchange);
+            return;
+        }
+        if (path.startsWith("/api/testcases/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/testcases/".length());
+            updateTestCase(exchange, id);
+            return;
+        }
+        if (path.startsWith("/api/testcases/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/testcases/".length());
+            boolean deleted = testCaseManager.delete(id);
+            if (deleted) {
+                sendJson(exchange, 200, Map.of("message", "Test case deleted."));
+            } else {
+                sendError(exchange, 404, "Test case not found: " + id);
+            }
+            return;
+        }
+        if (path.equals("/api/testcases/bulk-delete") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            bulkDeleteTestCases(exchange);
+            return;
+        }
+        // === Story Endpoints ===
+        if (path.equals("/api/stories") && method.equals("GET")) {
+            sendJson(exchange, 200, testCaseManager.listStories().stream()
+                    .map(this::storyToMap)
+                    .toList());
+            return;
+        }
+        if (path.equals("/api/stories") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            createStory(exchange);
+            return;
+        }
+        if (path.startsWith("/api/stories/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/stories/".length());
+            updateStory(exchange, id);
+            return;
+        }
+        if (path.startsWith("/api/stories/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/stories/".length());
+            boolean deleted = testCaseManager.deleteStory(id);
+            if (deleted) {
+                sendJson(exchange, 200, Map.of("message", "Story deleted."));
+            } else {
+                sendError(exchange, 404, "Story not found: " + id);
+            }
+            return;
+        }
+        if (path.equals("/api/stories/stats") && method.equals("GET")) {
+            sendJson(exchange, 200, testCaseManager.getStoryStats());
+            return;
+        }
+        if (path.equals("/api/stories/testcases") && method.equals("GET")) {
+            // Query param: storyId
+            String storyId = null;
+            String query = exchange.getRequestURI().getQuery();
+            if (query != null) {
+                for (String param : query.split("&")) {
+                    String[] qp = param.split("=");
+                    if (qp.length == 2 && "storyId".equals(qp[0])) {
+                        storyId = java.net.URLDecoder.decode(qp[1], StandardCharsets.UTF_8);
+                    }
+                }
+            }
+            if (storyId != null) {
+                sendJson(exchange, 200, testCaseManager.getTestCasesForStory(storyId).stream()
+                        .map(this::testCaseToMap)
+                        .toList());
+            } else {
+                sendError(exchange, 400, "Missing storyId parameter.");
+            }
+            return;
+        }
+        // === Test Suite Endpoints ===
+        if (path.equals("/api/suites") && method.equals("GET")) {
+            sendJson(exchange, 200, testCaseManager.listSuites().stream()
+                    .map(this::suiteToMap)
+                    .toList());
+            return;
+        }
+        if (path.equals("/api/suites") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            createSuite(exchange);
+            return;
+        }
+        if (path.startsWith("/api/suites/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/suites/".length());
+            updateSuite(exchange, id);
+            return;
+        }
+        if (path.startsWith("/api/suites/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/suites/".length());
+            boolean deleted = testCaseManager.deleteSuite(id);
+            if (deleted) {
+                sendJson(exchange, 200, Map.of("message", "Test suite deleted."));
+            } else {
+                sendError(exchange, 404, "Test suite not found: " + id);
+            }
+            return;
+        }
         if (parts.length == 5 && parts[1].equals("api") && parts[2].equals("runs")
                 && parts[4].equals("analyze") && method.equals("POST")) {
             // Return run data for AI analysis (client-side)
@@ -330,6 +488,22 @@ final class RunnerServer implements AutoCloseable {
                 analyzeData.put("summary", summaryMap);
             }
             sendJson(exchange, 200, analyzeData);
+            return;
+        }
+        // === AI Assistant Endpoint ===
+        if (path.equals("/api/ai/ask") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            handleAiAsk(exchange);
+            return;
+        }
+        // === Ticket Management Endpoints ===
+        if (path.equals("/api/tickets") && method.equals("GET")) {
+            sendJson(exchange, 200, getTickets());
+            return;
+        }
+        if (path.equals("/api/tickets") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            handleCreateTicket(exchange);
             return;
         }
         sendError(exchange, 404, "Not found.");
@@ -1874,4 +2048,2056 @@ final class RunnerServer implements AutoCloseable {
         dep.put("ready", allAvailable);
         return dep;
     }
+
+    // ==================== CI/CD Integration ====================
+
+    private final CiCdConfig ciCdConfig = new CiCdConfig();
+    private final WorkflowGenerator workflowGenerator = new WorkflowGenerator();
+    private final PipelineStatusService pipelineStatusService = new PipelineStatusService();
+
+    /**
+     * GET /api/cicd/config — return current CI/CD configuration (without token).
+     */
+    private Map<String, Object> getCiCdConfig() {
+        CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+        if (settings == null) {
+            return Map.of("configured", false);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("configured", true);
+        result.put("platform", settings.platform());
+        result.put("repoUrl", settings.repoUrl());
+        result.put("branch", settings.branch());
+        result.put("frameworks", settings.frameworks());
+        result.put("triggerType", settings.triggerType());
+        result.put("scheduleCron", settings.scheduleCron());
+        result.put("jenkinsUrl", settings.jenkinsUrl());
+        result.put("hasToken", !settings.token().isEmpty());
+        return result;
+    }
+
+    /**
+     * POST /api/cicd/config — save CI/CD configuration.
+     */
+    private void saveCiCdConfig(HttpExchange exchange) throws IOException {
+        try {
+            byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+            if (body.length > MAX_REQUEST_BYTES) {
+                throw new IllegalArgumentException("Request body too large.");
+            }
+            Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+            if (!(parsed instanceof Map<?, ?> values)) {
+                throw new IllegalArgumentException("Request must be a JSON object.");
+            }
+            String platform = stringField(values, "platform");
+            String repoUrl = CiCdConfig.normalizeRepoUrl(stringField(values, "repoUrl"));
+            String token = stringField(values, "token");
+            String branch = stringField(values, "branch");
+            if (branch.isEmpty()) branch = "main";
+            String triggerType = stringField(values, "triggerType");
+            if (triggerType.isEmpty()) triggerType = "push";
+            String scheduleCron = "";
+            Object scheduleCronObj = values.get("scheduleCron");
+            if (scheduleCronObj instanceof String scheduleCronText) scheduleCron = scheduleCronText;
+            String jenkinsUrl = "";
+            Object jenkinsUrlObj = values.get("jenkinsUrl");
+            if (jenkinsUrlObj instanceof String jenkinsUrlText) jenkinsUrl = jenkinsUrlText;
+
+            List<String> frameworks = new ArrayList<>();
+            Object fwObj = values.get("frameworks");
+            if (fwObj instanceof List<?> fwList) {
+                for (Object fw : fwList) {
+                    if (fw instanceof String s) frameworks.add(s);
+                }
+            }
+
+            CiCdConfig.CiCdSettings settings = new CiCdConfig.CiCdSettings(
+                    platform, repoUrl, token, branch, frameworks, triggerType, scheduleCron, jenkinsUrl);
+            ciCdConfig.save(settings);
+            sendJson(exchange, 200, Map.of("message", "CI/CD configuration saved."));
+        } catch (Exception e) {
+            sendJson(exchange, 400, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/cicd/test-connection — test repo access with provided token.
+     */
+    private void testCiCdConnection(HttpExchange exchange) throws IOException {
+        try {
+            byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+            if (body.length > MAX_REQUEST_BYTES) {
+                throw new IllegalArgumentException("Request body too large.");
+            }
+            Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+            if (!(parsed instanceof Map<?, ?> values)) {
+                throw new IllegalArgumentException("Request must be a JSON object.");
+            }
+            String platform = stringField(values, "platform");
+            String repoUrl = CiCdConfig.normalizeRepoUrl(stringField(values, "repoUrl"));
+            String token = stringField(values, "token");
+            String jenkinsUrl = "";
+            Object jenkinsUrlObj = values.get("jenkinsUrl");
+            if (jenkinsUrlObj instanceof String jenkinsUrlText) jenkinsUrl = jenkinsUrlText;
+
+            CiCdConfig.CiCdSettings settings = new CiCdConfig.CiCdSettings(
+                    platform, repoUrl, token, "main", List.of(), "push", "", jenkinsUrl);
+            String result = ciCdConfig.testConnection(settings);
+            boolean success = result.toLowerCase().contains("connected") || result.toLowerCase().contains("success");
+            sendJson(exchange, 200, Map.of("success", success, "message", result));
+        } catch (Exception e) {
+            sendJson(exchange, 400, Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/cicd/generate — generate workflow file based on current config.
+     */
+    private void generateWorkflow(HttpExchange exchange) throws IOException {
+        try {
+            CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+            if (settings == null) {
+                sendError(exchange, 400, "CI/CD not configured. Save configuration first.");
+                return;
+            }
+            String platform = settings.platform();
+            String content;
+            String filename;
+            String contentType;
+            if ("github".equals(platform)) {
+                content = workflowGenerator.generateGitHubActions(settings);
+                filename = "qa-runner.yml";
+                contentType = "text/yaml";
+            } else if ("jenkins".equals(platform)) {
+                content = workflowGenerator.generateJenkinsfile(settings);
+                filename = "Jenkinsfile";
+                contentType = "text/x-groovy";
+            } else {
+                sendError(exchange, 400, "Unknown platform: " + platform);
+                return;
+            }
+            byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", contentType);
+            exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=" + filename);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        } catch (Exception e) {
+            sendError(exchange, 500, "Failed to generate workflow: " + e.getMessage());
+        }
+    }
+
+    /**
+     * GET /api/cicd/status — return recent pipeline runs.
+     */
+    private Map<String, Object> getCiCdStatus() {
+        CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+        return pipelineStatusService.getLatestStatus(settings);
+    }
+
+    /**
+     * POST /api/cicd/commit — commit generated workflow file to the repo.
+     */
+    private void commitWorkflow(HttpExchange exchange) throws IOException {
+        try {
+            System.out.println("[COMMIT] Starting commit workflow...");
+            CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+            if (settings == null || settings.token().isEmpty()) {
+                System.out.println("[COMMIT] No config or token found.");
+                sendJson(exchange, 400, Map.of("success", false, "message", "CI/CD not configured or token missing."));
+                return;
+            }
+            System.out.println("[COMMIT] Token length: " + settings.token().length() + ", starts with: " + settings.token().substring(0, Math.min(10, settings.token().length())));
+            String platform = settings.platform();
+            String content;
+            String path;
+            if ("github".equals(platform)) {
+                content = workflowGenerator.generateGitHubActions(settings);
+                path = ".github/workflows/qa-runner.yml";
+            } else if ("jenkins".equals(platform)) {
+                content = workflowGenerator.generateJenkinsfile(settings);
+                path = "Jenkinsfile";
+            } else {
+                sendJson(exchange, 400, Map.of("success", false, "message", "Unknown platform."));
+                return;
+            }
+            String[] parts = parseRepoUrl(settings.repoUrl());
+            String owner = parts[0];
+            String repo = parts[1];
+            if (owner == null || repo == null) {
+                sendJson(exchange, 400, Map.of("success", false, "message", "Invalid repo URL."));
+                return;
+            }
+            System.out.println("[COMMIT] Detecting default branch for " + owner + "/" + repo + "...");
+            // Detect the actual default branch from the repo
+            String branch = detectDefaultBranch(owner, repo, settings.token(), settings.branch());
+            System.out.println("[COMMIT] Detected branch: " + branch);
+            // Try git command line first - it works better with fine-grained tokens
+            boolean gitSuccess = commitViaGit(owner, repo, branch, path, content, settings.token());
+            if (gitSuccess) {
+                System.out.println("[COMMIT] Git commit succeeded!");
+                sendJson(exchange, 200, Map.of("success", true, "message", "Workflow file committed to repo via git."));
+                return;
+            }
+            System.out.println("[COMMIT] Git commit failed, falling back to GitHub API...");
+            // Fallback to GitHub API if git is not available
+            // Base64 encode the content (required by GitHub Contents API)
+            String base64Content = java.util.Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+            // Try to get the latest commit SHA for the file
+            System.out.println("[COMMIT] Getting latest commit SHA...");
+            String sha = getLatestCommitSha(owner, repo, path, settings.token(), branch);
+            System.out.println("[COMMIT] SHA: " + sha);
+            String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path;
+            System.out.println("[COMMIT] Calling GitHub API: " + apiUrl);
+            StringBuilder body = new StringBuilder();
+            body.append("{\"message\":\"Add QA Runner CI/CD workflow\",\"content\":\"");
+            body.append(base64Content);
+            body.append("\",\"branch\":\"").append(branch).append("\"");
+            if (sha != null) {
+                body.append(",\"sha\":\"").append(sha).append("\"");
+            }
+            body.append("}");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(apiUrl).toURL().openConnection();
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Authorization", "token " + settings.token());
+            conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
+            try (java.io.OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            System.out.println("[COMMIT] Sending request to GitHub API...");
+            int code = conn.getResponseCode();
+            System.out.println("[COMMIT] GitHub API response code: " + code);
+            if (code == 200 || code == 201) {
+                System.out.println("[COMMIT] Success! Workflow committed.");
+                sendJson(exchange, 200, Map.of("success", true, "message", "Workflow file committed to repo."));
+            } else {
+                String error = readErrorBody(conn);
+                System.out.println("[COMMIT] Error response: " + error);
+                // Add helpful hint for workflow scope issues, but always show the real error
+                String message = "Failed to commit: " + error;
+                if ((code == 403 || code == 404) && path != null && path.startsWith(".github/workflows/")) {
+                    message += " (Note: For classic tokens, ensure both 'repo' AND 'workflow' scopes are checked. For fine-grained tokens, ensure both 'Contents' AND 'Actions' permissions are set to 'Read & write'.)";
+                }
+                sendJson(exchange, code, Map.of("success", false, "message", message));
+            }
+        } catch (Exception e) {
+            System.out.println("[COMMIT] Exception: " + e.getClass().getName() + " - " + e.getMessage());
+            e.printStackTrace();
+            sendJson(exchange, 500, Map.of("success", false, "message", "Commit failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Commit workflow file using git command line - works better with fine-grained tokens.
+     */
+    private boolean commitViaGit(String owner, String repo, String branch, String path, String content, String token) {
+        try {
+            String tempDir = System.getProperty("java.io.tmpdir") + "/qa-runner-git-" + System.currentTimeMillis();
+            java.nio.file.Path dir = java.nio.file.Paths.get(tempDir);
+            java.nio.file.Files.createDirectories(dir);
+            System.out.println("[COMMIT] Cloning repo to: " + tempDir);
+            // Clone the repo
+            runGitCommand(tempDir, "init");
+            runGitCommand(tempDir, "remote", "add", "origin", "https://" + token + "@github.com/" + owner + "/" + repo + ".git");
+            runGitCommand(tempDir, "fetch", "origin", branch);
+            runGitCommand(tempDir, "checkout", "-b", branch, "origin/" + branch);
+            // Create the file
+            java.nio.file.Path filePath = dir.resolve(path);
+            java.nio.file.Files.createDirectories(filePath.getParent());
+            java.nio.file.Files.writeString(filePath, content);
+            // Commit and push
+            runGitCommand(tempDir, "add", path);
+            runGitCommand(tempDir, "config", "user.email", "qa-runner@localhost");
+            runGitCommand(tempDir, "config", "user.name", "QA Runner");
+            runGitCommand(tempDir, "commit", "-m", "Add QA Runner CI/CD workflow");
+            String pushResult = runGitCommand(tempDir, "push", "origin", branch);
+            System.out.println("[COMMIT] Push result: " + pushResult);
+            // Cleanup
+            deleteDirectory(dir.toFile());
+            return pushResult.contains("To") || pushResult.contains("branch");
+        } catch (Exception e) {
+            System.out.println("[COMMIT] Git commit failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private String runGitCommand(String dir, String... args) throws Exception {
+        String[] cmd = new String[args.length + 1];
+        cmd[0] = "git";
+        System.arraycopy(args, 0, cmd, 1, args.length);
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.directory(new java.io.File(dir));
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        String output = new String(p.getInputStream().readAllBytes());
+        int exitCode = p.waitFor();
+        if (exitCode != 0) {
+            System.out.println("[GIT] Command failed: " + String.join(" ", cmd) + " - " + output.trim());
+            throw new RuntimeException("Git command failed: " + output.trim());
+        }
+        return output.trim();
+    }
+
+    private void deleteDirectory(java.io.File dir) {
+        java.io.File[] files = dir.listFiles();
+        if (files != null) {
+            for (java.io.File file : files) {
+                if (file.isDirectory()) {
+                    deleteDirectory(file);
+                } else {
+                    file.delete();
+                }
+            }
+        }
+        dir.delete();
+    }
+
+    /**
+     * Create a directory in the repository if it doesn't exist by creating a .gitkeep file.
+     */
+    private void createDirectoryIfNotExists(String owner, String repo, String dirPath, String token, String branch) {
+        try {
+            String url = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + dirPath + "/.gitkeep";
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(url).toURL().openConnection();
+            conn.setRequestProperty("Authorization", "token " + token);
+            conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            int code = conn.getResponseCode();
+            if (code == 404) {
+                // Directory doesn't exist, create it with .gitkeep
+                System.out.println("[COMMIT] Creating directory: " + dirPath);
+                String gitkeepContent = java.util.Base64.getEncoder().encodeToString("Keep this directory".getBytes(StandardCharsets.UTF_8));
+                String body = "{\"message\":\"Create directory " + dirPath + "\",\"content\":\"" + gitkeepContent + "\",\"branch\":\"" + branch + "\"}";
+                conn = (java.net.HttpURLConnection) java.net.URI.create(url).toURL().openConnection();
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Authorization", "token " + token);
+                conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                try (java.io.OutputStream os = conn.getOutputStream()) {
+                    os.write(body.getBytes(StandardCharsets.UTF_8));
+                }
+                int createCode = conn.getResponseCode();
+                System.out.println("[COMMIT] Create directory response: " + createCode);
+            } else if (code == 200) {
+                System.out.println("[COMMIT] Directory already exists: " + dirPath);
+            }
+        } catch (Exception e) {
+            System.out.println("[COMMIT] Failed to create directory " + dirPath + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Detect the default branch of the repository. Falls back to the configured branch if detection fails.
+     */
+    private String detectDefaultBranch(String owner, String repo, String token, String configuredBranch) {
+        try {
+            String url = "https://api.github.com/repos/" + owner + "/" + repo;
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(url).toURL().openConnection();
+            conn.setRequestProperty("Authorization", "token " + token);
+            conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                String response = readResponseBody(conn);
+                Object parsed = JsonParser.parse(response);
+                if (parsed instanceof Map<?, ?> map) {
+                    String defaultBranch = map.get("default_branch").toString();
+                    if (defaultBranch != null && !defaultBranch.isEmpty()) {
+                        return defaultBranch;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Fall back to configured branch
+        }
+        return configuredBranch;
+    }
+
+    private String getLatestCommitSha(String owner, String repo, String path, String token, String branch) {
+        try {
+            String url = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path
+                    + "?ref=" + branch;
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(url).toURL().openConnection();
+            conn.setRequestProperty("Authorization", "token " + token);
+            conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                String response = readResponseBody(conn);
+                Object parsed = JsonParser.parse(response);
+                if (parsed instanceof Map<?, ?> map) {
+                    return map.get("sha").toString();
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String[] parseRepoUrl(String repoUrl) {
+        if (repoUrl == null || repoUrl.isEmpty()) return new String[]{null, null};
+        String clean = repoUrl.replace("https://github.com/", "")
+                .replace("git@github.com:", "").replace(".git", "").trim();
+        int slash = clean.lastIndexOf('/');
+        if (slash > 0) return new String[]{clean.substring(0, slash), clean.substring(slash + 1)};
+        return new String[]{null, clean};
+    }
+
+    private String escapeJson(String s) {
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    private String readResponseBody(java.net.HttpURLConnection conn) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) sb.append(line);
+        }
+        return sb.toString();
+    }
+
+    private String readErrorBody(java.net.HttpURLConnection conn) {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(conn.getErrorStream(), StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) sb.append(line);
+            return sb.toString();
+        } catch (Exception e) {
+            return "Unknown error";
+        }
+    }
+
+    // === Test Case Management Helpers ===
+
+    private Map<String, Object> testCaseToMap(TestCaseManager.TestCase tc) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", tc.id());
+        map.put("caseId", tc.caseId());
+        map.put("name", tc.name());
+        map.put("description", tc.description());
+        map.put("priority", tc.priority());
+        map.put("tags", tc.tags());
+        map.put("framework", tc.framework());
+        map.put("status", tc.status());
+        map.put("lastRunId", tc.lastRunId());
+        map.put("lastRunTimestamp", tc.lastRunTimestamp());
+        map.put("suiteId", tc.suiteId());
+        map.put("storyId", tc.storyId());
+        map.put("steps", tc.steps());
+        map.put("module", tc.module());
+        map.put("testType", tc.testType());
+        map.put("testMethod", tc.testMethod());
+        map.put("assignedTo", tc.assignedTo());
+        map.put("automationStatus", tc.automationStatus());
+        return map;
+    }
+
+    private Map<String, Object> storyToMap(TestCaseManager.Story story) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", story.id());
+        map.put("storyCode", story.storyCode());
+        map.put("title", story.title());
+        map.put("description", story.description());
+        map.put("status", story.status());
+        map.put("priority", story.priority());
+        map.put("assignee", story.assignee());
+        map.put("storyPoints", story.storyPoints());
+        return map;
+    }
+
+    private Map<String, Object> suiteToMap(TestCaseManager.TestSuite suite) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", suite.id());
+        map.put("suiteCode", suite.suiteCode());
+        map.put("name", suite.name());
+        map.put("parentId", suite.parentId());
+        map.put("sortOrder", suite.sortOrder());
+        map.put("testCaseCount", testCaseManager.countTestCasesInSuite(suite.id()));
+        return map;
+    }
+
+    /**
+     * POST /api/testcases — create a new test case.
+     */
+    @SuppressWarnings("unchecked")
+    private void createTestCase(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String name = stringField(values, "name");
+        String description = optionalString(values, "description");
+        String priority = optionalString(values, "priority");
+        String framework = optionalString(values, "framework");
+
+        List<String> tags = new ArrayList<>();
+        Object tagsObj = values.get("tags");
+        if (tagsObj instanceof List<?> tagList) {
+            for (Object tag : tagList) {
+                if (tag instanceof String t) tags.add(t);
+            }
+        }
+
+        String suiteId = optionalString(values, "suiteId");
+        String storyId = optionalString(values, "storyId");
+        // Parse steps if present
+        List<Map<String, Object>> steps = new ArrayList<>();
+        Object stepsObj = values.get("steps");
+        if (stepsObj instanceof List<?> stepList) {
+            for (Object step : stepList) {
+                if (step instanceof Map<?, ?> s) {
+                    Map<String, Object> stepMap = new LinkedHashMap<>();
+                    stepMap.put("action", s.get("action") != null ? s.get("action").toString() : "");
+                    stepMap.put("expected", s.get("expected") != null ? s.get("expected").toString() : "");
+                    steps.add(stepMap);
+                }
+            }
+        }
+        String module = optionalString(values, "module");
+        String testType = optionalString(values, "testType");
+        String testMethod = optionalString(values, "testMethod");
+        String assignedTo = optionalString(values, "assignedTo");
+        String automationStatus = optionalString(values, "automationStatus");
+        TestCaseManager.TestCase created = testCaseManager.create(name, description, priority, tags, framework, suiteId, storyId, steps, module, testType, testMethod, assignedTo, automationStatus);
+        sendJson(exchange, 201, testCaseToMap(created));
+    }
+
+    /**
+     * PUT /api/testcases/{id} — update an existing test case.
+     */
+    @SuppressWarnings("unchecked")
+    private void updateTestCase(HttpExchange exchange, String id) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String name = optionalString(values, "name");
+        String description = optionalString(values, "description");
+        String priority = optionalString(values, "priority");
+        String framework = optionalString(values, "framework");
+
+        List<String> tags = new ArrayList<>();
+        Object tagsObj = values.get("tags");
+        if (tagsObj instanceof List<?> tagList) {
+            for (Object tag : tagList) {
+                if (tag instanceof String t) tags.add(t);
+            }
+        }
+
+        String suiteId = optionalString(values, "suiteId");
+        String storyId = optionalString(values, "storyId");
+        // Parse steps if present
+        List<Map<String, Object>> steps = new ArrayList<>();
+        Object stepsObj = values.get("steps");
+        if (stepsObj instanceof List<?> stepList) {
+            for (Object step : stepList) {
+                if (step instanceof Map<?, ?> s) {
+                    Map<String, Object> stepMap = new LinkedHashMap<>();
+                    stepMap.put("action", s.get("action") != null ? s.get("action").toString() : "");
+                    stepMap.put("expected", s.get("expected") != null ? s.get("expected").toString() : "");
+                    steps.add(stepMap);
+                }
+            }
+        }
+        String module = optionalString(values, "module");
+        String testType = optionalString(values, "testType");
+        String testMethod = optionalString(values, "testMethod");
+        String assignedTo = optionalString(values, "assignedTo");
+        String automationStatus = optionalString(values, "automationStatus");
+        try {
+            TestCaseManager.TestCase updated = testCaseManager.update(id, name, description, priority, tags, framework, suiteId, storyId, steps, module, testType, testMethod, assignedTo, automationStatus);
+            sendJson(exchange, 200, testCaseToMap(updated));
+        } catch (IllegalArgumentException e) {
+            sendError(exchange, 404, e.getMessage());
+        }
+    }
+
+    /**
+     * POST /api/testcases/sync — sync test case statuses from a pipeline or local run.
+     * Accepts: {runId} for local runs, or {runId, source:"github"} for GitHub pipeline runs.
+     */
+    @SuppressWarnings("unchecked")
+    private void syncTestCases(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String runId = optionalString(values, "runId");
+        String source = optionalString(values, "source");
+
+        if ("github".equals(source) && runId != null) {
+            // Sync from GitHub pipeline run
+            CiCdConfig.CiCdSettings settings = new CiCdConfig().load();
+            if (settings == null || settings.token().isEmpty()) {
+                sendError(exchange, 400, "CI/CD config not found. Save your CI/CD configuration first.");
+                return;
+            }
+            String[] parts = parseRepoUrl(settings.repoUrl());
+            List<RunDetail> jobs = pipelineStatusService.getRunJobs(parts[0], parts[1], runId, settings.token());
+            if (jobs.isEmpty()) {
+                sendError(exchange, 404, "No job details found for run " + runId);
+                return;
+            }
+            testCaseManager.syncFromRun(runId, jobs);
+            sendJson(exchange, 200, Map.of("message", "Test cases synced from GitHub run " + runId, "matched", jobs.size()));
+        } else if (runId != null) {
+            // Sync from local run
+            RunEntry entry = runs.get(runId);
+            if (entry != null && entry.result != null && entry.result.summary() != null) {
+                testCaseManager.syncFromRun(runId, entry.result.summary().details());
+                sendJson(exchange, 200, Map.of("message", "Test cases synced from run " + runId));
+            } else {
+                sendError(exchange, 404, "Run not found: " + runId);
+            }
+        } else {
+            // Auto-sync: sync from latest GitHub pipeline run
+            CiCdConfig.CiCdSettings settings = new CiCdConfig().load();
+            if (settings == null || settings.token().isEmpty()) {
+                sendError(exchange, 400, "CI/CD config not found. Save your CI/CD configuration first.");
+                return;
+            }
+            List<CiCdConfig.PipelineRun> pipelineRuns = pipelineStatusService.getRuns(settings);
+            if (pipelineRuns.isEmpty()) {
+                sendError(exchange, 404, "No pipeline runs found");
+                return;
+            }
+            CiCdConfig.PipelineRun latest = pipelineRuns.get(0);
+            String[] parts = parseRepoUrl(settings.repoUrl());
+            List<RunDetail> jobs = pipelineStatusService.getRunJobs(parts[0], parts[1], latest.id(), settings.token());
+            if (jobs.isEmpty()) {
+                sendError(exchange, 404, "No job details found for run " + latest.id());
+                return;
+            }
+            testCaseManager.syncFromRun(latest.id(), jobs);
+            sendJson(exchange, 200, Map.of("message", "Test cases synced from latest pipeline run", "runId", latest.id()));
+        }
+    }
+
+    /**
+     * POST /api/testcases/bulk-delete — delete multiple test cases by ID list.
+     */
+    @SuppressWarnings("unchecked")
+    private void bulkDeleteTestCases(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        Object idsObj = values.get("ids");
+        if (!(idsObj instanceof List<?> idsList)) {
+            sendError(exchange, 400, "Request must contain an 'ids' array.");
+            return;
+        }
+        List<String> ids = new ArrayList<>();
+        for (Object id : idsList) {
+            if (id instanceof String s && !s.isBlank()) {
+                ids.add(s);
+            }
+        }
+        if (ids.isEmpty()) {
+            sendError(exchange, 400, "No valid IDs provided.");
+            return;
+        }
+        int deleted = testCaseManager.bulkDelete(ids);
+        sendJson(exchange, 200, Map.of("message", deleted + " test case(s) deleted.", "deleted", deleted));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String optionalString(Map<?, ?> values, String name) {
+        Object value = values.get(name);
+        if (value instanceof String text && !text.isBlank()) {
+            return text;
+        }
+        return null;
+    }
+
+    // === Test Suite Helpers ===
+
+    /**
+     * POST /api/suites — create a new test suite.
+     */
+    @SuppressWarnings("unchecked")
+    private void createSuite(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String name = stringField(values, "name");
+        String parentId = optionalString(values, "parentId");
+        TestCaseManager.TestSuite created = testCaseManager.createSuite(name, parentId);
+        sendJson(exchange, 201, suiteToMap(created));
+    }
+
+    /**
+     * PUT /api/suites/{id} — update an existing test suite.
+     */
+    @SuppressWarnings("unchecked")
+    private void updateSuite(HttpExchange exchange, String id) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String name = optionalString(values, "name");
+        String parentId = optionalString(values, "parentId");
+        try {
+            TestCaseManager.TestSuite updated = testCaseManager.updateSuite(id, name, parentId);
+            sendJson(exchange, 200, suiteToMap(updated));
+        } catch (IllegalArgumentException e) {
+            sendError(exchange, 404, e.getMessage());
+        }
+    }
+
+    // === Story Helpers ===
+
+    /**
+     * POST /api/stories — create a new story.
+     */
+    @SuppressWarnings("unchecked")
+    private void createStory(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String title = stringField(values, "title");
+        String description = optionalString(values, "description");
+        String status = optionalString(values, "status");
+        String priority = optionalString(values, "priority");
+        String assignee = optionalString(values, "assignee");
+        int storyPoints = 0;
+        Object sp = values.get("storyPoints");
+        if (sp instanceof Number n) storyPoints = n.intValue();
+        TestCaseManager.Story created = testCaseManager.createStory(title, description, status, priority, assignee, storyPoints);
+        sendJson(exchange, 201, storyToMap(created));
+    }
+
+    /**
+     * PUT /api/stories/{id} — update an existing story.
+     */
+    @SuppressWarnings("unchecked")
+    private void updateStory(HttpExchange exchange, String id) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String title = optionalString(values, "title");
+        String description = optionalString(values, "description");
+        String status = optionalString(values, "status");
+        String priority = optionalString(values, "priority");
+        String assignee = optionalString(values, "assignee");
+        int storyPoints = 0;
+        Object sp = values.get("storyPoints");
+        if (sp instanceof Number n) storyPoints = n.intValue();
+        try {
+            TestCaseManager.Story updated = testCaseManager.updateStory(id, title, description, status, priority, assignee, storyPoints);
+            sendJson(exchange, 200, storyToMap(updated));
+        } catch (IllegalArgumentException e) {
+            sendError(exchange, 404, e.getMessage());
+        }
+    }
+
+    // === AI Assistant Handler ===
+
+    /**
+     * POST /api/ai/ask — AI assistant that helps with coding, frameworks, and testing questions.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleAiAsk(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            throw new IllegalArgumentException("Request body is too large.");
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String query = stringField(values, "query");
+        if (query.isBlank()) {
+            throw new IllegalArgumentException("Query is required.");
+        }
+        String response = generateAiResponse(query.trim());
+        sendJson(exchange, 200, Map.of("response", response, "timestamp", java.time.Instant.now().toString()));
+    }
+
+    /**
+     * Generate an AI-like response based on the user's query.
+     * Uses pattern matching against known frameworks, testing concepts, and coding patterns.
+     */
+    private String generateAiResponse(String query) {
+        String q = query.toLowerCase().trim();
+
+        // Framework-specific help
+        if (q.contains("cucumber") || q.contains("bdd") || q.contains("gherkin")) {
+            return """
+                **Cucumber BDD Framework Help**
+                
+                Cucumber uses Gherkin syntax for behavior-driven development. Here's how to write a feature:
+                
+                ```gherkin
+                Feature: User Login
+                  Scenario: Successful login
+                    Given I am on the login page
+                    When I enter valid credentials
+                    And I click the login button
+                    Then I should see the dashboard
+                ```
+                
+                **Step Definition Example:**
+                ```java
+                @Given("I am on the login page")
+                public void iAmOnTheLoginPage() {
+                    driver.get("https://example.com/login");
+                }
+                
+                @When("I enter valid credentials")
+                public void iEnterValidCredentials() {
+                    driver.findElement(By.id("username")).sendKeys("admin");
+                    driver.findElement(By.id("password")).sendKeys("password");
+                }
+                
+                @Then("I should see the dashboard")
+                public void iShouldSeeTheDashboard() {
+                    assertTrue(driver.getCurrentUrl().contains("dashboard"));
+                }
+                ```
+                
+                **Key Concepts:**
+                - Use `@Given` for preconditions
+                - Use `@When` for actions
+                - Use `@Then` for assertions
+                - Use `@And` for additional steps
+                - Group related scenarios with `Background`
+                
+                Need help with a specific Cucumber scenario?""";
+        }
+
+        if (q.contains("selenium") || q.contains("webdriver") || q.contains("browser")) {
+            return """
+                **Selenium WebDriver Help**
+                
+                Selenium is used for browser automation. Here are common patterns:
+                
+                **Element Locators:**
+                ```java
+                // By ID
+                WebElement element = driver.findElement(By.id("username"));
+                
+                // By CSS Selector
+                WebElement element = driver.findElement(By.cssSelector(".class-name"));
+                
+                // By XPath
+                WebElement element = driver.findElement(By.xpath("//div[@class='name']"));
+                
+                // By Class Name
+                WebElement element = driver.findElement(By.className("my-class"));
+                
+                // By Name
+                WebElement element = driver.findElement(By.name("field-name"));
+                ```
+                
+                **Common Actions:**
+                ```java
+                // Click
+                element.click();
+                
+                // Type text
+                element.sendKeys("Hello World");
+                
+                // Get text
+                String text = element.getText();
+                
+                // Wait for element
+                WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+                wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("element")));
+                
+                // Handle dropdowns
+                Select dropdown = new Select(driver.findElement(By.id("dropdown")));
+                dropdown.selectByVisibleText("Option 1");
+                ```
+                
+                **Explicit Waits (Recommended):**
+                ```java
+                WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+                wait.until(ExpectedConditions.elementToBeClickable(By.id("submit")));
+                ```
+                
+                What specific Selenium task do you need help with?""";
+        }
+
+        if (q.contains("playwright")) {
+            return """
+                **Playwright Help**
+                
+                Playwright is a modern browser automation framework. Here are common patterns:
+                
+                **Basic Setup:**
+                ```java
+                try (Playwright playwright = Playwright.create()) {
+                    Browser browser = playwright.chromium().launch();
+                    Page page = browser.newPage();
+                    page.navigate("https://example.com");
+                }
+                ```
+                
+                **Common Actions:**
+                ```java
+                // Click
+                page.click("#button-id");
+                
+                // Fill input
+                page.fill("#input-id", "text");
+                
+                // Get text
+                String text = page.textContent("#element");
+                
+                // Wait for element
+                page.waitForSelector(".element-class");
+                
+                // Screenshot
+                page.screenshot(new Page.ScreenshotOptions().setPath(Path.of("screenshot.png")));
+                
+                // Handle multiple tabs
+                Page newPage = page.waitForPopup(() -> page.click("#link"));
+                ```
+                
+                **Assertions:**
+                ```java
+                import static com.microsoft.playwright.assertions.PlaywrightAssertions.*;
+                
+                expect(page.locator("#element")).toHaveText("Expected text");
+                expect(page.locator("#element")).toBeVisible();
+                ```
+                
+                What Playwright functionality do you need help with?""";
+        }
+
+        if (q.contains("rest assured") || q.contains("restassured") || q.contains("api test")) {
+            return """
+                **REST Assured API Testing Help**
+                
+                REST Assured simplifies API testing in Java:
+                
+                **GET Request:**
+                ```java
+                given()
+                    .baseUri("https://jsonplaceholder.typicode.com")
+                    .header("Content-Type", "application/json")
+                .when()
+                    .get("/posts/1")
+                .then()
+                    .statusCode(200)
+                    .body("title", notNullValue());
+                ```
+                
+                **POST Request:**
+                ```java
+                String json = "{\"title\": \"foo\", \"body\": \"bar\", \"userId\": 1}";
+                
+                given()
+                    .baseUri("https://jsonplaceholder.typicode.com")
+                    .contentType(ContentType.JSON)
+                    .body(json)
+                .when()
+                    .post("/posts")
+                .then()
+                    .statusCode(201)
+                    .body("id", greaterThan(0));
+                ```
+                
+                **PUT Request:**
+                ```java
+                given()
+                    .baseUri("https://jsonplaceholder.typicode.com")
+                    .contentType(ContentType.JSON)
+                    .body(json)
+                .when()
+                    .put("/posts/1")
+                .then()
+                    .statusCode(200);
+                ```
+                
+                **DELETE Request:**
+                ```java
+                given()
+                    .baseUri("https://jsonplaceholder.typicode.com")
+                .when()
+                    .delete("/posts/1")
+                .then()
+                    .statusCode(200);
+                ```
+                
+                **JSON Path Assertions:**
+                ```java
+                .body("title", equalTo("foo"))
+                .body("userId", equalTo(1))
+                .body("id", notNullValue())
+                ```
+                
+                What API testing scenario do you need help with?""";
+        }
+
+        if (q.contains("junit") || q.contains("junit5")) {
+            return """
+                **JUnit 5 Testing Help**
+                
+                JUnit 5 is the standard Java testing framework:
+                
+                **Basic Test Structure:**
+                ```java
+                @Test
+                void shouldReturnTrueWhenValid() {
+                    // Arrange
+                    Calculator calc = new Calculator();
+                    
+                    // Act
+                    int result = calc.add(2, 3);
+                    
+                    // Assert
+                    assertEquals(5, result);
+                }
+                ```
+                
+                **Lifecycle Methods:**
+                ```java
+                @BeforeEach  // Runs before each test
+                void setUp() {
+                    // Initialize test data
+                }
+                
+                @AfterEach  // Runs after each test
+                void tearDown() {
+                    // Clean up
+                }
+                
+                @BeforeAll  // Runs once before all tests
+                static void initAll() {
+                    // Static setup
+                }
+                
+                @AfterAll  // Runs once after all tests
+                static void cleanupAll() {
+                    // Static cleanup
+                }
+                ```
+                
+                **Parameterized Tests:**
+                ```java
+                @ParameterizedTest
+                @ValueSource(strings = {"hello", "world"})
+                void testWithStringParameter(String input) {
+                    assertNotNull(input);
+                }
+                ```
+                
+                **Assertions:**
+                ```java
+                assertEquals(expected, actual)
+                assertTrue(condition)
+                assertFalse(condition)
+                assertNotNull(object)
+                assertNull(object)
+                assertThrows(Exception.class, () -> { /* code */ })
+                ```
+                
+                What JUnit functionality do you need help with?""";
+        }
+
+        if (q.contains("testng")) {
+            return """
+                **TestNG Help**
+                
+                TestNG is a powerful testing framework with advanced features:
+                
+                **Basic Test:**
+                ```java
+                @Test
+                public void testLogin() {
+                    assertEquals("success", loginService.login("user", "pass"));
+                }
+                ```
+                
+                **Lifecycle Annotations:**
+                ```java
+                @BeforeSuite
+                public void beforeSuite() { }
+                
+                @AfterSuite
+                public void afterSuite() { }
+                
+                @BeforeTest
+                public void beforeTest() { }
+                
+                @AfterTest
+                public void afterTest() { }
+                
+                @BeforeMethod
+                public void beforeMethod() { }
+                
+                @AfterMethod
+                public void afterMethod() { }
+                ```
+                
+                **Data-Driven Testing:**
+                ```java
+                @Test(dataProvider = "loginData")
+                public void testLogin(String user, String pass, boolean expected) {
+                    boolean result = loginService.login(user, pass);
+                    assertEquals(expected, result);
+                }
+                
+                @DataProvider(name = "loginData")
+                public Object[][] provideData() {
+                    return new Object[][] {
+                        {"user1", "pass1", true},
+                        {"user2", "wrong", false}
+                    };
+                }
+                ```
+                
+                **Parallel Execution:**
+                ```xml
+                <suite name="Suite" parallel="tests" thread-count="3">
+                    <test name="Test1">...</test>
+                    <test name="Test2">...</test>
+                </suite>
+                ```
+                
+                What TestNG feature do you need help with?""";
+        }
+
+        if (q.contains("jmeter") || q.contains("performance") || q.contains("load test")) {
+            return """
+                **JMeter Performance Testing Help**
+                
+                JMeter is used for load and performance testing:
+                
+                **Test Plan Structure:**
+                1. Thread Group - Simulates users
+                2. HTTP Request Defaults - Base URL configuration
+                3. HTTP Request Samplers - Individual API calls
+                4. Listeners - Results visualization
+                
+                **Key Configurations:**
+                ```
+                Thread Group:
+                - Number of Threads: 100 (users)
+                - Ramp-Up Period: 10 (seconds)
+                - Loop Count: 10 (iterations)
+                
+                HTTP Request Defaults:
+                - Server Name: api.example.com
+                - Protocol: https
+                - Port: 443
+                ```
+                
+                **Assertions:**
+                - Response Code: 200
+                - Response Message: OK
+                - Response Time: < 500ms
+                
+                **Listeners:**
+                - View Results Tree - Debug individual requests
+                - Summary Report - Aggregate statistics
+                - Graph Results - Response time trends
+                
+                **Common Metrics:**
+                - Average Response Time
+                - 90th/95th Percentile
+                - Throughput (requests/sec)
+                - Error Rate
+                
+                Need help with a specific JMeter scenario?""";
+        }
+
+        if (q.contains("maven")) {
+            return """
+                **Maven Help**
+                
+                Maven manages project dependencies and build lifecycle:
+                
+                **Common Commands:**
+                ```bash
+                mvn clean install          # Clean and build with tests
+                mvn clean package -DskipTests  # Build without tests
+                mvn test                   # Run all tests
+                mvn test -Dtest=ClassName  # Run specific test class
+                mvn dependency:tree        # Show dependency tree
+                mvn clean compile          # Compile only
+                ```
+                
+                **Adding Dependencies (pom.xml):**
+                ```xml
+                <dependencies>
+                    <dependency>
+                        <groupId>org.seleniumhq.selenium</groupId>
+                        <artifactId>selenium-java</artifactId>
+                        <version>4.15.0</version>
+                    </dependency>
+                </dependencies>
+                ```
+                
+                **Running Specific Test:**
+                ```bash
+                mvn test -Dtest=LoginTest#testSuccessfulLogin
+                ```
+                
+                What Maven task do you need help with?""";
+        }
+
+        if (q.contains("docker") || q.contains("container")) {
+            return """
+                **Docker Help**
+                
+                Docker containerizes your application:
+                
+                **Basic Dockerfile:**
+                ```dockerfile
+                FROM openjdk:17-slim
+                WORKDIR /app
+                COPY target/*.jar app.jar
+                EXPOSE 8081
+                ENTRYPOINT ["java", "-jar", "app.jar"]
+                ```
+                
+                **Common Commands:**
+                ```bash
+                docker build -t myapp .              # Build image
+                docker run -p 8081:8081 myapp        # Run container
+                docker ps                            # List running containers
+                docker stop <container-id>           # Stop container
+                docker logs <container-id>           # View logs
+                ```
+                
+                **Docker Compose:**
+                ```yaml
+                version: '3'
+                services:
+                  app:
+                    image: myapp
+                    ports:
+                      - "8081:8081"
+                  db:
+                    image: postgres:15
+                    environment:
+                      POSTGRES_DB: testdb
+                ```
+                
+                What Docker task do you need help with?""";
+        }
+
+        if (q.contains("git") || q.contains("github")) {
+            return """
+                **Git Help**
+                
+                Git is a version control system:
+                
+                **Common Commands:**
+                ```bash
+                git status                    # Check status
+                git add .                     # Stage all changes
+                git commit -m "message"       # Commit changes
+                git push                      # Push to remote
+                git pull                      # Pull from remote
+                git branch                    # List branches
+                git checkout -b new-branch    # Create new branch
+                git merge branch-name         # Merge branch
+                git log --oneline             # View commit history
+                ```
+                
+                **GitHub Workflow:**
+                1. Create feature branch: `git checkout -b feature/my-feature`
+                2. Make changes and commit
+                3. Push: `git push origin feature/my-feature`
+                4. Create Pull Request on GitHub
+                5. Review and merge
+                
+                What Git operation do you need help with?""";
+        }
+
+        if (q.contains("ci/cd") || q.contains("pipeline") || q.contains("jenkins") || q.contains("github action")) {
+            return """
+                **CI/CD Pipeline Help**
+                
+                CI/CD automates building, testing, and deployment:
+                
+                **GitHub Actions Example:**
+                ```yaml
+                name: CI Pipeline
+                on: [push, pull_request]
+                jobs:
+                  test:
+                    runs-on: ubuntu-latest
+                    steps:
+                      - uses: actions/checkout@v3
+                      - uses: actions/setup-java@v3
+                        with:
+                          java-version: '17'
+                      - run: mvn clean test
+                      - run: mvn package
+                ```
+                
+                **Jenkins Pipeline:**
+                ```groovy
+                pipeline {
+                    agent any
+                    stages {
+                        stage('Build') {
+                            steps {
+                                sh 'mvn clean package'
+                            }
+                        }
+                        stage('Test') {
+                            steps {
+                                sh 'mvn test'
+                            }
+                        }
+                    }
+                }
+                ```
+                
+                **Best Practices:**
+                - Run tests on every commit
+                - Fail fast on errors
+                - Use caching for dependencies
+                - Store artifacts for deployment
+                
+                What CI/CD task do you need help with?""";
+        }
+
+        if (q.contains("page object") || q.contains("page factory") || q.contains("pof")) {
+            return """
+                **Page Object Pattern Help**
+                
+                Page Object is a design pattern for maintaining test code:
+                
+                **Base Page:**
+                ```java
+                public class BasePage {
+                    protected WebDriver driver;
+                    
+                    public BasePage(WebDriver driver) {
+                        this.driver = driver;
+                    }
+                    
+                    protected void click(By locator) {
+                        driver.findElement(locator).click();
+                    }
+                    
+                    protected void type(By locator, String text) {
+                        driver.findElement(locator).sendKeys(text);
+                    }
+                }
+                ```
+                
+                **Login Page:**
+                ```java
+                public class LoginPage extends BasePage {
+                    private By username = By.id("username");
+                    private By password = By.id("password");
+                    private By loginBtn = By.id("login");
+                    
+                    public LoginPage(WebDriver driver) {
+                        super(driver);
+                    }
+                    
+                    public void login(String user, String pass) {
+                        type(username, user);
+                        type(password, pass);
+                        click(loginBtn);
+                    }
+                }
+                ```
+                
+                **Test Using Page Object:**
+                ```java
+                @Test
+                void testLogin() {
+                    LoginPage loginPage = new LoginPage(driver);
+                    loginPage.login("admin", "password");
+                    
+                    DashboardPage dashboard = new DashboardPage(driver);
+                    assertTrue(dashboard.isDisplayed());
+                }
+                ```
+                
+                What Page Object pattern question do you have?""";
+        }
+
+        if (q.contains("assertion") || q.contains("assert") || q.contains("verify")) {
+            return """
+                **Assertions Help**
+                
+                Assertions verify expected vs actual results:
+                
+                **JUnit Assertions:**
+                ```java
+                assertEquals(expected, actual)
+                assertEquals(expected, actual, "message")
+                assertTrue(condition)
+                assertFalse(condition)
+                assertNotNull(object)
+                assertNull(object)
+                assertSame(obj1, obj2)
+                assertNotSame(obj1, obj2)
+                assertThrows(Exception.class, () -> { /* code */ })
+                assertAll("group", () -> assert1(), () -> assert2())
+                ```
+                
+                **Hamcrest Matchers:**
+                ```java
+                import static org.hamcrest.Matchers.*;
+                
+                assertThat(actual, is(expected))
+                assertThat(actual, containsString("text"))
+                assertThat(actual, hasItem("item"))
+                assertThat(actual, greaterThan(10))
+                assertThat(actual, notNullValue())
+                ```
+                
+                **Soft Assertions (TestNG):**
+                ```java
+                SoftAssertions soft = new SoftAssertions();
+                soft.assertEquals(actual, expected);
+                soft.assertTrue(condition);
+                soft.assertAll();  // Throws if any failed
+                ```
+                
+                What assertion scenario do you need help with?""";
+        }
+
+        if (q.contains("wait") || q.contains("timeout") || q.contains("flaky")) {
+            return """
+                **Waits and Timeouts Help**
+                
+                Proper waits prevent flaky tests:
+                
+                **Explicit Wait (Recommended):**
+                ```java
+                WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+                
+                // Wait for element to be visible
+                wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("element")));
+                
+                // Wait for element to be clickable
+                wait.until(ExpectedConditions.elementToBeClickable(By.id("button")));
+                
+                // Wait for text to appear
+                wait.until(ExpectedConditions.textToBePresentInElement(
+                    By.id("status"), "Success"));
+                
+                // Wait for element to disappear
+                wait.until(ExpectedConditions.invisibilityOfElementLocated(By.id("loading")));
+                ```
+                
+                **Fluent Wait:**
+                ```java
+                Wait<WebDriver> wait = new FluentWait<>(driver)
+                    .withTimeout(Duration.ofSeconds(30))
+                    .pollingEvery(Duration.ofSeconds(2))
+                    .ignoring(NoSuchElementException.class);
+                
+                wait.until(d -> d.findElement(By.id("element")).isDisplayed());
+                ```
+                
+                **Implicit Wait:**
+                ```java
+                driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+                ```
+                
+                **Thread.sleep (Avoid):**
+                ```java
+                Thread.sleep(2000);  // Not recommended - use explicit waits instead
+                ```
+                
+                What wait-related issue are you facing?""";
+        }
+
+        if (q.contains("exception") || q.contains("error") || q.contains("debug") || q.contains("debugging")) {
+            return """
+                **Debugging Help**
+                
+                Common debugging techniques:
+                
+                **Try-Catch with Logging:**
+                ```java
+                try {
+                    // Code that might fail
+                    element.click();
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                    e.printStackTrace();
+                    throw e;
+                }
+                ```
+                
+                **Common Exceptions:**
+                - `NoSuchElementException` - Element not found
+                - `TimeoutException` - Wait timed out
+                - `StaleElementReferenceException` - Element changed
+                - `ElementNotInteractableException` - Element not visible/enabled
+                
+                **Debugging Tips:**
+                1. Take screenshots on failure
+                2. Log element states before actions
+                3. Use explicit waits
+                4. Check locators are correct
+                5. Verify page loaded completely
+                
+                **Screenshot on Failure:**
+                ```java
+                @AfterEach
+                void takeScreenshotOnFailure(ExtensionContext context) {
+                    if (context.getExecutionException().isPresent()) {
+                        TakesScreenshot ts = (TakesScreenshot) driver;
+                        File screenshot = ts.getScreenshotAs(OutputType.FILE);
+                        // Save screenshot
+                    }
+                }
+                ```
+                
+                What error are you encountering?""";
+        }
+
+        if (q.contains("test data") || q.contains("data driven") || q.contains("parameterized")) {
+            return """
+                **Data-Driven Testing Help**
+                
+                Run the same test with different data:
+                
+                **JUnit Parameterized:**
+                ```java
+                @ParameterizedTest
+                @CsvFileSource(resources = "/test-data.csv")
+                void testLogin(String user, String pass, boolean expected) {
+                    boolean result = loginService.login(user, pass);
+                    assertEquals(expected, result);
+                }
+                ```
+                
+                **TestNG Data Provider:**
+                ```java
+                @Test(dataProvider = "data")
+                public void test(String input, int expected) {
+                    assertEquals(expected, service.process(input));
+                }
+                
+                @DataProvider(name = "data")
+                public Object[][] data() {
+                    return new Object[][] {
+                        {"input1", 1},
+                        {"input2", 2}
+                    };
+                }
+                ```
+                
+                **JSON Test Data:**
+                ```java
+                // Read from JSON file
+                String json = Files.readString(Path.of("test-data.json"));
+                ObjectMapper mapper = new ObjectMapper();
+                List<Map<String, Object>> data = mapper.readValue(json, List.class);
+                ```
+                
+                What data-driven testing scenario do you need?""";
+        }
+
+        if (q.contains("report") || q.contains("allure") || q.contains("extent")) {
+            return """
+                **Test Reporting Help**
+                
+                Generate test execution reports:
+                
+                **Allure Reports:**
+                ```java
+                @Test
+                @Severity(SeverityLevel.CRITICAL)
+                @Description("Test user login functionality")
+                @Step("Login with valid credentials")
+                void testLogin() {
+                    Allure.step("Navigate to login page", () -> {
+                        driver.get("https://example.com/login");
+                    });
+                    
+                    Allure.step("Enter credentials", () -> {
+                        loginPage.login("admin", "password");
+                    });
+                    
+                    assertTrue(dashboard.isDisplayed());
+                }
+                ```
+                
+                **Extent Reports:**
+                ```java
+                ExtentReports report = new ExtentReports();
+                report.attachReporter(new ExtentHtmlReporter("report.html"));
+                
+                ExtentTest test = report.createTest("Login Test");
+                test.pass("Login successful");
+                test.fail("Assertion failed");
+                
+                report.flush();
+                ```
+                
+                What reporting feature do you need?""";
+        }
+
+        if (q.contains("test case") || q.contains("test plan") || q.contains("test strategy")) {
+            return """
+                **Test Planning Help**
+                
+                Creating effective test cases:
+                
+                **Test Case Structure:**
+                ```
+                Test Case ID: TC-001
+                Title: Verify user login with valid credentials
+                Priority: High
+                Precondition: User account exists
+                Steps:
+                  1. Navigate to login page
+                  2. Enter valid username
+                  3. Enter valid password
+                  4. Click login button
+                Expected Result: User is redirected to dashboard
+                ```
+                
+                **Test Types:**
+                - **Smoke Testing** - Critical path verification
+                - **Regression Testing** - Re-run after changes
+                - **Integration Testing** - Component interactions
+                - **End-to-End Testing** - Full user workflows
+                - **Performance Testing** - Load and stress
+                - **Security Testing** - Vulnerability checks
+                
+                **Test Coverage:**
+                - Happy path (positive scenarios)
+                - Edge cases (boundary values)
+                - Error scenarios (negative testing)
+                - Data validation
+                
+                What aspect of test planning do you need help with?""";
+        }
+
+        if (q.contains("java") || q.contains("code") || q.contains("programming")) {
+            return """
+                **Java Coding Help**
+                
+                Common Java patterns for testing:
+                
+                **Utility Methods:**
+                ```java
+                public class TestUtils {
+                    
+                    public static String generateRandomString(int length) {
+                        return RandomStringUtils.randomAlphanumeric(length);
+                    }
+                    
+                    public static String generateRandomEmail() {
+                        return "user" + System.currentTimeMillis() + "@test.com";
+                    }
+                    
+                    public static void waitForPageLoad(WebDriver driver, int seconds) {
+                        new WebDriverWait(driver, Duration.ofSeconds(seconds))
+                            .until(driver -> 
+                                ((JavascriptExecutor) driver)
+                                .executeScript("return document.readyState")
+                                .equals("complete"));
+                    }
+                }
+                ```
+                
+                **Singleton Pattern:**
+                ```java
+                public class DriverManager {
+                    private static DriverManager instance;
+                    private WebDriver driver;
+                    
+                    private DriverManager() {
+                        driver = new ChromeDriver();
+                    }
+                    
+                    public static synchronized DriverManager getInstance() {
+                        if (instance == null) {
+                            instance = new DriverManager();
+                        }
+                        return instance;
+                    }
+                }
+                ```
+                
+                What Java code do you need help with?""";
+        }
+
+        if (q.contains("sql") || q.contains("database") || q.contains("query")) {
+            return """
+                **Database Testing Help**
+                
+                Verify data in databases:
+                
+                **JDBC Connection:**
+                ```java
+                Connection conn = DriverManager.getConnection(
+                    "jdbc:mysql://localhost:3306/testdb", "user", "password");
+                
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("SELECT * FROM users WHERE id = 1");
+                
+                if (rs.next()) {
+                    String name = rs.getString("name");
+                    assertEquals("John", name);
+                }
+                
+                rs.close();
+                stmt.close();
+                conn.close();
+                ```
+                
+                **Common Queries:**
+                ```sql
+                -- Check record exists
+                SELECT COUNT(*) FROM users WHERE email = 'test@example.com';
+                
+                -- Verify data integrity
+                SELECT * FROM orders WHERE user_id = 1 AND status = 'completed';
+                
+                -- Check recent inserts
+                SELECT * FROM logs ORDER BY created_at DESC LIMIT 10;
+                ```
+                
+                What database testing task do you need?""";
+        }
+
+        if (q.contains("json") || q.contains("xml") || q.contains("parse")) {
+            return """
+                **JSON/XML Parsing Help**
+                
+                Parse and validate data formats:
+                
+                **JSON Parsing (Jackson):**
+                ```java
+                ObjectMapper mapper = new ObjectMapper();
+                
+                // String to Object
+                User user = mapper.readValue(jsonString, User.class);
+                
+                // Object to String
+                String json = mapper.writeValueAsString(user);
+                
+                // Parse JSON nodes
+                JsonNode root = mapper.readTree(jsonString);
+                String name = root.path("name").asText();
+                int age = root.path("age").asInt();
+                ```
+                
+                **JSON Path (REST Assured):**
+                ```java
+                Response response = given().get("/users/1");
+                String name = response.jsonPath().getString("name");
+                int id = response.jsonPath().getInt("id");
+                List<String> roles = response.jsonPath().getList("roles");
+                ```
+                
+                What parsing task do you need help with?""";
+        }
+
+        if (q.contains("file") || q.contains("upload") || q.contains("download")) {
+            return """
+                **File Operations Help**
+                
+                Handle file uploads and downloads:
+                
+                **File Upload:**
+                ```java
+                WebElement uploadInput = driver.findElement(By.id("file-upload"));
+                uploadInput.sendKeys("/path/to/file.pdf");
+                ```
+                
+                **File Download:**
+                ```java
+                // Set download directory
+                ChromeOptions options = new ChromeOptions();
+                options.addArguments("--download-directory=/downloads");
+                
+                // Click download
+                driver.findElement(By.id("download-btn")).click();
+                Thread.sleep(5000);  // Wait for download
+                
+                // Verify file exists
+                File downloaded = new File("/downloads/file.pdf");
+                assertTrue(downloaded.exists());
+                ```
+                
+                **Read File Content:**
+                ```java
+                String content = Files.readString(Path.of("file.txt"));
+                List<String> lines = Files.readAllLines(Path.of("file.txt"));
+                ```
+                
+                What file operation do you need?""";
+        }
+
+        if (q.contains("auth") || q.contains("authentication") || q.contains("login") || q.contains("token")) {
+            return """
+                **Authentication Testing Help**
+                
+                Test authentication flows:
+                
+                **Session-Based Auth:**
+                ```java
+                // Login and store session
+                driver.get("https://example.com/login");
+                driver.findElement(By.id("username")).sendKeys("admin");
+                driver.findElement(By.id("password")).sendKeys("password");
+                driver.findElement(By.id("login-btn")).click();
+                
+                // Cookie is automatically stored
+                ```
+                
+                **Token-Based Auth (JWT):**
+                ```java
+                // Get token
+                Response response = given()
+                    .contentType(ContentType.JSON)
+                    .body("{\"username\":\"admin\",\"password\":\"pass\"}")
+                .when()
+                    .post("/api/auth/login");
+                
+                String token = response.jsonPath().getString("token");
+                
+                // Use token in subsequent requests
+                given()
+                    .header("Authorization", "Bearer " + token)
+                .when()
+                    .get("/api/protected")
+                .then()
+                    .statusCode(200);
+                ```
+                
+                **OAuth 2.0:**
+                ```java
+                // Authorization Code Flow
+                String authUrl = "https://provider.com/oauth/authorize?client_id=xxx&redirect_uri=xxx";
+                driver.get(authUrl);
+                // User grants permission
+                // Redirect back with code
+                // Exchange code for token
+                ```
+                
+                What authentication scenario do you need?""";
+        }
+
+        if (q.contains("framework") || q.contains("integrated") || q.contains("list")) {
+            return """
+                **Integrated Frameworks Overview**
+                
+                This Unified QA Runner integrates 18+ testing frameworks:
+                
+                **Web Automation:**
+                - Selenium WebDriver - Browser automation
+                - Playwright - Modern browser automation
+                - Cypress - JavaScript testing
+                
+                **API Testing:**
+                - REST Assured - REST API testing
+                - HTTP Client - Low-level HTTP requests
+                
+                **BDD:**
+                - Cucumber - Behavior-driven development
+                - JBehave - BDD framework
+                
+                **Unit Testing:**
+                - JUnit 5 - Java unit testing
+                - TestNG - Advanced testing framework
+                
+                **Performance:**
+                - JMeter - Load and performance testing
+                
+                **Mobile:**
+                - Appium - Mobile automation
+                
+                **Database:**
+                - JDBC - Database testing
+                
+                **Reporting:**
+                - Allure - Test reports
+                - Extent Reports - HTML reports
+                
+                **Build & CI/CD:**
+                - Maven - Build automation
+                - GitHub Actions - CI/CD
+                
+                Which framework would you like help with?""";
+        }
+
+        if (q.contains("help") || q.contains("what can you") || q.contains("how do i")) {
+            return """
+                **AI Assistant - How Can I Help?**
+                
+                I can help you with:
+                
+                **Framework Questions:**
+                - Cucumber BDD features and step definitions
+                - Selenium WebDriver automation
+                - Playwright browser testing
+                - REST Assured API testing
+                - JUnit 5 and TestNG
+                - JMeter performance testing
+                
+                **Coding Help:**
+                - Java code patterns and utilities
+                - Page Object design pattern
+                - Assertions and verification
+                - Waits and timeouts
+                - Exception handling
+                
+                **Testing Concepts:**
+                - Test case design
+                - Test planning strategies
+                - Data-driven testing
+                - Test reporting
+                
+                **DevOps:**
+                - Maven build commands
+                - Git version control
+                - CI/CD pipeline configuration
+                - Docker containers
+                
+                **Other:**
+                - Database testing with SQL
+                - JSON/XML parsing
+                - File operations
+                - Authentication testing
+                
+                Just ask your question and I'll provide code examples and best practices!""";
+        }
+
+        // Default response for unrecognized queries
+        return """
+            **I can help with testing and automation!**
+            
+            I'm not sure I understood your question completely, but I can help with:
+            
+            - **Framework questions**: Cucumber, Selenium, Playwright, REST Assured, JUnit, TestNG, JMeter
+            - **Coding help**: Java patterns, Page Object, assertions, waits
+            - **Testing concepts**: Test design, planning, data-driven testing
+            - **DevOps**: Maven, Git, CI/CD, Docker
+            - **Database**: SQL queries and testing
+            - **API testing**: REST endpoints and authentication
+            
+            Could you rephrase your question or be more specific about what you need help with?
+            
+            Try asking:
+            - "How do I write a Cucumber feature?"
+            - "Help with Selenium waits"
+            - "REST Assured POST request example"
+            - "Page Object pattern example"
+            - "What frameworks are integrated?"
+            """;
+    }
+
+    // ==========================================
+    // Ticket Management
+    // ==========================================
+
+    private final java.util.List<Map<String, Object>> tickets = new java.util.ArrayList<>();
+    private int nextTicketNum = 1;
+
+    private java.util.List<Map<String, Object>> getTickets() {
+        return new java.util.ArrayList<>(tickets);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void handleCreateTicket(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) {
+            sendError(exchange, 400, "Request body is too large.");
+            return;
+        }
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) {
+            sendError(exchange, 400, "Request must be a JSON object.");
+            return;
+        }
+        String title = stringField(values, "title");
+        String description = stringField(values, "description");
+        if (title == null || title.isBlank()) {
+            sendError(exchange, 400, "Title is required.");
+            return;
+        }
+        if (description == null || description.isBlank()) {
+            sendError(exchange, 400, "Description is required.");
+            return;
+        }
+        String category = (String) values.get("category");
+        if (category == null || category.isBlank()) category = "other";
+        String priority = (String) values.get("priority");
+        if (priority == null || priority.isBlank()) priority = "medium";
+        String steps = (String) values.get("steps");
+        if (steps == null) steps = "";
+
+        String ticketId = String.format("TKT-%03d", nextTicketNum++);
+        String now = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        Map<String, Object> ticket = new java.util.LinkedHashMap<>();
+        ticket.put("ticketId", ticketId);
+        ticket.put("title", title);
+        ticket.put("description", description);
+        ticket.put("category", category);
+        ticket.put("priority", priority);
+        ticket.put("steps", steps);
+        ticket.put("status", "open");
+        ticket.put("createdAt", now);
+        ticket.put("response", null);
+        tickets.add(ticket);
+
+        sendJson(exchange, 201, Map.of("ticketId", ticketId, "message", "Ticket created successfully."));
+    }
+
 }

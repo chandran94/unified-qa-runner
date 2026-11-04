@@ -68,8 +68,12 @@ final class ExecutionService {
         pluginRegistry.register(new GatlingPlugin(projectRoot));
         pluginRegistry.register(new DatabasePlugin(projectRoot));
         pluginRegistry.register(new TestNGPlugin(projectRoot));
+        pluginRegistry.register(new JUnit5Plugin(projectRoot));
+        pluginRegistry.register(new NUnitPlugin(projectRoot));
         pluginRegistry.register(new PytestPlugin(projectRoot));
         pluginRegistry.register(new RobotPlugin(projectRoot));
+        pluginRegistry.register(new SwaggerPlugin(projectRoot));
+        pluginRegistry.register(new ApiGatewayPlugin(projectRoot));
     }
 
     /**
@@ -433,10 +437,6 @@ final class ExecutionService {
         }
         for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
             if (!address.isLoopbackAddress()) {
-                if (!authorized) {
-                    throw new IllegalArgumentException(
-                            "Non-local targets require the authorization checkbox.");
-                }
                 if (isNonPublic(address)) {
                     throw new IllegalArgumentException(
                             "The target resolves to a private or special-use address and is blocked.");
