@@ -4,12 +4,17 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import java.awt.Desktop;
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -18,6 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -28,11 +36,17 @@ final class RunnerServer implements AutoCloseable {
     private static final int MAX_REQUEST_BYTES = 64 * 1024;
     private static final int MAX_RUNS = 50;
     private static final int DEFAULT_PORT = 8081;
+    private static final String CURRENT_USER_ID = configuredUser("QA_RUNNER_USER_ID", "qa.runner.user.id", "local-user");
+    private static final String CURRENT_USER_NAME = configuredUser("QA_RUNNER_USER_NAME", "qa.runner.user.name", "Local QA User");
+    private static final long MAX_ATTACHMENT_BYTES = Long.getLong("qa.runner.attachments.maxBytes", 10L * 1024L * 1024L);
+    private static final Path ATTACHMENT_DIRECTORY = Path.of(".qa-attachments");
+    private static final Pattern MULTIPART_BOUNDARY = Pattern.compile("boundary=\\\"?([^;\\\"]+)\\\"?", Pattern.CASE_INSENSITIVE);
 
     private final Path projectRoot;
     private final ExecutionService executionService;
     private final SharedPathConfig sharedPathConfig;
     private final RemoteImportConfig remoteImportConfig;
+    private final UserStoryStore userStoryStore;
     private final HttpServer server;
     private final ExecutorService httpExecutor;
     private final ExecutorService runExecutor;
@@ -43,12 +57,29 @@ final class RunnerServer implements AutoCloseable {
     private final AtomicBoolean runnerEnabled = new AtomicBoolean(true);
 
     private final TestCaseManager testCaseManager = new TestCaseManager();
+    private final DefectManager defectManager = new DefectManager();
+    private final AutomationMappingManager automationMappingManager = new AutomationMappingManager();
+    private final AutomationExecutionManager automationExecutionManager;
+    private final TeamMemberManager teamMemberManager;
+    private final TeamRoleManager teamRoleManager;
+    private final TeamAuthorization teamAuthorization;
+    private final AuthUserDirectory authUserDirectory;
+    private final AuthSessionManager authSessionManager;
+    private final WikiManager wikiManager;
 
     RunnerServer(Path projectRoot) throws IOException {
         this.projectRoot = projectRoot;
         this.executionService = new ExecutionService(projectRoot);
         this.sharedPathConfig = new SharedPathConfig(projectRoot);
         this.remoteImportConfig = new RemoteImportConfig(projectRoot);
+        this.userStoryStore = new UserStoryStore(projectRoot);
+        this.automationExecutionManager = new AutomationExecutionManager(projectRoot);
+        this.teamMemberManager = new TeamMemberManager(projectRoot);
+        this.teamRoleManager = new TeamRoleManager(projectRoot);
+        this.teamAuthorization = new TeamAuthorization(CURRENT_USER_ID, CURRENT_USER_NAME);
+        this.authUserDirectory = new AuthUserDirectory(projectRoot);
+        this.authSessionManager = new AuthSessionManager();
+        this.wikiManager = new WikiManager(projectRoot);
         server = HttpServer.create(new InetSocketAddress(DEFAULT_PORT), 0);
         httpExecutor = Executors.newCachedThreadPool(runnable -> daemonThread(runnable, "qa-http"));
         runExecutor = Executors.newSingleThreadExecutor(
@@ -103,7 +134,7 @@ final class RunnerServer implements AutoCloseable {
                                 + "object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
 
                 String path = exchange.getRequestURI().getPath();
-                if (exchange.getRequestURI().getRawQuery() != null) {
+                if (exchange.getRequestURI().getRawQuery() != null && !queryParametersAllowed(path)) {
                     sendError(exchange, 400, "Query parameters are not supported.");
                 } else if (path.equals("/") || path.equals("/index.html")) {
                     servePage(exchange);
@@ -116,6 +147,8 @@ final class RunnerServer implements AutoCloseable {
                 } else {
                     sendError(exchange, 404, "Not found.");
                 }
+            } catch (AuthorizationException exception) {
+                sendError(exchange, exception.status, exception.getMessage());
             } catch (IllegalArgumentException exception) {
                 sendError(exchange, 400, exception.getMessage());
             } catch (IllegalStateException exception) {
@@ -127,10 +160,198 @@ final class RunnerServer implements AutoCloseable {
         }
     }
 
+    private static boolean queryParametersAllowed(String path) {
+        return path.startsWith("/api/user-stories/stories") || path.startsWith("/api/user-stories/sprints") || path.startsWith("/api/user-stories/board") || path.equals("/api/user-stories/work-items") || path.equals("/api/user-stories/test-case-links") || path.equals("/api/stories/testcases") || path.equals("/api/defects") || path.equals("/api/testcase-automation-mappings") || path.equals("/api/automation-executions") || path.equals("/api/automation-assets/scenarios") || path.equals("/api/team-members") || path.equals("/api/team-permissions") || path.equals("/api/team-roles") || path.startsWith("/api/wiki/spaces");
+    }
+
     private void handleApi(HttpExchange exchange, String path) throws Exception {
         String method = exchange.getRequestMethod();
+        if (path.equals("/api/auth/login") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            String login = stringField(values, "username").trim();
+            String password = stringField(values, "password");
+            String rateKey = exchange.getRemoteAddress().getAddress().getHostAddress() + ":" + AuthUserDirectory.normalizeUsername(login);
+            if (!authSessionManager.allowLogin(rateKey)) {
+                exchange.getResponseHeaders().set("Retry-After", "900");
+                sendError(exchange, 429, "Too many login attempts. Try again later.");
+                return;
+            }
+            char[] passwordChars = password.toCharArray();
+            AuthUserDirectory.User user = authUserDirectory.authenticate(login, passwordChars);
+            java.util.Arrays.fill(passwordChars, '\0');
+            if (user == null) {
+                authSessionManager.recordFailure(rateKey);
+                sendError(exchange, 401, "Invalid username or password.");
+                return;
+            }
+            authSessionManager.recordSuccess(rateKey);
+            AuthSessionManager.Session session = authSessionManager.create(user.id());
+            exchange.getResponseHeaders().add("Set-Cookie", authSessionManager.cookie(session, secureCookies()));
+            sendJson(exchange, 200, Map.of("user", authUserToMap(user), "csrfToken", session.csrfToken()));
+            return;
+        }
+        if (path.equals("/api/auth/me") && method.equals("GET")) {
+            AuthSessionManager.Session session = session(exchange);
+            if (session == null) { sendError(exchange, 401, "Authentication is required."); return; }
+            AuthUserDirectory.User user = authUserDirectory.findById(session.userId());
+            if (user == null || !AuthUserDirectory.ACTIVE.equals(user.status())) { authSessionManager.invalidate(session.id()); sendError(exchange, 401, "Authentication is required."); return; }
+            sendJson(exchange, 200, Map.of("user", authUserToMap(user), "csrfToken", session.csrfToken()));
+            return;
+        }
+        if (path.equals("/api/auth/logout") && method.equals("POST")) {
+            requireAuthenticatedCsrf(exchange);
+            AuthSessionManager.Session current = session(exchange);
+            authSessionManager.invalidate(current.id());
+            exchange.getResponseHeaders().add("Set-Cookie", authSessionManager.expiredCookie(secureCookies()));
+            sendJson(exchange, 200, Map.of("loggedOut", true));
+            return;
+        }
+        if (path.startsWith("/api/wiki/") && !Set.of("GET", "HEAD", "OPTIONS").contains(method)) {
+            requireAuthenticatedCsrf(exchange);
+        }
+        if (path.equals("/api/wiki/spaces") && method.equals("GET")) {
+            sendJson(exchange, 200, wikiManager.listSpaces(queryValue(exchange, "search")).stream().map(this::wikiSpaceToMap).toList());
+            return;
+        }
+        if (path.equals("/api/wiki/spaces") && method.equals("POST")) {
+            Map<String, Object> values = requestObject(exchange);
+            sendJson(exchange, 201, wikiSpaceToMap(wikiManager.createSpace(stringField(values, "name"), stringField(values, "key"), optionalString(values, "description"), authActorName(exchange))));
+            return;
+        }
+        if (path.startsWith("/api/wiki/spaces/")) {
+            String remainder = path.substring("/api/wiki/spaces/".length());
+            if (remainder.endsWith("/pages") && method.equals("GET")) {
+                String spaceId = remainder.substring(0, remainder.length() - "/pages".length());
+                sendJson(exchange, 200, wikiManager.listPages(spaceId, queryValue(exchange, "search"), "true".equalsIgnoreCase(queryValue(exchange, "includeArchived"))).stream().map(this::wikiPageToMap).toList());
+                return;
+            }
+            String spaceId = remainder;
+            if (method.equals("GET")) { sendJson(exchange, 200, wikiSpaceToMap(wikiManager.getSpace(spaceId))); return; }
+            if (method.equals("PUT")) { sendJson(exchange, 200, wikiSpaceToMap(wikiManager.updateSpace(spaceId, requestObject(exchange)))); return; }
+            if (method.equals("POST") && remainder.endsWith("/archive")) { String id = remainder.substring(0, remainder.length() - "/archive".length()); sendJson(exchange, 200, wikiSpaceToMap(wikiManager.setSpaceStatus(id, WikiManager.ARCHIVED))); return; }
+        }
+        if (path.equals("/api/wiki/pages") && method.equals("POST")) {
+            sendJson(exchange, 201, wikiPageToMap(wikiManager.createPage(requestObject(exchange), authActorName(exchange))));
+            return;
+        }
+        if (path.startsWith("/api/wiki/pages/")) {
+            String remainder = path.substring("/api/wiki/pages/".length());
+            if (remainder.endsWith("/archive") || remainder.endsWith("/restore")) {
+                boolean restore = remainder.endsWith("/restore"); String id = remainder.substring(0, remainder.lastIndexOf('/')); Map<String,Object> values=requestObject(exchange); int version=Integer.parseInt(String.valueOf(values.getOrDefault("version", wikiManager.getPage(id).version()))); sendJson(exchange, 200, wikiPageToMap(wikiManager.setPageStatus(id, restore ? WikiManager.DRAFT : WikiManager.ARCHIVED, authActorName(exchange), version))); return;
+            }
+            if (method.equals("GET")) { sendJson(exchange, 200, wikiPageToMap(wikiManager.getPage(remainder))); return; }
+            if (method.equals("PUT")) { sendJson(exchange, 200, wikiPageToMap(wikiManager.updatePage(remainder, requestObject(exchange), authActorName(exchange)))); return; }
+        }
+        if (!Set.of("GET", "HEAD", "OPTIONS").contains(method)) {
+            requireAuthenticatedCsrf(exchange);
+        }
+        if (path.equals("/api/team-permissions") && method.equals("GET")) {
+            sendJson(exchange, 200, teamAuthorization.permissionSnapshot(queryValue(exchange, "projectId"), teamMemberManager.list()));
+            return;
+        }
+        if (path.equals("/api/team-roles") && method.equals("GET")) {
+            sendJson(exchange, 200, teamRoleManager.list().stream().map(role -> teamRoleToMap(role, teamMemberManager.list())).toList());
+            return;
+        }
+        if (path.equals("/api/team-roles") && method.equals("POST")) {
+            requireSameOrigin(exchange); requireAuthenticatedAdmin();
+            TeamRoleManager.Role role = teamRoleManager.create(requestObject(exchange));
+            teamRoleManager.recordAudit("ROLE_CREATED", role.id(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            sendJson(exchange, 201, teamRoleToMap(role, teamMemberManager.list()));
+            return;
+        }
+        if (path.startsWith("/api/team-roles/") && method.equals("PUT")) {
+            requireSameOrigin(exchange); requireAuthenticatedAdmin();
+            String id = path.substring("/api/team-roles/".length());
+            TeamRoleManager.Role role = teamRoleManager.update(id, requestObject(exchange), teamMemberManager.list());
+            teamRoleManager.recordAudit("ROLE_UPDATED", role.id(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            sendJson(exchange, 200, teamRoleToMap(role, teamMemberManager.list()));
+            return;
+        }
+        if (path.equals("/api/team-members") && method.equals("GET")) {
+            requireTeamView();
+            sendJson(exchange, 200, listTeamMembers(exchange));
+            return;
+        }
+        if (path.equals("/api/team-members") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = normalizeMemberRole(requestObject(exchange));
+            requireTeamManage(values, null);
+            validateRegisteredUser(values);
+            sendJson(exchange, 201, teamMemberToMap(teamMemberManager.create(values, validProjectIds(), teamRoleManager.list())));
+            return;
+        }
+        if (path.startsWith("/api/team-members/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/team-members/".length());
+            Map<String, Object> values = normalizeMemberRole(requestObject(exchange));
+            requireTeamManage(values, id);
+            validateRegisteredUser(values);
+            sendJson(exchange, 200, teamMemberToMap(teamMemberManager.update(id, values, validProjectIds(), teamRoleManager.list())));
+            return;
+        }
+        if (path.startsWith("/api/team-members/") && method.equals("DELETE")) {
+            sendError(exchange, 405, "Team members are deactivated rather than deleted to preserve work history.");
+            return;
+        }
         if (path.equals("/api/catalog") && method.equals("GET")) {
             sendJson(exchange, 200, catalogResponse());
+            return;
+        }
+        if (path.equals("/api/automation-assets/scenarios") && method.equals("GET")) {
+            String assetId = queryParameter(exchange, "assetId");
+            Map<String, Object> asset = catalogResponse().get("assets") instanceof List<?> assets
+                    ? assets.stream().filter(item -> item instanceof Map<?, ?> map
+                            && assetId != null && assetId.equals(String.valueOf(map.get("assetId"))))
+                    .map(item -> (Map<String, Object>) item).findFirst().orElse(null) : null;
+            if (asset == null) throw new IllegalArgumentException("Automation asset was not discovered in the current catalog.");
+            sendJson(exchange, 200, cucumberScenarios(asset));
+            return;
+        }
+        if (path.equals("/api/testcase-automation-mappings") && method.equals("GET")) {
+            String testCaseId = queryParameter(exchange, "testCaseId");
+            String assetId = queryParameter(exchange, "assetId");
+            List<Map<String, Object>> mappings = automationMappingManager.list();
+            if (testCaseId != null && !testCaseId.isBlank()) {
+                mappings = mappings.stream().filter(item -> testCaseId.equals(String.valueOf(item.get("testCaseId")))).toList();
+            }
+            if (assetId != null && !assetId.isBlank()) {
+                mappings = mappings.stream().filter(item -> assetId.equals(String.valueOf(item.get("assetId")))).toList();
+            }
+            sendJson(exchange, 200, mappings);
+            return;
+        }
+        if (path.equals("/api/testcase-automation-mappings") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            String testCaseId = stringField(values, "testCaseId");
+            String assetId = stringField(values, "assetId");
+            if (testCaseManager.getById(testCaseId) == null) throw new IllegalArgumentException("Test case not found: " + testCaseId);
+            Map<String, Object> asset = catalogResponse().get("assets") instanceof List<?> assets
+                    ? assets.stream().filter(item -> item instanceof Map<?, ?> map && assetId.equals(String.valueOf(map.get("assetId"))))
+                        .map(item -> (Map<String, Object>) item).findFirst().orElse(null)
+                    : null;
+            if (asset == null) throw new IllegalArgumentException("Automation asset was not discovered in the current catalog.");
+            sendJson(exchange, 201, automationMappingManager.link(testCaseId, assetId,
+                    stringField(asset, "kind"), stringField(asset, "sourceProject"), stringField(asset, "selection"),
+                    Boolean.TRUE.equals(values.get("confirmShared"))));
+            return;
+        }
+        if (path.equals("/api/testcase-automation-mappings") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String testCaseId = queryParameter(exchange, "testCaseId");
+            String assetId = queryParameter(exchange, "assetId");
+            if (!automationMappingManager.unlink(testCaseId, assetId)) {
+                sendError(exchange, 404, "Automation mapping not found.");
+            } else {
+                sendJson(exchange, 200, Map.of("testCaseId", testCaseId, "assetId", assetId, "removed", true));
+            }
+            return;
+        }
+        if (path.equals("/api/automation-executions") && method.equals("GET")) {
+            sendJson(exchange, 200, automationExecutionManager.list(
+                    queryParameter(exchange, "testCaseId"), queryParameter(exchange, "assetId")));
             return;
         }
         if (path.equals("/api/status") && method.equals("GET")) {
@@ -264,7 +485,7 @@ final class RunnerServer implements AutoCloseable {
         }
         if (path.equals("/api/runs") && method.equals("POST")) {
             requireSameOrigin(exchange);
-            if (!runnerEnabled.get()) {
+        if (!runnerEnabled.get()) {
                 sendError(exchange, 409, "Runner is disabled. Enable the runner before executing tests.");
                 return;
             }
@@ -343,8 +564,67 @@ final class RunnerServer implements AutoCloseable {
             createTestCase(exchange);
             return;
         }
+        if (path.startsWith("/api/testcases/") && method.equals("GET")
+                && !path.equals("/api/testcases/stats")
+                && !path.endsWith("/history")
+                && !path.contains("/history/")
+                && !path.endsWith("/archive")
+                && !path.endsWith("/restore")) {
+            String id = path.substring("/api/testcases/".length());
+            TestCaseManager.TestCase testCase = testCaseManager.getById(id);
+            if (testCase == null) {
+                sendError(exchange, 404, "Test case not found: " + id);
+            } else {
+                sendJson(exchange, 200, testCaseToMap(testCase));
+            }
+            return;
+        }
         if (path.equals("/api/testcases/stats") && method.equals("GET")) {
             sendJson(exchange, 200, testCaseManager.stats());
+            return;
+        }
+        if (path.startsWith("/api/testcases/") && path.endsWith("/history") && method.equals("GET")) {
+            String id = path.substring("/api/testcases/".length(), path.length() - "/history".length());
+            if (testCaseManager.getById(id) == null) {
+                sendError(exchange, 404, "Test case not found: " + id);
+            } else {
+                sendJson(exchange, 200, testCaseManager.history(id));
+            }
+            return;
+        }
+        if (path.startsWith("/api/testcases/") && path.contains("/history/") && path.endsWith("/restore") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String rest = path.substring("/api/testcases/".length(), path.length() - "/restore".length());
+            String[] historyParts = rest.split("/history/", 2);
+            if (historyParts.length != 2) {
+                sendError(exchange, 400, "Invalid test case history path.");
+                return;
+            }
+            String id = historyParts[0];
+            TestCaseManager.TestCase before = testCaseManager.getById(id);
+            try {
+                TestCaseManager.TestCase restored = testCaseManager.restoreVersion(id, Integer.parseInt(historyParts[1]));
+                testCaseManager.recordHistory(id, testCaseToMap(before), testCaseToMap(restored), "Local User");
+                sendJson(exchange, 200, testCaseToMap(restored));
+            } catch (IllegalArgumentException error) {
+                sendError(exchange, 404, error.getMessage());
+            }
+            return;
+        }
+        if (path.startsWith("/api/testcases/") && path.endsWith("/archive") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/testcases/".length(), path.length() - "/archive".length());
+            boolean archived = testCaseManager.archive(id, true);
+            if (archived) sendJson(exchange, 200, Map.of("id", id, "archived", true));
+            else sendError(exchange, 404, "Test case not found: " + id);
+            return;
+        }
+        if (path.startsWith("/api/testcases/") && path.endsWith("/restore") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/testcases/".length(), path.length() - "/restore".length());
+            boolean restored = testCaseManager.archive(id, false);
+            if (restored) sendJson(exchange, 200, Map.of("id", id, "archived", false));
+            else sendError(exchange, 404, "Test case not found: " + id);
             return;
         }
         if (path.equals("/api/testcases/sync") && method.equals("POST")) {
@@ -372,6 +652,322 @@ final class RunnerServer implements AutoCloseable {
         if (path.equals("/api/testcases/bulk-delete") && method.equals("POST")) {
             requireSameOrigin(exchange);
             bulkDeleteTestCases(exchange);
+            return;
+        }
+        if (path.equals("/api/defects") && method.equals("GET")) {
+            sendJson(exchange, 200, defectManager.list(queryParameter(exchange, "testCaseId"), queryParameter(exchange, "storyId")));
+            return;
+        }
+        if (path.equals("/api/defects") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 201, defectManager.create(requestObject(exchange), CURRENT_USER_ID, CURRENT_USER_NAME));
+            return;
+        }
+        if (path.startsWith("/api/defects/") && path.endsWith("/links") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/defects/".length(), path.length() - "/links".length());
+            Map<String, Object> values = requestObject(exchange);
+            sendJson(exchange, 200, defectManager.link(id, optionalString(values, "testCaseId"), optionalString(values, "storyId"), optionalString(values, "executionId")));
+            return;
+        }
+        if (path.startsWith("/api/defects/") && method.equals("GET")) {
+            String id = path.substring("/api/defects/".length());
+            Map<String, Object> defect = defectManager.list(null).stream().filter(item -> id.equals(stringField(item, "id"))).findFirst().orElse(null);
+            if (defect == null) sendError(exchange, 404, "Defect not found: " + id);
+            else sendJson(exchange, 200, defect);
+            return;
+        }
+        if (path.startsWith("/api/defects/") && path.contains("/links/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String rest = path.substring("/api/defects/".length());
+            int separator = rest.indexOf("/links/");
+            String linkTarget = rest.substring(separator + "/links/".length());
+            if (linkTarget.startsWith("story-")) defectManager.unlink(rest.substring(0, separator), null, linkTarget.substring("story-".length()));
+            else defectManager.unlink(rest.substring(0, separator), linkTarget);
+            sendJson(exchange, 200, Map.of("message", "Defect unlinked."));
+            return;
+        }
+        if (path.startsWith("/api/defects/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/defects/".length());
+            sendJson(exchange, 200, defectManager.update(id, requestObject(exchange)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/attachments/") && method.equals("GET")) {
+            serveUserStoryAttachment(exchange, path.substring("/api/user-stories/attachments/".length()), false);
+            return;
+        }
+        if (path.startsWith("/api/user-stories/attachments/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            deleteUserStoryAttachment(exchange, path.substring("/api/user-stories/attachments/".length()));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/related-links/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            String linkId = path.substring("/api/user-stories/related-links/".length());
+            validateRelatedWorkItemTarget(stringField(values, "url"), optionalString(values, "type"));
+            UserStoryStore.RelatedLink updatedLink = userStoryStore.updateRelatedLink(linkId, stringField(values, "title"), stringField(values, "url"), optionalString(values, "type"));
+            userStoryStore.recordActivity(updatedLink.storyId(), "Link changed", updatedLink.title(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            sendJson(exchange, 200, relatedLinkToMap(updatedLink));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/related-links/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            String linkId = path.substring("/api/user-stories/related-links/".length());
+            UserStoryStore.RelatedLink existingLink = userStoryStore.findRelatedLink(linkId);
+            userStoryStore.removeRelatedLink(linkId);
+            if (existingLink != null) userStoryStore.recordActivity(existingLink.storyId(), "Link removed", existingLink.title(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            sendJson(exchange, 204, Map.of());
+            return;
+        }
+        // === Phase 1 User Story Management Endpoints ===
+        if (path.equals("/api/user-stories/projects") && method.equals("GET")) {
+            sendJson(exchange, 200, userStoryStore.listProjects(queryBoolean(exchange, "includeArchived")).stream().map(this::projectToMap).toList());
+            return;
+        }
+        if (path.equals("/api/user-stories/projects") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 201, projectToMap(createUserStoryProject(exchange)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/projects/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 200, projectToMap(updateUserStoryProject(exchange, path.substring("/api/user-stories/projects/".length()))));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/projects/") && method.equals("POST") && path.endsWith("/archive")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/projects/".length(), path.length() - "/archive".length());
+            sendJson(exchange, 200, projectToMap(userStoryStore.archiveProject(id, true)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/projects/") && method.equals("POST") && path.endsWith("/restore")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/projects/".length(), path.length() - "/restore".length());
+            sendJson(exchange, 200, projectToMap(userStoryStore.archiveProject(id, false)));
+            return;
+        }
+        if (path.equals("/api/user-stories/epics") && method.equals("GET")) {
+            sendJson(exchange, 200, userStoryStore.listEpics(queryValue(exchange, "projectId"), queryBoolean(exchange, "includeArchived")).stream().map(this::epicToMap).toList());
+            return;
+        }
+        if (path.equals("/api/user-stories/epics") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 201, epicToMap(createUserStoryEpic(exchange)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/epics/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 200, epicToMap(updateUserStoryEpic(exchange, path.substring("/api/user-stories/epics/".length()))));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/epics/") && method.equals("POST") && path.endsWith("/archive")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/epics/".length(), path.length() - "/archive".length());
+            sendJson(exchange, 200, epicToMap(userStoryStore.archiveEpic(id, true)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/epics/") && method.equals("POST") && path.endsWith("/restore")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/epics/".length(), path.length() - "/restore".length());
+            sendJson(exchange, 200, epicToMap(userStoryStore.archiveEpic(id, false)));
+            return;
+        }
+        if (path.equals("/api/user-stories/stories") && method.equals("GET")) {
+            String search = queryValue(exchange, "search");
+            int offset = queryInt(exchange, "offset", 0);
+            int limit = queryInt(exchange, "limit", 50);
+            String projectId = queryValue(exchange, "projectId");
+            String sprintId = queryValue(exchange, "sprintId");
+            boolean includeArchived = queryBoolean(exchange, "includeArchived");
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("items", userStoryStore.listStories(projectId, sprintId, search, offset, limit, includeArchived).stream().map(this::userStoryToMap).toList());
+            response.put("total", userStoryStore.countStories(projectId, sprintId, search, includeArchived));
+            response.put("offset", Math.max(0, offset));
+            response.put("limit", Math.min(100, Math.max(1, limit)));
+            sendJson(exchange, 200, response);
+            return;
+        }
+        if (path.equals("/api/user-stories/test-case-links") && method.equals("GET")) {
+            Map<String, UserStoryStore.Story> stories = userStoryStore.listStories(null, null, null, 0, 100, true).stream()
+                    .collect(java.util.stream.Collectors.toMap(UserStoryStore.Story::id, story -> story, (left, right) -> left, LinkedHashMap::new));
+            List<Map<String, Object>> links = userStoryStore.listTestCaseLinks().stream().map(link -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("testCaseId", link.testCaseId());
+                item.put("storyId", link.storyId());
+                UserStoryStore.Story story = stories.get(link.storyId());
+                if (story != null) item.put("story", userStoryToMap(story));
+                return item;
+            }).toList();
+            sendJson(exchange, 200, links);
+            return;
+        }
+        if (path.equals("/api/user-stories/work-items") && method.equals("GET")) {
+            String query = queryValue(exchange, "search");
+            sendJson(exchange, 200, userStoryStore.searchWorkItems(queryValue(exchange, "projectId"), query, queryInt(exchange, "limit", 25)).stream().map(this::workItemToMap).toList());
+            return;
+        }
+        if (path.equals("/api/user-stories/stories") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 201, userStoryToMap(createUserStory(exchange)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && method.equals("PUT") && !path.contains("/comments/")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 200, userStoryToMap(updateUserStory(exchange, path.substring("/api/user-stories/stories/".length()))));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && method.equals("POST") && path.endsWith("/status")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/stories/".length(), path.length() - "/status".length());
+            Map<String, Object> values = requestObject(exchange);
+            sendJson(exchange, 200, userStoryToMap(userStoryStore.updateStoryStatus(id, stringField(values, "status"), optionalString(values, "projectId"))));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/activity") && method.equals("GET")) {
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/activity".length());
+            sendJson(exchange, 200, userStoryStore.listActivity(storyId).stream().map(this::activityToMap).toList());
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/comments") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/comments".length());
+            Map<String, Object> values = requestObject(exchange);
+            sendJson(exchange, 201, activityToMap(userStoryStore.addComment(storyId, stringField(values, "comment"), CURRENT_USER_ID, CURRENT_USER_NAME)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.contains("/comments/") && (method.equals("PUT") || method.equals("DELETE"))) {
+            requireSameOrigin(exchange);
+            String marker = "/comments/";
+            int markerIndex = path.indexOf(marker);
+            String storyId = path.substring("/api/user-stories/stories/".length(), markerIndex);
+            String commentId = path.substring(markerIndex + marker.length());
+            if (method.equals("PUT")) {
+                Map<String, Object> values = requestObject(exchange);
+                sendJson(exchange, 200, activityToMap(userStoryStore.updateComment(storyId, commentId, stringField(values, "comment"), CURRENT_USER_ID, CURRENT_USER_NAME)));
+            } else {
+                sendJson(exchange, 200, activityToMap(userStoryStore.deleteComment(storyId, commentId, CURRENT_USER_ID, CURRENT_USER_NAME)));
+            }
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/attachments") && method.equals("GET")) {
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/attachments".length());
+            sendJson(exchange, 200, userStoryStore.listAttachments(storyId).stream().map(this::attachmentToMap).toList());
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/attachments") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/attachments".length());
+            sendJson(exchange, 201, uploadUserStoryAttachment(exchange, storyId));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/related-links") && method.equals("GET")) {
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/related-links".length());
+            sendJson(exchange, 200, userStoryStore.listRelatedLinks(storyId).stream().map(this::relatedLinkToMap).toList());
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/related-links") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/related-links".length());
+            Map<String, Object> values = requestObject(exchange);
+            validateRelatedWorkItemTarget(stringField(values, "url"), optionalString(values, "type"));
+            sendJson(exchange, 201, relatedLinkToMap(userStoryStore.addRelatedLink(storyId, stringField(values, "title"), stringField(values, "url"), optionalString(values, "type"))));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/test-cases") && method.equals("GET")) {
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/test-cases".length());
+            String search = queryValue(exchange, "search");
+            int offset = queryInt(exchange, "offset", 0);
+            int limit = Math.min(100, Math.max(1, queryInt(exchange, "limit", 25)));
+            List<Map<String, Object>> items = linkedTestCases(storyId, search, offset, limit);
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("items", items);
+            response.put("total", linkedTestCases(storyId, search, 0, 10000).size());
+            response.put("offset", Math.max(0, offset));
+            response.put("limit", limit);
+            sendJson(exchange, 200, response);
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/test-cases") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/test-cases".length());
+            Map<String, Object> values = requestObject(exchange);
+            String testCaseId = stringField(values, "testCaseId");
+            if (testCaseManager.list().stream().noneMatch(testCase -> testCase.id().equals(testCaseId))) {
+                throw new IllegalArgumentException("Test case not found: " + testCaseId);
+            }
+            sendJson(exchange, 201, linkToMap(userStoryStore.linkTestCase(storyId, testCaseId)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && path.contains("/test-cases/") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            int marker = path.indexOf("/test-cases/");
+            String storyId = path.substring("/api/user-stories/stories/".length(), marker);
+            String testCaseId = path.substring(marker + "/test-cases/".length());
+            userStoryStore.unlinkTestCase(storyId, testCaseId);
+            sendJson(exchange, 204, Map.of());
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && method.equals("POST") && path.endsWith("/archive")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/stories/".length(), path.length() - "/archive".length());
+            sendJson(exchange, 200, userStoryToMap(userStoryStore.archiveStory(id, true)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/stories/") && method.equals("POST") && path.endsWith("/restore")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/stories/".length(), path.length() - "/restore".length());
+            sendJson(exchange, 200, userStoryToMap(userStoryStore.archiveStory(id, false)));
+            return;
+        }
+        // === Phase 2 Sprint and Kanban endpoints ===
+        if (path.equals("/api/user-stories/sprints") && method.equals("GET")) {
+            sendJson(exchange, 200, userStoryStore.listSprints(queryValue(exchange, "projectId"), queryBoolean(exchange, "includeCompleted")).stream().map(this::sprintToMap).toList());
+            return;
+        }
+        if (path.equals("/api/user-stories/sprints") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 201, sprintToMap(createSprint(exchange)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/sprints/") && method.equals("PUT")) {
+            requireSameOrigin(exchange);
+            sendJson(exchange, 200, sprintToMap(updateSprint(exchange, path.substring("/api/user-stories/sprints/".length()))));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/sprints/") && method.equals("POST") && path.endsWith("/start")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/sprints/".length(), path.length() - "/start".length());
+            sendJson(exchange, 200, sprintToMap(userStoryStore.startSprint(id)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/sprints/") && method.equals("POST") && path.endsWith("/complete")) {
+            requireSameOrigin(exchange);
+            String id = path.substring("/api/user-stories/sprints/".length(), path.length() - "/complete".length());
+            sendJson(exchange, 200, sprintToMap(userStoryStore.completeSprint(id)));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/sprints/") && path.endsWith("/stories") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String sprintId = path.substring("/api/user-stories/sprints/".length(), path.length() - "/stories".length());
+            Map<String, Object> values = requestObject(exchange);
+            sendJson(exchange, 200, userStoryToMap(userStoryStore.assignStoryToSprint(sprintId, stringField(values, "storyId"))));
+            return;
+        }
+        if (path.startsWith("/api/user-stories/sprints/") && path.endsWith("/stories") && method.equals("DELETE")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            sendJson(exchange, 200, userStoryToMap(userStoryStore.removeStoryFromSprint(stringField(values, "storyId"))));
+            return;
+        }
+        if (path.equals("/api/user-stories/board") && method.equals("GET")) {
+            String projectId = queryValue(exchange, "projectId");
+            String sprintId = queryValue(exchange, "sprintId");
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("items", userStoryStore.listStories(projectId, sprintId, queryValue(exchange, "search"), queryInt(exchange, "offset", 0), queryInt(exchange, "limit", 100), false).stream().map(this::userStoryToMap).toList());
+            response.put("total", userStoryStore.countStories(projectId, sprintId, queryValue(exchange, "search"), false));
+            sendJson(exchange, 200, response);
             return;
         }
         // === Story Endpoints ===
@@ -515,6 +1111,27 @@ final class RunnerServer implements AutoCloseable {
         allPaths.addAll(remoteImportConfig.getExistingPaths());
         List<Map<String, Object>> assets = executionService.pluginRegistry()
                 .discoverAllAssets(projectRoot, allPaths);
+        String projectIdentity = stableHash(projectRoot.toAbsolutePath().normalize().toString());
+        String sourceProject = projectRoot.getFileName() == null ? projectRoot.toString() : projectRoot.getFileName().toString();
+        List<Map<String, Object>> mappings = automationMappingManager.list();
+        for (Map<String, Object> asset : assets) {
+            String kind = String.valueOf(asset.getOrDefault("kind", "unknown"));
+            String selection = String.valueOf(asset.getOrDefault("selection", ""));
+            String assetId = "automation-" + stableHash(projectIdentity + "\n" + kind + "\n" + selection);
+            asset.put("assetId", assetId);
+            asset.put("projectIdentity", projectIdentity);
+            asset.put("sourceProject", sourceProject);
+            List<String> linkedTestCaseIds = mappings.stream()
+                    .filter(mapping -> assetId.equals(String.valueOf(mapping.get("assetId"))))
+                    .map(mapping -> String.valueOf(mapping.get("testCaseId")))
+                    .distinct().toList();
+            asset.put("linkedTestCaseIds", linkedTestCaseIds);
+            asset.put("mappingStatus", linkedTestCaseIds.isEmpty() ? "unmapped" : "mapped");
+            if ("cucumber".equalsIgnoreCase(kind)) asset.put("scenarios", cucumberScenarios(asset));
+            Map<String, Object> latestExecution = automationExecutionManager.latest(null, assetId);
+            asset.put("latestExecutionStatus", latestExecution == null ? null : latestExecution.get("status"));
+            asset.put("latestExecutionId", latestExecution == null ? null : latestExecution.get("executionId"));
+        }
         List<Map<String, String>> sharedPathsList = new ArrayList<>();
         for (SharedPathConfig.SharedPathEntry entry : sharedPathConfig.getSharedPaths()) {
             Map<String, String> entryMap = new LinkedHashMap<>();
@@ -535,6 +1152,17 @@ final class RunnerServer implements AutoCloseable {
             importsList.add(entryMap);
         }
         return Map.of("assets", assets, "sharedPaths", sharedPathsList, "imports", importsList);
+    }
+
+    private static String stableHash(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder();
+            for (byte item : digest) result.append(String.format(Locale.ROOT, "%02x", item));
+            return result.toString();
+        } catch (Exception error) {
+            throw new IllegalStateException("SHA-256 is not available.", error);
+        }
     }
 
     private void addSharedPath(HttpExchange exchange) throws Exception {
@@ -861,8 +1489,9 @@ final class RunnerServer implements AutoCloseable {
         if (!(parsed instanceof Map<?, ?> values)) {
             throw new IllegalArgumentException("Run settings must be a JSON object.");
         }
-        Set<String> supportedFields =
-                Set.of("kind", "selection", "selections", "targetUrl", "authorized", "headless", "browsers");
+        Set<String> supportedFields = Set.of("kind", "selection", "selections", "targetUrl", "authorized",
+                "headless", "browsers", "testCaseId", "assetId", "executionSource", "ciProvider", "pipelineRunId",
+                "executionScope", "scenarioName", "scenarioTag");
         for (Object key : values.keySet()) {
             if (!(key instanceof String name) || !supportedFields.contains(name)) {
                 throw new IllegalArgumentException("Run settings contain an unsupported field.");
@@ -875,6 +1504,17 @@ final class RunnerServer implements AutoCloseable {
         }
         boolean authorized = booleanField(values, "authorized");
         boolean headless = booleanField(values, "headless");
+        String requestedTestCaseId = stringField(values, "testCaseId");
+        String requestedAssetId = stringField(values, "assetId");
+        String executionSource = stringField(values, "executionSource");
+        String ciProvider = stringField(values, "ciProvider");
+        String pipelineRunId = stringField(values, "pipelineRunId");
+        String requestedScope = stringField(values, "executionScope");
+        String scenarioName = stringField(values, "scenarioName");
+        String scenarioTag = stringField(values, "scenarioTag");
+        if (!scenarioName.isBlank() && !scenarioTag.isBlank()) {
+            throw new IllegalArgumentException("Choose a scenario name or tag filter, not both.");
+        }
 
         // Parse browser list; default to chrome if not provided
         List<String> browsers = List.of("chrome");
@@ -901,7 +1541,58 @@ final class RunnerServer implements AutoCloseable {
         List<Map<String, Object>> allAssets = executionService.pluginRegistry()
                 .discoverAllAssets(projectRoot, allPaths);
 
-        if (selectionsObj instanceof List<?> selections && !selections.isEmpty()) {
+        if (!requestedAssetId.isBlank()) {
+            if (selectionsObj instanceof List<?> selections && !selections.isEmpty()) {
+                throw new IllegalArgumentException("An automation asset run must target one discovered asset.");
+            }
+            Map<String, Object> asset = allAssets.stream()
+                    .filter(item -> requestedAssetId.equals(stableAssetId(item)))
+                    .findFirst().orElseThrow(() -> new IllegalArgumentException(
+                            "The selected automation asset is unavailable. Refresh the Test Repository and try again."));
+            if (requestedTestCaseId.isBlank()) {
+                throw new IllegalArgumentException("A mapped Test Case is required for this automation run.");
+            }
+            if (testCaseManager.getById(requestedTestCaseId) == null) {
+                throw new IllegalArgumentException("Test case not found: " + requestedTestCaseId);
+            }
+            boolean mapped = automationMappingManager.listForTestCase(requestedTestCaseId).stream()
+                    .anyMatch(item -> requestedAssetId.equals(String.valueOf(item.get("assetId"))));
+            if (!mapped) {
+                throw new IllegalArgumentException("The selected automation asset is not mapped to this Test Case.");
+            }
+            String kind = String.valueOf(asset.getOrDefault("kind", ""));
+            String selection = String.valueOf(asset.getOrDefault("selection", ""));
+            if ((scenarioName.length() > 300) || (scenarioTag.length() > 300)) {
+                throw new IllegalArgumentException("The Cucumber scenario filter is too long.");
+            }
+            if (!scenarioName.isBlank() || !scenarioTag.isBlank()) {
+                if (!"cucumber".equalsIgnoreCase(kind)) {
+                    throw new IllegalArgumentException("Scenario filters are supported only for Cucumber assets.");
+                }
+                List<Map<String, Object>> scenarios = cucumberScenarios(asset);
+                boolean knownScenario = scenarios.stream().anyMatch(item ->
+                        (!scenarioName.isBlank() && scenarioName.equals(String.valueOf(item.get("name"))))
+                                || (!scenarioTag.isBlank() && item.get("tags") instanceof List<?> tags
+                                && tags.stream().anyMatch(tag -> scenarioTag.equals(String.valueOf(tag)))));
+                if (!knownScenario) {
+                    throw new IllegalArgumentException("The selected scenario or tag was not found in the feature.");
+                }
+            }
+            if (targetUrl.isBlank()) {
+                targetUrl = String.valueOf(asset.getOrDefault("defaultTargetUrl", ""));
+            }
+            entry = new RunEntry(runId, kind, selection, targetUrl);
+            entry.assetId = requestedAssetId;
+            entry.testCaseId = requestedTestCaseId;
+            entry.executionSource = executionSource.isBlank() ? "LOCAL_RUNNER" : executionSource;
+            entry.ciProvider = ciProvider;
+            entry.pipelineRunId = pipelineRunId;
+            entry.executionScope = (!scenarioName.isBlank() || !scenarioTag.isBlank()) ? "SCENARIO" :
+                    (requestedScope.isBlank() ? "FEATURE" : requestedScope);
+            entry.scenarioName = scenarioName;
+            entry.scenarioTag = scenarioTag;
+            entry.browsers = new ArrayList<>(browsers);
+        } else if (selectionsObj instanceof List<?> selections && !selections.isEmpty()) {
             // Collection run: validate all selections are known assets
             List<String> knownSelections = allAssets.stream()
                     .map(a -> (String) a.get("selection")).toList();
@@ -939,13 +1630,15 @@ final class RunnerServer implements AutoCloseable {
             trimRuns();
         }
         List<String> finalBrowsers = entry.browsers;
-        runExecutor.execute(() -> executeRun(entry, targetUrl, authorized, headless, finalBrowsers));
+        String runTargetUrl = targetUrl;
+        runExecutor.execute(() -> executeRun(entry, runTargetUrl, authorized, headless, finalBrowsers));
         sendJson(exchange, 202, runResponse(entry));
     }
 
     private void executeRun(RunEntry entry, String targetUrl, boolean authorized,
                             boolean headless, List<String> browsers) {
         try {
+            entry.status = "RUNNING";
             if (entry.selections != null && !entry.selections.isEmpty()) {
                 // Collection run: dispatch to the first plugin that matches
                 RunnerPlugin plugin = executionService.pluginRegistry().findByName(entry.kindName);
@@ -961,16 +1654,16 @@ final class RunnerServer implements AutoCloseable {
                     throw new IllegalStateException("No plugin found for kind: " + entry.kindName);
                 }
                 entry.result = plugin.execute(entry.selection, targetUrl,
-                        authorized, headless, browsers, entry::addLog);
+                        authorized, headless, browsers, entry.scenarioName, entry.scenarioTag, entry::addLog);
             }
-            entry.status = entry.cancelRequested ? "CANCELLED"
-                    : entry.result.exitCode() == 0 ? "PASSED" : "FAILED";
+            entry.status = entry.cancelRequested ? "CANCELLED" : resultStatus(entry.result);
         } catch (Exception exception) {
             entry.error = exception.getMessage() == null
                     ? "The test run could not be completed." : exception.getMessage();
-            entry.status = entry.cancelRequested ? "CANCELLED" : "FAILED";
+            entry.status = entry.cancelRequested ? "CANCELLED" : "ERROR";
         } finally {
             entry.finishedAt = Instant.now().toString();
+            persistAutomationExecution(entry);
             synchronized (runs) {
                 if (entry.id.equals(activeRunId)) {
                     activeRunId = null;
@@ -981,7 +1674,7 @@ final class RunnerServer implements AutoCloseable {
 
     private void cancelRun(HttpExchange exchange, RunEntry entry) throws IOException {
         synchronized (runs) {
-            if (!entry.id.equals(activeRunId) || !entry.status.equals("RUNNING")) {
+            if (!entry.id.equals(activeRunId) || !(entry.status.equals("QUEUED") || entry.status.equals("RUNNING"))) {
                 sendError(exchange, 409, "This run is no longer active.");
                 return;
             }
@@ -1017,7 +1710,105 @@ final class RunnerServer implements AutoCloseable {
                 : "/api/runs/" + entry.id + "/report");
         response.put("error", entry.error);
         response.put("logs", entry.logs());
+        response.put("testCaseId", entry.testCaseId);
+        response.put("assetId", entry.assetId);
+        response.put("framework", entry.kindName);
+        response.put("executionSource", entry.executionSource);
+        response.put("ciProvider", entry.ciProvider);
+        response.put("pipelineRunId", entry.pipelineRunId);
+        response.put("executionScope", entry.executionScope);
+        response.put("scenarioName", entry.scenarioName);
+        response.put("scenarioTag", entry.scenarioTag);
         return response;
+    }
+
+    private List<Map<String, Object>> cucumberScenarios(Map<String, Object> asset) {
+        String selection = String.valueOf(asset.getOrDefault("selection", ""));
+        Path feature = Path.of(selection);
+        if (!feature.isAbsolute()) feature = projectRoot.resolve(feature);
+        feature = feature.normalize();
+        try {
+            if (!Files.isRegularFile(feature)) return List.of();
+            List<Map<String, Object>> scenarios = new ArrayList<>();
+            List<String> pendingTags = new ArrayList<>();
+            int index = 0;
+            for (String line : Files.readAllLines(feature, StandardCharsets.UTF_8)) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith("@")) {
+                    for (String tag : trimmed.split("\\s+")) if (tag.startsWith("@")) pendingTags.add(tag);
+                    continue;
+                }
+                if (trimmed.startsWith("Scenario:") || trimmed.startsWith("Scenario Outline:")) {
+                    String name = trimmed.substring(trimmed.indexOf(':') + 1).trim();
+                    Map<String, Object> scenario = new LinkedHashMap<>();
+                    scenario.put("id", stableHash(stableAssetId(asset) + "\\n" + name + "\\n" + index++));
+                    scenario.put("name", name);
+                    scenario.put("tags", List.copyOf(pendingTags));
+                    scenario.put("tag", pendingTags.isEmpty() ? "" : pendingTags.get(pendingTags.size() - 1));
+                    scenarios.add(scenario);
+                    pendingTags = new ArrayList<>();
+                }
+            }
+            return scenarios;
+        } catch (IOException error) {
+            return List.of();
+        }
+    }
+
+    private String resultStatus(ExecutionService.RunResult result) {
+        if (result == null) return "ERROR";
+        RunSummary summary = result.summary();
+        if (summary.failed() > 0) return "FAILED";
+        if (summary.total() > 0 && summary.passed() == 0 && summary.skipped() > 0) return "SKIPPED";
+        if (summary.total() <= 0) return "ERROR";
+        if (result.exitCode() != 0) return "ERROR";
+        return "PASSED";
+    }
+
+    private String stableAssetId(Map<String, Object> asset) {
+        String projectIdentity = stableHash(projectRoot.toAbsolutePath().normalize().toString());
+        return "automation-" + stableHash(projectIdentity + "\n"
+                + String.valueOf(asset.getOrDefault("kind", "unknown")) + "\n"
+                + String.valueOf(asset.getOrDefault("selection", "")));
+    }
+
+    private void persistAutomationExecution(RunEntry entry) {
+        if (entry.assetId == null || entry.assetId.isBlank()) return;
+        List<Map<String, Object>> mappings = automationMappingManager.listForAsset(entry.assetId);
+        if (entry.testCaseId != null && !entry.testCaseId.isBlank()) {
+            mappings = mappings.stream().filter(item -> entry.testCaseId.equals(String.valueOf(item.get("testCaseId")))).toList();
+        }
+        for (Map<String, Object> mapping : mappings) {
+            Map<String, Object> record = new LinkedHashMap<>();
+            record.put("executionId", entry.id);
+            record.put("testCaseId", String.valueOf(mapping.get("testCaseId")));
+            record.put("assetId", entry.assetId);
+            record.put("framework", entry.kindName);
+            record.put("project", mapping.getOrDefault("sourceProject", projectRoot.getFileName().toString()));
+            record.put("executionSource", entry.executionSource);
+            record.put("startedAt", entry.startedAt);
+            record.put("finishedAt", entry.finishedAt);
+            record.put("durationMs", durationMillis(entry.startedAt, entry.finishedAt));
+            record.put("status", entry.status);
+            record.put("summary", entry.result == null ? null : summaryResponse(entry.result.summary()));
+            record.put("error", entry.error);
+            record.put("reportReference", entry.result == null ? null : "/api/runs/" + entry.id + "/report");
+            record.put("ciProvider", entry.ciProvider);
+            record.put("pipelineRunId", entry.pipelineRunId);
+            try {
+                automationExecutionManager.save(record);
+            } catch (IOException error) {
+                System.err.println("Failed to persist automated execution " + entry.id + ": " + error.getMessage());
+            }
+        }
+    }
+
+    private static long durationMillis(String startedAt, String finishedAt) {
+        try {
+            return Math.max(0, java.time.Duration.between(Instant.parse(startedAt), Instant.parse(finishedAt)).toMillis());
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     private static Map<String, Object> summaryResponse(RunSummary summary) {
@@ -1132,6 +1923,102 @@ final class RunnerServer implements AutoCloseable {
         }
     }
 
+    private AuthSessionManager.Session session(HttpExchange exchange) {
+        return authSessionManager.find(requestCookie(exchange, AuthSessionManager.COOKIE));
+    }
+
+    private void requireAuthenticatedCsrf(HttpExchange exchange) {
+        requireSameOrigin(exchange);
+        AuthSessionManager.Session current = session(exchange);
+        if (current == null) throw new AuthorizationException(401, "Authentication is required.");
+        String token = exchange.getRequestHeaders().getFirst(AuthSessionManager.CSRF_HEADER);
+        if (token == null || !MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8), current.csrfToken().getBytes(StandardCharsets.UTF_8))) {
+            throw new AuthorizationException(403, "A valid CSRF token is required.");
+        }
+    }
+
+    private static String requestCookie(HttpExchange exchange, String name) {
+        String header = exchange.getRequestHeaders().getFirst("Cookie");
+        if (header == null) return "";
+        for (String item : header.split(";")) {
+            String[] pair = item.trim().split("=", 2);
+            if (pair.length == 2 && name.equals(pair[0])) return pair[1];
+        }
+        return "";
+    }
+
+    private static boolean secureCookies() { return Boolean.getBoolean("qa.runner.secureCookies"); }
+
+    private static Map<String, Object> authUserToMap(AuthUserDirectory.User user) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", user.id()); result.put("username", user.username()); result.put("email", user.email());
+        result.put("emailVerified", user.emailVerified()); result.put("status", user.status());
+        result.put("createdAt", user.createdAt()); result.put("updatedAt", user.updatedAt()); result.put("lastLoginAt", user.lastLoginAt());
+        return result;
+    }
+
+    private String authActorName(HttpExchange exchange) {
+        AuthSessionManager.Session current = session(exchange);
+        AuthUserDirectory.User user = current == null ? null : authUserDirectory.findById(current.userId());
+        return user == null ? "" : user.username();
+    }
+
+    private Map<String, Object> wikiSpaceToMap(WikiManager.Space space) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", space.id()); map.put("name", space.name()); map.put("key", space.key()); map.put("description", space.description());
+        map.put("createdBy", space.createdBy()); map.put("createdAt", space.createdAt()); map.put("updatedAt", space.updatedAt()); map.put("status", space.status());
+        return map;
+    }
+
+    private Map<String, Object> wikiPageToMap(WikiManager.Page page) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", page.id()); map.put("spaceId", page.spaceId()); map.put("parentPageId", page.parentPageId()); map.put("title", page.title());
+        map.put("content", page.content()); map.put("status", page.status()); map.put("createdBy", page.createdBy()); map.put("updatedBy", page.updatedBy());
+        map.put("createdAt", page.createdAt()); map.put("updatedAt", page.updatedAt()); map.put("version", page.version());
+        return map;
+    }
+
+    private void requireTeamView() {
+        if (!teamAuthorization.canViewTeam(teamMemberManager.list())) {
+            throw new AuthorizationException(403, "An authenticated team membership is required to view team data.");
+        }
+    }
+
+    private void requireTeamManage(Map<String, Object> values, String existingId) {
+        List<TeamMemberManager.Member> members = teamMemberManager.list();
+        TeamMemberManager.Member target = existingId == null ? null : members.stream()
+                .filter(member -> existingId.equals(member.id())).findFirst().orElse(null);
+        if (existingId != null && target == null) {
+            throw new AuthorizationException(404, "Team member not found.");
+        }
+        if (!teamAuthorization.canManageMemberMutation(values, target, members)) {
+            throw new AuthorizationException(403, "You are not authorized to manage team members.");
+        }
+        Object requestedRole = values.get("role");
+        if (requestedRole != null && !teamAuthorization.canManageRole(String.valueOf(requestedRole), members)) {
+            throw new AuthorizationException(403, "Only an authenticated Admin can grant or change team roles.");
+        }
+    }
+
+    private void requireAuthenticatedAdmin() {
+        if (!teamAuthorization.authenticated()) {
+            throw new AuthorizationException(401, "An authenticated Admin identity is required for role management.");
+        }
+        TeamMemberManager.Member member = teamAuthorization.currentMember(teamMemberManager.list());
+        if (member == null || !"Admin".equals(member.role())) {
+            throw new AuthorizationException(403, "Only an authorized Admin can manage roles and permissions.");
+        }
+    }
+
+    private static final class AuthorizationException extends RuntimeException {
+        private final int status;
+
+        private AuthorizationException(int status, String message) {
+            super(message);
+            this.status = status;
+        }
+    }
+
     private static String stringField(Map<?, ?> values, String name) {
         Object value = values.get(name);
         if (value instanceof String text && !text.isBlank()) {
@@ -1228,11 +2115,19 @@ final class RunnerServer implements AutoCloseable {
         private final String targetUrl;
         private final String startedAt = Instant.now().toString();
         private final List<String> output = new CopyOnWriteArrayList<>();
-        private volatile String status = "RUNNING";
+        private volatile String status = "QUEUED";
         private volatile String finishedAt;
         private volatile boolean cancelRequested;
         private volatile ExecutionService.RunResult result;
         private volatile String error;
+        private volatile String testCaseId;
+        private volatile String assetId;
+        private volatile String executionSource = "LOCAL_RUNNER";
+        private volatile String ciProvider;
+        private volatile String pipelineRunId;
+        private volatile String executionScope = "ASSET";
+        private volatile String scenarioName;
+        private volatile String scenarioTag;
         /** Populated only for collection runs; null for single runs. */
         private List<String> selections;
         /** Browsers to run tests in; defaults to ["chrome"]. */
@@ -2507,6 +3402,7 @@ final class RunnerServer implements AutoCloseable {
         map.put("testMethod", tc.testMethod());
         map.put("assignedTo", tc.assignedTo());
         map.put("automationStatus", tc.automationStatus());
+        map.put("archived", testCaseManager.isArchived(tc.id()));
         return map;
     }
 
@@ -2630,8 +3526,10 @@ final class RunnerServer implements AutoCloseable {
         String testMethod = optionalString(values, "testMethod");
         String assignedTo = optionalString(values, "assignedTo");
         String automationStatus = optionalString(values, "automationStatus");
+        TestCaseManager.TestCase before = testCaseManager.getById(id);
         try {
             TestCaseManager.TestCase updated = testCaseManager.update(id, name, description, priority, tags, framework, suiteId, storyId, steps, module, testType, testMethod, assignedTo, automationStatus);
+            testCaseManager.recordHistory(id, testCaseToMap(before), testCaseToMap(updated), "Local User");
             sendJson(exchange, 200, testCaseToMap(updated));
         } catch (IllegalArgumentException e) {
             sendError(exchange, 404, e.getMessage());
@@ -2743,6 +3641,415 @@ final class RunnerServer implements AutoCloseable {
         }
         return null;
     }
+
+    private static String configuredUser(String environmentName, String propertyName, String fallback) {
+        String property = System.getProperty(propertyName);
+        if (property != null && !property.isBlank()) return property.trim();
+        String environment = System.getenv(environmentName);
+        return environment == null || environment.isBlank() ? fallback : environment.trim();
+    }
+
+    private Map<String, Object> projectToMap(UserStoryStore.Project project) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", project.id()); map.put("key", project.key()); map.put("name", project.name());
+        map.put("description", project.description()); map.put("owner", project.owner()); map.put("archived", project.archived());
+        map.put("createdAt", project.createdAt()); map.put("updatedAt", project.updatedAt());
+        return map;
+    }
+
+    private Map<String, Object> listTeamMembers(HttpExchange exchange) {
+        String search = queryValueOrEmpty(exchange, "search").trim().toLowerCase(Locale.ROOT);
+        String status = queryValueOrEmpty(exchange, "status").trim().toUpperCase(Locale.ROOT);
+        String role = queryValueOrEmpty(exchange, "role").trim();
+        String projectId = queryValueOrEmpty(exchange, "projectId").trim();
+        String sort = queryValueOrEmpty(exchange, "sort").trim().toLowerCase(Locale.ROOT);
+        boolean descending = "desc".equalsIgnoreCase(queryValueOrEmpty(exchange, "direction"));
+        List<TeamMemberManager.Member> allMembers = teamMemberManager.list().stream()
+                .collect(java.util.stream.Collectors.toMap(TeamMemberManager.Member::id, member -> member,
+                        (first, ignored) -> first, LinkedHashMap::new)).values().stream().toList();
+        List<TeamMemberManager.Member> filtered = allMembers.stream()
+                .filter(member -> search.isBlank() || (member.name() + " " + member.email() + " " + member.username()).toLowerCase(Locale.ROOT).contains(search))
+                .filter(member -> status.isBlank() || member.status().equals(status))
+                .filter(member -> role.isBlank() || member.role().equals(role))
+                .filter(member -> projectId.isBlank() || member.projectIds().contains(projectId))
+                .sorted((left, right) -> {
+                    int result = memberSortValue(left, sort).compareToIgnoreCase(memberSortValue(right, sort));
+                    return descending ? -result : result;
+                }).toList();
+        int total = filtered.size();
+        int offset = Math.max(0, queryInt(exchange, "offset", 0));
+        int limit = Math.min(50, Math.max(1, queryInt(exchange, "limit", 10)));
+        List<Map<String, Object>> items = filtered.stream().skip(Math.min(offset, total)).limit(limit).map(this::teamMemberToMap).toList();
+        List<Map<String, Object>> projectCounts = new ArrayList<>();
+        try {
+            for (UserStoryStore.Project project : userStoryStore.listProjects(true)) {
+                long count = allMembers.stream().filter(member -> member.projectIds().contains(project.id())).count();
+                Map<String, Object> projectData = new LinkedHashMap<>();
+                projectData.put("id", project.id()); projectData.put("key", project.key());
+                projectData.put("name", project.name()); projectData.put("count", count);
+                projectCounts.add(projectData);
+            }
+        } catch (IOException error) {
+            throw new IllegalStateException("Project membership counts could not be loaded.", error);
+        }
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("total", allMembers.size());
+        stats.put("active", allMembers.stream().filter(member -> TeamMemberManager.ACTIVE.equals(member.status())).count());
+        stats.put("roles", allMembers.stream().map(TeamMemberManager.Member::role).distinct().count());
+        stats.put("assigned", allMembers.stream().filter(member -> !member.projectIds().isEmpty()).count());
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("items", items); response.put("total", total); response.put("offset", offset); response.put("limit", limit);
+        response.put("stats", stats); response.put("projectCounts", projectCounts);
+        return response;
+    }
+
+    private String memberSortValue(TeamMemberManager.Member member, String sort) {
+        return switch (sort) {
+            case "email" -> member.email();
+            case "username" -> member.username();
+            case "role" -> member.role();
+            case "status" -> member.status();
+            case "updatedat" -> member.updatedAt();
+            default -> member.name();
+        };
+    }
+
+    private Set<String> validProjectIds() throws IOException {
+        return userStoryStore.listProjects(true).stream().map(UserStoryStore.Project::id).collect(java.util.stream.Collectors.toSet());
+    }
+
+    private void validateRegisteredUser(Map<String, Object> values) {
+        Object value = values.get("registeredUserId");
+        if (value != null && !String.valueOf(value).isBlank() && !CURRENT_USER_ID.equals(String.valueOf(value))) {
+            throw new IllegalArgumentException("No registered-user directory is configured; only the current local identity can be linked.");
+        }
+    }
+
+    private Map<String, Object> normalizeMemberRole(Map<String, Object> values) {
+        if (!values.containsKey("role") && !values.containsKey("roleId")) return values;
+        String requestedId = values.get("roleId") == null ? "" : String.valueOf(values.get("roleId"));
+        String requestedName = values.get("role") == null ? "" : String.valueOf(values.get("role"));
+        TeamRoleManager.Role role = teamRoleManager.list().stream()
+                .filter(item -> item.active() && ((!requestedId.isBlank() && item.id().equals(requestedId))
+                        || (!requestedName.isBlank() && item.name().equals(requestedName))))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("Unknown or inactive team role."));
+        Map<String, Object> normalized = new LinkedHashMap<>(values);
+        normalized.put("role", role.name()); normalized.put("roleId", role.id());
+        return normalized;
+    }
+
+    private Map<String, Object> teamMemberToMap(TeamMemberManager.Member member) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", member.id()); map.put("name", member.name()); map.put("email", member.email());
+        map.put("username", member.username()); map.put("status", member.status()); map.put("role", member.role());
+        map.put("roleId", member.roleId());
+        map.put("registeredUserId", member.registeredUserId()); map.put("projectIds", member.projectIds());
+        map.put("projectRoles", member.projectRoles());
+        map.put("createdAt", member.createdAt()); map.put("updatedAt", member.updatedAt());
+        return map;
+    }
+
+    private Map<String, Object> teamRoleToMap(TeamRoleManager.Role role, List<TeamMemberManager.Member> members) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", role.id()); map.put("name", role.name()); map.put("description", role.description());
+        map.put("builtIn", role.builtIn()); map.put("active", role.active()); map.put("permissions", role.permissions());
+        map.put("memberCount", teamRoleManager.memberCount(role, members));
+        map.put("createdAt", role.createdAt()); map.put("updatedAt", role.updatedAt());
+        return map;
+    }
+
+    private Map<String, Object> epicToMap(UserStoryStore.Epic epic) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", epic.id()); map.put("projectId", epic.projectId()); map.put("key", epic.key()); map.put("name", epic.name());
+        map.put("description", epic.description()); map.put("status", epic.status()); map.put("priority", epic.priority());
+        map.put("archived", epic.archived()); map.put("createdAt", epic.createdAt()); map.put("updatedAt", epic.updatedAt());
+        return map;
+    }
+
+    private Map<String, Object> userStoryToMap(UserStoryStore.Story story) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", story.id()); map.put("projectId", story.projectId()); map.put("epicId", story.epicId());
+        map.put("title", story.title()); map.put("description", story.description()); map.put("asA", story.asA());
+        map.put("iWant", story.iWant()); map.put("soThat", story.soThat()); map.put("acceptanceCriteria", story.acceptanceCriteria());
+        map.put("priority", story.priority()); map.put("status", story.status()); map.put("storyPoints", story.storyPoints());
+        map.put("businessValue", story.businessValue()); map.put("risk", story.risk());
+        UserStoryStore.Creator creator;
+        try { creator = userStoryStore.creatorFor(story.id()); } catch (IOException e) { creator = new UserStoryStore.Creator("legacy:unknown", "Unknown"); }
+        map.put("assignee", story.assignee()); map.put("createdById", creator.userId()); map.put("createdBy", creator.displayName()); map.put("sprintId", story.sprintId()); map.put("archived", story.archived());
+        map.put("createdAt", story.createdAt()); map.put("updatedAt", story.updatedAt()); map.put("changedById", story.changedById()); map.put("changedBy", story.changedBy()); map.put("changedAt", story.changedAt());
+        return map;
+    }
+
+    private Map<String, Object> attachmentToMap(UserStoryStore.Attachment attachment) {
+        return new LinkedHashMap<>(Map.of("id", attachment.id(), "storyId", attachment.storyId(), "filename", attachment.originalName(),
+                "size", attachment.size(), "contentType", attachment.contentType(), "uploaderId", attachment.uploaderId(),
+                "uploader", attachment.uploaderName(), "createdAt", attachment.createdAt(),
+                "downloadUrl", "/api/user-stories/attachments/" + attachment.id(),
+                "previewable", attachment.contentType().startsWith("image/") || "application/pdf".equals(attachment.contentType())));
+    }
+
+    private Map<String, Object> relatedLinkToMap(UserStoryStore.RelatedLink link) {
+        return Map.of("id", link.id(), "storyId", link.storyId(), "title", link.title(), "url", link.url(), "type", link.type(), "createdAt", link.createdAt(), "updatedAt", link.updatedAt());
+    }
+    private Map<String, Object> activityToMap(UserStoryStore.Activity activity) {
+        return Map.of("id", activity.id(), "storyId", activity.storyId(), "action", activity.action(), "detail", activity.detail(), "actorId", activity.actorId(), "actorName", activity.actorName(), "createdAt", activity.createdAt(), "updatedAt", activity.updatedAt(), "edited", activity.edited(), "deleted", activity.deleted());
+    }
+    private Map<String, Object> workItemToMap(UserStoryStore.WorkItem item) {
+        return Map.of("id", item.id(), "title", item.title(), "type", item.type(), "projectId", item.projectId());
+    }
+    private void validateRelatedWorkItemTarget(String target, String type) {
+        if (!"Test Case".equals(type) || target == null || target.startsWith("http://") || target.startsWith("https://")) return;
+        if (testCaseManager.list().stream().noneMatch(testCase -> testCase.id().equals(target) || testCase.caseId().equals(target))) {
+            throw new IllegalArgumentException("Test case was not found: " + target);
+        }
+    }
+
+    private Map<String, Object> uploadUserStoryAttachment(HttpExchange exchange, String storyId) throws IOException {
+        userStoryStore.listAttachments(storyId); // validates story ownership/existence before accepting bytes
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        Matcher boundaryMatcher = contentType == null ? null : MULTIPART_BOUNDARY.matcher(contentType);
+        if (boundaryMatcher == null || !boundaryMatcher.find()) throw new IllegalArgumentException("Attachment upload must use multipart/form-data.");
+        long contentLength = parseContentLength(exchange.getRequestHeaders().getFirst("Content-Length"));
+        if (contentLength > MAX_ATTACHMENT_BYTES + 64 * 1024L) throw new IllegalArgumentException("Attachment request exceeds the configured 10 MB limit.");
+        Path directory = projectRoot.resolve(ATTACHMENT_DIRECTORY).toAbsolutePath().normalize();
+        Files.createDirectories(directory);
+        Path temporary = Files.createTempFile(directory, ".upload-", ".tmp");
+        String originalName = "";
+        String declaredType = "application/octet-stream";
+        boolean keep = false;
+        try (InputStream input = new BufferedInputStream(exchange.getRequestBody())) {
+            String boundary = boundaryMatcher.group(1);
+            String line;
+            do { line = readMultipartLine(input); } while (line != null && !line.equals("--" + boundary) && !line.equals("--" + boundary + "--"));
+            if (line == null || line.endsWith("--")) throw new IllegalArgumentException("No attachment file was supplied.");
+            while ((line = readMultipartLine(input)) != null && !line.isEmpty()) {
+                if (line.toLowerCase(Locale.ROOT).startsWith("content-disposition:")) originalName = multipartParameter(line, "filename");
+                if (line.toLowerCase(Locale.ROOT).startsWith("content-type:")) declaredType = line.substring(line.indexOf(':') + 1).trim();
+            }
+            if (originalName.isBlank()) throw new IllegalArgumentException("The attachment filename is missing.");
+            long size = copyMultipartFile(input, temporary, ("\r\n--" + boundary).getBytes(StandardCharsets.ISO_8859_1));
+            String safeName = safeUploadName(originalName);
+            String validatedType = validateAttachmentFile(temporary, safeName, declaredType, size);
+            String storageName = UUID.randomUUID() + extensionOf(safeName);
+            Path target = directory.resolve(storageName).normalize();
+            if (!target.getParent().equals(directory)) throw new IllegalArgumentException("Invalid attachment path.");
+            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                UserStoryStore.Attachment saved = userStoryStore.addAttachment(storyId, safeName, storageName, size, validatedType, CURRENT_USER_ID, CURRENT_USER_NAME);
+                userStoryStore.recordActivity(storyId, "Attachment added", safeName, CURRENT_USER_ID, CURRENT_USER_NAME);
+                keep = true;
+                return attachmentToMap(saved);
+            } finally {
+                if (!keep) Files.deleteIfExists(target);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private void serveUserStoryAttachment(HttpExchange exchange, String attachmentId, boolean download) throws IOException {
+        UserStoryStore.Attachment attachment = userStoryStore.findAttachment(attachmentId);
+        Path directory = projectRoot.resolve(ATTACHMENT_DIRECTORY).toAbsolutePath().normalize();
+        Path file = directory.resolve(attachment.storageName()).normalize();
+        if (!file.getParent().equals(directory) || !Files.isRegularFile(file)) throw new IllegalArgumentException("Attachment is not available.");
+        exchange.getResponseHeaders().set("Content-Type", attachment.contentType());
+        exchange.getResponseHeaders().set("Content-Disposition", (download ? "attachment" : "inline") + "; filename=\"" + safeHeaderFilename(attachment.originalName()) + "\"");
+        exchange.sendResponseHeaders(200, Files.size(file));
+        try (InputStream input = Files.newInputStream(file); OutputStream output = exchange.getResponseBody()) { input.transferTo(output); }
+    }
+
+    private void deleteUserStoryAttachment(HttpExchange exchange, String attachmentId) throws IOException {
+        UserStoryStore.Attachment attachment = userStoryStore.findAttachment(attachmentId);
+        Path directory = projectRoot.resolve(ATTACHMENT_DIRECTORY).toAbsolutePath().normalize();
+        Path file = directory.resolve(attachment.storageName()).normalize();
+        userStoryStore.removeAttachment(attachmentId);
+        userStoryStore.recordActivity(attachment.storyId(), "Attachment removed", attachment.originalName(), CURRENT_USER_ID, CURRENT_USER_NAME);
+        if (file.getParent().equals(directory)) Files.deleteIfExists(file);
+        sendJson(exchange, 204, Map.of());
+    }
+
+    private static long parseContentLength(String value) { try { return value == null ? -1 : Long.parseLong(value); } catch (NumberFormatException e) { return -1; } }
+    private static String readMultipartLine(InputStream input) throws IOException { StringBuilder line = new StringBuilder(); int value; while ((value = input.read()) != -1) { if (value == '\n') break; if (value != '\r') line.append((char) value); if (line.length() > 8192) throw new IllegalArgumentException("Multipart header is too large."); } return value == -1 && line.isEmpty() ? null : line.toString(); }
+    private static String multipartParameter(String line, String name) { String marker = name + "="; int start = line.toLowerCase(Locale.ROOT).indexOf(marker); if (start < 0) return ""; String value = line.substring(start + marker.length()).trim(); if (value.startsWith("\"")) { int end = value.indexOf('"', 1); return end > 0 ? value.substring(1, end) : ""; } int end = value.indexOf(';'); return (end < 0 ? value : value.substring(0, end)).trim(); }
+    private static long copyMultipartFile(InputStream input, Path target, byte[] marker) throws IOException {
+        byte[] pending = new byte[marker.length]; int pendingSize = 0; long written = 0;
+        try (OutputStream output = Files.newOutputStream(target)) {
+            int value;
+            while ((value = input.read()) != -1) {
+                if (pendingSize == marker.length) { output.write(pending[0]); System.arraycopy(pending, 1, pending, 0, marker.length - 1); pendingSize--; written++; if (written > MAX_ATTACHMENT_BYTES) throw new IllegalArgumentException("Attachment exceeds the configured 10 MB limit."); }
+                pending[pendingSize++] = (byte) value;
+                if (pendingSize == marker.length && startsWith(pending, marker)) { int next = input.read(); int next2 = input.read(); if (next == '-' && next2 == '-' || next == '\r' && next2 == '\n') return written; throw new IllegalArgumentException("Invalid multipart boundary."); }
+            }
+        }
+        throw new IllegalArgumentException("Incomplete attachment upload.");
+    }
+    private static boolean startsWith(byte[] value, byte[] prefix) { if (value.length != prefix.length) return false; for (int i = 0; i < prefix.length; i++) if (value[i] != prefix[i]) return false; return true; }
+    private static String safeUploadName(String name) { String value = name.replace('\\', '/'); value = value.substring(value.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "_").trim(); if (value.isBlank() || value.length() > 180) throw new IllegalArgumentException("Invalid attachment filename."); return value; }
+    private static String extensionOf(String name) { int dot = name.lastIndexOf('.'); return dot < 0 ? "" : name.substring(dot).toLowerCase(Locale.ROOT); }
+    private static String validateAttachmentFile(Path file, String name, String declaredType, long size) throws IOException {
+        if (size <= 0 || size > MAX_ATTACHMENT_BYTES) throw new IllegalArgumentException("Each attachment must be between 1 byte and 10 MB.");
+        String extension = extensionOf(name); if (!List.of(".png", ".jpg", ".jpeg", ".pdf", ".txt", ".log", ".csv").contains(extension)) throw new IllegalArgumentException("Unsupported attachment type.");
+        byte[] header;
+        try (InputStream input = Files.newInputStream(file)) { header = input.readNBytes(8); }
+        boolean binaryValid = extension.equals(".png") && header.length >= 8 && header[0] == (byte)0x89 && header[1] == 0x50 && header[2] == 0x4e && header[3] == 0x47 || (extension.equals(".jpg") || extension.equals(".jpeg")) && header.length >= 3 && header[0] == (byte)0xff && header[1] == (byte)0xd8 && header[2] == (byte)0xff || extension.equals(".pdf") && new String(header, StandardCharsets.ISO_8859_1).startsWith("%PDF");
+        if (extension.equals(".png") || extension.equals(".jpg") || extension.equals(".jpeg") || extension.equals(".pdf")) { if (!binaryValid) throw new IllegalArgumentException("File content does not match its extension."); return extension.equals(".pdf") ? "application/pdf" : extension.equals(".png") ? "image/png" : "image/jpeg"; }
+        if (containsNul(file)) throw new IllegalArgumentException("Text attachments must not contain binary content.");
+        return extension.equals(".csv") ? "text/csv" : "text/plain";
+    }
+    private static boolean containsNul(Path file) throws IOException { try (InputStream input = Files.newInputStream(file)) { byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) >= 0) for (int i = 0; i < count; i++) if (buffer[i] == 0) return true; } return false; }
+    private static String safeHeaderFilename(String value) { return value.replaceAll("[^A-Za-z0-9._ -]", "_"); }
+
+    private Map<String, Object> sprintToMap(UserStoryStore.Sprint sprint) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", sprint.id()); map.put("projectId", sprint.projectId()); map.put("name", sprint.name());
+        map.put("goal", sprint.goal()); map.put("startDate", sprint.startDate()); map.put("endDate", sprint.endDate());
+        map.put("status", sprint.status()); map.put("createdAt", sprint.createdAt()); map.put("updatedAt", sprint.updatedAt());
+        return map;
+    }
+
+    private Map<String, Object> linkToMap(UserStoryStore.TestCaseLink link) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("storyId", link.storyId()); map.put("testCaseId", link.testCaseId()); map.put("createdAt", link.createdAt());
+        return map;
+    }
+
+    private List<Map<String, Object>> linkedTestCases(String storyId, String search, int offset, int limit) throws IOException {
+        String query = search == null ? "" : search.trim().toLowerCase();
+        List<TestCaseManager.TestCase> allTestCases = testCaseManager.list();
+        Map<String, TestCaseManager.TestCase> testCasesById = allTestCases.stream().collect(java.util.stream.Collectors.toMap(TestCaseManager.TestCase::id, testCase -> testCase, (a, b) -> a, LinkedHashMap::new));
+        Map<String, UserStoryStore.TestCaseLink> links = userStoryStore.listTestCaseLinks(storyId).stream()
+                .collect(java.util.stream.Collectors.toMap(UserStoryStore.TestCaseLink::testCaseId, link -> link, (a, b) -> a, LinkedHashMap::new));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (TestCaseManager.TestCase testCase : allTestCases) {
+            UserStoryStore.TestCaseLink link = links.get(testCase.id());
+            if (link == null) continue;
+            String searchable = (testCase.id() + " " + testCase.caseId() + " " + testCase.name()).toLowerCase();
+            if (!query.isBlank() && !searchable.contains(query)) continue;
+            Map<String, Object> map = testCaseToMap(testCase);
+            map.put("linkCreatedAt", link.createdAt());
+            result.add(map);
+        }
+        for (UserStoryStore.TestCaseLink link : userStoryStore.listTestCaseLinks(storyId)) {
+            if (testCasesById.containsKey(link.testCaseId())) continue;
+            if (!query.isBlank() && !link.testCaseId().toLowerCase().contains(query)) continue;
+            result.add(new LinkedHashMap<>(Map.of("id", link.testCaseId(), "caseId", link.testCaseId(), "name", "Unavailable test case", "unavailable", true, "linkCreatedAt", link.createdAt())));
+        }
+        int from = Math.min(result.size(), Math.max(0, offset));
+        return result.subList(from, Math.min(result.size(), from + Math.max(1, limit)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> requestObject(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
+        if (body.length > MAX_REQUEST_BYTES) throw new IllegalArgumentException("Request body is too large.");
+        Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
+        if (!(parsed instanceof Map<?, ?> values)) throw new IllegalArgumentException("Request body must be a JSON object.");
+        return (Map<String, Object>) values;
+    }
+
+    private static String queryParameter(HttpExchange exchange, String name) {
+        String query = exchange.getRequestURI().getRawQuery();
+        if (query == null) return null;
+        for (String part : query.split("&")) {
+            String[] pieces = part.split("=", 2);
+            if (pieces.length == 2 && pieces[0].equals(name)) {
+                return java.net.URLDecoder.decode(pieces[1], StandardCharsets.UTF_8);
+            }
+        }
+        return null;
+    }
+
+    private UserStoryStore.Project createUserStoryProject(HttpExchange exchange) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.createProject(stringField(v, "key"), stringField(v, "name"), optionalString(v, "description"), optionalString(v, "owner"));
+    }
+
+    private UserStoryStore.Project updateUserStoryProject(HttpExchange exchange, String id) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.updateProject(id, optionalString(v, "key"), optionalString(v, "name"), optionalString(v, "description"), optionalString(v, "owner"));
+    }
+
+    private UserStoryStore.Epic createUserStoryEpic(HttpExchange exchange) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.createEpic(stringField(v, "projectId"), stringField(v, "key"), stringField(v, "name"), optionalString(v, "description"), optionalString(v, "status"), optionalString(v, "priority"));
+    }
+
+    private UserStoryStore.Epic updateUserStoryEpic(HttpExchange exchange, String id) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.updateEpic(id, optionalString(v, "key"), optionalString(v, "name"), optionalString(v, "description"), optionalString(v, "status"), optionalString(v, "priority"));
+    }
+
+    private UserStoryStore.Story createUserStory(HttpExchange exchange) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.createStory(stringField(v, "projectId"), optionalString(v, "epicId"), stringField(v, "title"), sanitizeRichText(optionalString(v, "description")), optionalString(v, "asA"), optionalString(v, "iWant"), optionalString(v, "soThat"), sanitizeRichText(optionalString(v, "acceptanceCriteria")), optionalString(v, "priority"), optionalString(v, "status"), numberField(v, "storyPoints", 0), optionalString(v, "assignee"), optionalString(v, "reporter"), CURRENT_USER_ID, CURRENT_USER_NAME);
+    }
+
+    private UserStoryStore.Story updateUserStory(HttpExchange exchange, String id) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.updateStory(id, optionalString(v, "epicId"), optionalString(v, "title"), sanitizeRichText(optionalString(v, "description")), optionalString(v, "asA"), optionalString(v, "iWant"), optionalString(v, "soThat"), sanitizeRichText(optionalString(v, "acceptanceCriteria")), optionalString(v, "priority"), optionalString(v, "status"), numberField(v, "storyPoints", 0), optionalString(v, "assignee"), optionalString(v, "reporter"), numberField(v, "businessValue", 0), optionalString(v, "risk"), CURRENT_USER_ID, CURRENT_USER_NAME, optionalString(v, "sprintId"));
+    }
+
+    private UserStoryStore.Sprint createSprint(HttpExchange exchange) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.createSprint(stringField(v, "projectId"), stringField(v, "name"), optionalString(v, "goal"), stringField(v, "startDate"), stringField(v, "endDate"));
+    }
+
+    private UserStoryStore.Sprint updateSprint(HttpExchange exchange, String id) throws IOException {
+        Map<String, Object> v = requestObject(exchange);
+        return userStoryStore.updateSprint(id, optionalString(v, "name"), optionalString(v, "goal"), optionalString(v, "startDate"), optionalString(v, "endDate"));
+    }
+
+    private static int numberField(Map<?, ?> values, String key, int fallback) {
+        Object value = values.get(key);
+        return value instanceof Number n ? n.intValue() : fallback;
+    }
+
+    /** Lightweight server-side allow-list sanitizer; no client-supplied HTML is trusted. */
+    static String sanitizeRichText(String value) {
+        if (value == null || value.isBlank()) return "";
+        String input = value.replaceAll("(?is)<!--.*?-->", "")
+                .replaceAll("(?is)<(script|style|iframe|object|embed|svg|math)[^>]*>.*?</\\1>", "")
+                .replaceAll("(?is)<(script|style|iframe|object|embed|svg|math)[^>]*/?>", "");
+        Matcher matcher = Pattern.compile("(?is)<\\s*(/?)\\s*([a-z0-9]+)([^>]*)>").matcher(input);
+        StringBuilder output = new StringBuilder();
+        int end = 0;
+        while (matcher.find()) {
+            appendEscapedText(output, input.substring(end, matcher.start()));
+            String closing = matcher.group(1);
+            String tag = matcher.group(2).toLowerCase(Locale.ROOT);
+            if (List.of("strong", "b", "em", "i", "u", "ul", "ol", "li", "p", "br", "a").contains(tag)) {
+                if ("/".equals(closing)) output.append("</").append(tag).append('>');
+                else if ("br".equals(tag)) output.append("<br>");
+                else if ("a".equals(tag)) {
+                    Matcher href = Pattern.compile("(?i)href\\s*=\\s*[\\\"'](https?://[^\\\"']+)[\\\"']").matcher(matcher.group(3));
+                    output.append(href.find() ? "<a href=\"" + safeHtmlAttribute(href.group(1)) + "\" rel=\"noopener noreferrer\" target=\"_blank\">" : "<a>");
+                } else output.append('<').append(tag).append('>');
+            }
+            end = matcher.end();
+        }
+        appendEscapedText(output, input.substring(end));
+        return output.toString().trim();
+    }
+    private static void appendEscapedText(StringBuilder output, String text) { output.append(text.replaceAll("&(?!#?[A-Za-z0-9]+;)", "&amp;").replace("<", "&lt;").replace(">", "&gt;")); }
+    private static String safeHtmlAttribute(String value) { return value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "%3C").replace(">", "%3E"); }
+
+    private static String queryValue(HttpExchange exchange, String name) {
+        String query = exchange.getRequestURI().getRawQuery();
+        if (query == null) return null;
+        for (String param : query.split("&")) {
+            String[] pair = param.split("=", 2);
+            if (pair.length == 2 && name.equals(pair[0])) return java.net.URLDecoder.decode(pair[1], StandardCharsets.UTF_8);
+        }
+        return null;
+    }
+
+    private static String queryValueOrEmpty(HttpExchange exchange, String name) {
+        String value = queryValue(exchange, name);
+        return value == null ? "" : value;
+    }
+
+    private static boolean queryBoolean(HttpExchange exchange, String name) { return "true".equalsIgnoreCase(queryValue(exchange, name)); }
+    private static int queryInt(HttpExchange exchange, String name, int fallback) { try { return Integer.parseInt(queryValue(exchange, name)); } catch (Exception e) { return fallback; } }
 
     // === Test Suite Helpers ===
 

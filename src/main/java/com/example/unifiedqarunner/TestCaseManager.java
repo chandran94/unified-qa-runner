@@ -625,6 +625,149 @@ public class TestCaseManager {
         return updated;
     }
 
+    /** Store an immutable version record alongside the existing test-case data. */
+    @SuppressWarnings("unchecked")
+    public void recordHistory(String testCaseId, Map<String, Object> oldValues, Map<String, Object> newValues, String changedBy) {
+        try {
+            Path path = Path.of(CONFIG_FILE);
+            Map<String, Object> root = readRoot(path);
+            List<Map<String, Object>> history = new ArrayList<>();
+            Object historyObject = root.get("testCaseHistory");
+            if (historyObject instanceof List<?> entries) {
+                for (Object entry : entries) {
+                    if (entry instanceof Map<?, ?> map) history.add(new LinkedHashMap<>((Map<String, Object>) map));
+                }
+            }
+            int version = 1;
+            for (Map<String, Object> entry : history) {
+                if (testCaseId.equals(String.valueOf(entry.get("testCaseId"))) && entry.get("version") instanceof Number number) {
+                    version = Math.max(version, number.intValue() + 1);
+                }
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("id", UUID.randomUUID().toString());
+            entry.put("testCaseId", testCaseId);
+            entry.put("version", version);
+            entry.put("changedBy", changedBy == null || changedBy.isBlank() ? "Local User" : changedBy);
+            entry.put("changedAt", Instant.now().toString());
+            entry.put("oldValues", oldValues == null ? Map.of() : oldValues);
+            entry.put("newValues", newValues == null ? Map.of() : newValues);
+            history.add(entry);
+            root.put("testCaseHistory", history);
+            writeRoot(path, root);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save test case history: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> history(String testCaseId) {
+        try {
+            Map<String, Object> root = readRoot(Path.of(CONFIG_FILE));
+            Object historyObject = root.get("testCaseHistory");
+            if (!(historyObject instanceof List<?> entries)) return new ArrayList<>();
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Object entry : entries) {
+                if (entry instanceof Map<?, ?> map && testCaseId.equals(String.valueOf(map.get("testCaseId")))) {
+                    result.add(new LinkedHashMap<>((Map<String, Object>) map));
+                }
+            }
+            result.sort(Comparator.comparingInt(item -> item.get("version") instanceof Number n ? n.intValue() : 0));
+            return result;
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public TestCase restoreVersion(String testCaseId, int version) {
+        TestCase current = getById(testCaseId);
+        if (current == null) throw new IllegalArgumentException("Test case not found: " + testCaseId);
+        Map<String, Object> target = null;
+        for (Map<String, Object> entry : history(testCaseId)) {
+            if (entry.get("version") instanceof Number number && number.intValue() == version
+                    && entry.get("newValues") instanceof Map<?, ?> values) {
+                target = new LinkedHashMap<>((Map<String, Object>) values);
+                break;
+            }
+        }
+        if (target == null) throw new IllegalArgumentException("Version not found: " + version);
+        return update(testCaseId,
+                stringVal(target, "name", current.name()),
+                stringVal(target, "description", current.description()),
+                stringVal(target, "priority", current.priority()),
+                stringList(target.get("tags"), current.tags()),
+                stringVal(target, "framework", current.framework()),
+                stringVal(target, "suiteId", current.suiteId()),
+                stringVal(target, "storyId", current.storyId()),
+                mapList(target.get("steps"), current.steps()),
+                stringVal(target, "module", current.module()),
+                stringVal(target, "testType", current.testType()),
+                stringVal(target, "testMethod", current.testMethod()),
+                stringVal(target, "assignedTo", current.assignedTo()),
+                stringVal(target, "automationStatus", current.automationStatus()));
+    }
+
+    private List<String> stringList(Object value, List<String> fallback) {
+        if (!(value instanceof List<?> values)) return fallback;
+        List<String> result = new ArrayList<>();
+        values.forEach(item -> { if (item != null) result.add(String.valueOf(item)); });
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> mapList(Object value, List<Map<String, Object>> fallback) {
+        if (!(value instanceof List<?> values)) return fallback;
+        List<Map<String, Object>> result = new ArrayList<>();
+        values.forEach(item -> { if (item instanceof Map<?, ?> map) result.add(new LinkedHashMap<>((Map<String, Object>) map)); });
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    public boolean archive(String id, boolean archived) {
+        try {
+            if (getById(id) == null) return false;
+            Path path = Path.of(CONFIG_FILE);
+            Map<String, Object> root = readRoot(path);
+            Set<String> ids = new LinkedHashSet<>();
+            Object archivedObject = root.get("archivedTestCaseIds");
+            if (archivedObject instanceof List<?> values) {
+                values.forEach(value -> { if (value != null) ids.add(String.valueOf(value)); });
+            }
+            if (archived) ids.add(id); else ids.remove(id);
+            root.put("archivedTestCaseIds", new ArrayList<>(ids));
+            writeRoot(path, root);
+            return true;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update archived test case state: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public boolean isArchived(String id) {
+        try {
+            Map<String, Object> root = readRoot(Path.of(CONFIG_FILE));
+            Object archivedObject = root.get("archivedTestCaseIds");
+            if (archivedObject instanceof List<?> values) {
+                return values.stream().anyMatch(value -> id.equals(String.valueOf(value)));
+            }
+        } catch (Exception ignored) {
+            // Treat unreadable optional metadata as not archived; the test case remains available.
+        }
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readRoot(Path path) throws Exception {
+        if (!Files.exists(path)) return new LinkedHashMap<>();
+        Object parsed = JsonParser.parse(Files.readString(path));
+        return parsed instanceof Map<?, ?> map ? new LinkedHashMap<>((Map<String, Object>) map) : new LinkedHashMap<>();
+    }
+
+    private void writeRoot(Path path, Map<String, Object> root) throws Exception {
+        Files.writeString(path, CiCdConfig.toJson(root));
+    }
+
     /**
      * Delete a test case by ID.
      */

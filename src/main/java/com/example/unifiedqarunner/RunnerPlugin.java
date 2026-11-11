@@ -61,6 +61,17 @@ public interface RunnerPlugin {
                                        Consumer<String> output) throws Exception;
 
     /**
+     * Executes one discovered asset with an optional framework-specific filter.
+     * Plugins that cannot narrow an asset safely retain their existing asset-level behavior.
+     */
+    default ExecutionService.RunResult execute(String selection, String targetUrl, boolean authorized,
+                                               boolean headless, List<String> browsers,
+                                               String scenarioName, String scenarioTag,
+                                               Consumer<String> output) throws Exception {
+        return execute(selection, targetUrl, authorized, headless, browsers, output);
+    }
+
+    /**
      * Execute a collection of test assets as a single run.
      *
      * @param selections list of asset paths returned by {@link #discover}

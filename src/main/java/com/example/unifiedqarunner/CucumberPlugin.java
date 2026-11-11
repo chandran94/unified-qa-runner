@@ -106,6 +106,14 @@ public class CucumberPlugin implements RunnerPlugin {
     public ExecutionService.RunResult execute(String selection, String targetUrl, boolean authorized,
                                               boolean headless, List<String> browsers,
                                               Consumer<String> output) throws Exception {
+        return execute(selection, targetUrl, authorized, headless, browsers, null, null, output);
+    }
+
+    @Override
+    public ExecutionService.RunResult execute(String selection, String targetUrl, boolean authorized,
+                                              boolean headless, List<String> browsers,
+                                              String scenarioName, String scenarioTag,
+                                              Consumer<String> output) throws Exception {
         URI target = validateTarget(targetUrl, authorized);
         Path runDirectory = createRunDirectory();
         Files.createDirectories(runDirectory);
@@ -129,7 +137,8 @@ public class CucumberPlugin implements RunnerPlugin {
                 Path cucumberJson = browserDir.resolve("cucumber.json");
                 Path surefireDirectory = browserDir.resolve("surefire");
 
-                List<String> args = buildMavenArgs(target, headless, browser, surefireDirectory, selection, cucumberJson);
+                List<String> args = buildMavenArgs(target, headless, browser, surefireDirectory, selection,
+                        cucumberJson, scenarioName, scenarioTag);
                 int exitCode = runProcess("mvn.cmd", args, output);
                 if (exitCode != 0) {
                     overallExitCode = exitCode;
@@ -186,7 +195,8 @@ public class CucumberPlugin implements RunnerPlugin {
                     Path cucumberJson = featureDir.resolve("cucumber.json");
                     Path surefireDir = featureDir.resolve("surefire");
 
-                    List<String> args = buildMavenArgs(target, headless, browser, surefireDir, selection, cucumberJson);
+                    List<String> args = buildMavenArgs(target, headless, browser, surefireDir, selection,
+                            cucumberJson, null, null);
                     int exitCode = runProcess("mvn.cmd", args, output);
                     if (exitCode != 0) {
                         overallExitCode = exitCode;
@@ -258,7 +268,8 @@ public class CucumberPlugin implements RunnerPlugin {
     }
 
     private List<String> buildMavenArgs(URI target, boolean headless, String browser,
-                                        Path surefireDir, String selection, Path cucumberJson) {
+                                        Path surefireDir, String selection, Path cucumberJson,
+                                        String scenarioName, String scenarioTag) {
         boolean loopback;
         try {
             loopback = ExecutionService.isLoopbackTarget(target);
@@ -276,6 +287,12 @@ public class CucumberPlugin implements RunnerPlugin {
                 "-Dtest=com.example.doctests.RunCucumberTest",
                 "-Dcucumber.features=classpath:features/" + Path.of(selection).getFileName(),
                 "-Dcucumber.plugin=json:" + cucumberJson));
+        if (scenarioName != null && !scenarioName.isBlank()) {
+            args.add("-Dcucumber.filter.name=" + scenarioName);
+        }
+        if (scenarioTag != null && !scenarioTag.isBlank()) {
+            args.add("-Dcucumber.filter.tags=" + scenarioTag);
+        }
         args.add("test");
         return args;
     }

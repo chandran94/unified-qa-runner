@@ -56,9 +56,10 @@ public class SharedPathConfig {
      * Load configuration from qa-runner.json.
      */
     private void load() {
+        // Optional configuration must remain usable when qa-runner.json has no sharedPaths key.
+        this.sharedPaths = List.of();
         Path configFile = projectRoot.resolve(CONFIG_FILE);
         if (!Files.isRegularFile(configFile)) {
-            this.sharedPaths = List.of();
             return;
         }
         try {
