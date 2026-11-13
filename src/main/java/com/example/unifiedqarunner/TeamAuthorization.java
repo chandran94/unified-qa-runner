@@ -22,6 +22,7 @@ final class TeamAuthorization {
     static final String TEST_EXECUTION = "test-execution";
     static final String DEFECTS = "defects";
     static final String CICD = "ci-cd";
+    static final String WIKI = "wiki";
     static final String PROJECT_MEMBER_VIEW = "PROJECT_MEMBER_VIEW";
     static final String PROJECT_MEMBER_ADD = "PROJECT_MEMBER_ADD";
     static final String PROJECT_MEMBER_EDIT = "PROJECT_MEMBER_EDIT";
@@ -34,15 +35,22 @@ final class TeamAuthorization {
     private final String currentUserId;
     private final String currentUserName;
     private final boolean authenticated;
+    private final List<TeamRoleManager.Role> roleCatalog;
 
     TeamAuthorization(String currentUserId, String currentUserName) {
         this(currentUserId, currentUserName, false);
     }
 
     TeamAuthorization(String currentUserId, String currentUserName, boolean authenticated) {
+        this(currentUserId, currentUserName, authenticated, List.of());
+    }
+
+    TeamAuthorization(String currentUserId, String currentUserName, boolean authenticated,
+                      List<TeamRoleManager.Role> roleCatalog) {
         this.currentUserId = currentUserId == null ? "" : currentUserId;
         this.currentUserName = currentUserName == null ? "" : currentUserName;
         this.authenticated = authenticated;
+        this.roleCatalog = roleCatalog == null ? List.of() : List.copyOf(roleCatalog);
     }
 
     String currentUserId() { return currentUserId; }
@@ -63,7 +71,9 @@ final class TeamAuthorization {
 
     boolean canManageTeam(List<TeamMemberManager.Member> members) {
         TeamMemberManager.Member member = currentMember(members);
-        if (member != null) return "Admin".equals(member.role());
+        if (member != null) return "Admin".equals(member.role())
+                || "Project Manager".equals(member.role()) || "Product Owner".equals(member.role())
+                || member.projectRoles().values().stream().anyMatch(this::isProjectManagerRole);
         // Local-only mode is a one-time constrained bootstrap path, never an
         // Admin role. Once a roster exists, mutations fail closed until a real
         // authenticated identity provider is connected.
@@ -118,10 +128,16 @@ final class TeamAuthorization {
 
     private boolean canManageProject(String projectId, TeamMemberManager.Member actor) {
         if (actor == null || projectId == null || projectId.isBlank()) return false;
-        if ("Admin".equals(actor.role())) return actor.projectIds().contains(projectId);
+        if ("Admin".equals(actor.role())) return true;
         String projectRole = actor.projectRoles().get(projectId);
+        if (projectRole != null && !projectRole.isBlank() && customPermission(projectRole, "team-management", "manage-members")) return true;
         return "Project Manager".equals(projectRole) || "role-project-manager".equals(projectRole)
                 || "Product Owner".equals(projectRole) || "role-product-owner".equals(projectRole);
+    }
+
+    private boolean isProjectManagerRole(String role) {
+        return "Project Manager".equals(role) || "role-project-manager".equals(role)
+                || "Product Owner".equals(role) || "role-product-owner".equals(role);
     }
 
     private boolean isElevatedProjectRole(String role) {
@@ -132,26 +148,56 @@ final class TeamAuthorization {
     boolean canAccessProject(String projectId, List<TeamMemberManager.Member> members) {
         if (projectId == null || projectId.isBlank()) return false;
         TeamMemberManager.Member member = currentMember(members);
-        return member != null && member.projectIds().contains(projectId);
+        return member != null && ("Admin".equals(member.role()) || member.projectIds().contains(projectId));
     }
 
     boolean canReadProjectDomain(String domain, String projectId, List<TeamMemberManager.Member> members) {
         TeamMemberManager.Member member = currentMember(members);
-        return member != null && member.projectIds().contains(projectId)
-                && permissionsFor(member.role()).getOrDefault(domain, List.of()).contains("read");
+        return member != null && canAccessProject(projectId, members)
+                && permissionsFor(effectiveRole(member, projectId)).getOrDefault(domain, List.of()).contains("read");
     }
 
     boolean canWriteProjectDomain(String domain, String projectId, List<TeamMemberManager.Member> members) {
         TeamMemberManager.Member member = currentMember(members);
-        return member != null && member.projectIds().contains(projectId)
-                && permissionsFor(member.role()).getOrDefault(domain, List.of()).contains("write");
+        return member != null && canAccessProject(projectId, members)
+                && permissionsFor(effectiveRole(member, projectId)).getOrDefault(domain, List.of()).contains("write");
+    }
+
+    private String effectiveRole(TeamMemberManager.Member member, String projectId) {
+        String configured = member.projectRoles().getOrDefault(projectId, "");
+        return switch (configured) {
+            case "role-admin" -> "Admin";
+            case "role-project-manager" -> "Project Manager";
+            case "role-product-owner" -> "Product Owner";
+            case "role-qa-lead" -> "QA Lead";
+            case "role-qa-engineer" -> "QA Engineer";
+            case "role-developer" -> "Developer";
+            case "role-viewer" -> "Viewer";
+            case "" -> member.role();
+            default -> configured;
+        };
+    }
+
+    private boolean customPermission(String role, String domain, String action) {
+        return roleCatalog.stream()
+                .filter(item -> item.active() && (item.id().equals(role) || item.name().equals(role)))
+                .findFirst()
+                .map(item -> item.permissions().getOrDefault(normalizeDomain(domain), List.of()).contains(action))
+                .orElse(false);
+    }
+
+    private String normalizeDomain(String domain) {
+        return switch (domain) {
+            case "sprint-board", "sprints" -> "sprint-board";
+            default -> domain;
+        };
     }
 
     Map<String, Object> permissionSnapshot(String projectId, List<TeamMemberManager.Member> members) {
         TeamMemberManager.Member member = currentMember(members);
         Map<String, Object> permissions = new LinkedHashMap<>();
-        for (String domain : List.of(USER_STORIES, SPRINT_BOARD, TEST_CASES, TEST_EXECUTION, DEFECTS, CICD)) {
-            List<String> actions = member == null ? List.of() : permissionsFor(member.role()).getOrDefault(domain, List.of());
+        for (String domain : List.of(USER_STORIES, SPRINT_BOARD, TEST_CASES, TEST_EXECUTION, DEFECTS, CICD, WIKI)) {
+            List<String> actions = member == null ? List.of() : permissionsFor(effectiveRole(member, projectId)).getOrDefault(domain, List.of());
             permissions.put(domain, Map.of("read", actions.contains("read"), "write", actions.contains("write")));
         }
         permissions.put(TEAM_VIEW, canViewTeam(members));
@@ -169,36 +215,47 @@ final class TeamAuthorization {
 
     private Map<String, List<String>> permissionsFor(String role) {
         Map<String, List<String>> result = new LinkedHashMap<>();
+        TeamRoleManager.Role customRole = roleCatalog.stream()
+                .filter(item -> item.active() && (item.id().equals(role) || item.name().equals(role)))
+                .findFirst().orElse(null);
+        if (customRole != null) {
+            customRole.permissions().forEach((domain, actions) -> {
+                List<String> normalized = actions.stream().map(this::normalizeAction).filter(action -> !action.isBlank()).toList();
+                result.put(normalizeDomain(domain), normalized);
+            });
+            return result;
+        }
         boolean admin = "Admin".equals(role);
         if (admin) {
             for (String domain : List.of(USER_STORIES, SPRINT_BOARD, TEST_CASES, TEST_EXECUTION, DEFECTS, CICD)) {
                 result.put(domain, List.of("read", "write"));
             }
+            result.put(WIKI, List.of("read", "write"));
             return result;
         }
         switch (role) {
             case "Project Manager" -> {
                 grant(result, USER_STORIES); grant(result, SPRINT_BOARD); grant(result, TEST_CASES);
-                grant(result, TEST_EXECUTION); grant(result, DEFECTS); grant(result, CICD);
+                grant(result, TEST_EXECUTION); grant(result, DEFECTS); grant(result, CICD); grant(result, WIKI);
             }
             case "QA Lead" -> {
                 grant(result, USER_STORIES); grant(result, SPRINT_BOARD); grant(result, TEST_CASES);
-                grant(result, TEST_EXECUTION); grant(result, DEFECTS);
+                grant(result, TEST_EXECUTION); grant(result, DEFECTS); grant(result, WIKI);
             }
             case "QA Engineer" -> {
                 grant(result, USER_STORIES, "read"); grant(result, SPRINT_BOARD, "read");
-                grant(result, TEST_CASES); grant(result, TEST_EXECUTION); grant(result, DEFECTS);
+                grant(result, TEST_CASES); grant(result, TEST_EXECUTION); grant(result, DEFECTS); grant(result, WIKI, "read");
             }
             case "Developer" -> {
                 grant(result, USER_STORIES, "read"); grant(result, SPRINT_BOARD, "read");
-                grant(result, TEST_CASES, "read"); grant(result, TEST_EXECUTION, "read"); grant(result, DEFECTS);
+                grant(result, TEST_CASES, "read"); grant(result, TEST_EXECUTION, "read"); grant(result, DEFECTS); grant(result, WIKI, "read");
             }
             case "Product Owner" -> {
                 grant(result, USER_STORIES); grant(result, SPRINT_BOARD); grant(result, TEST_CASES, "read");
-                grant(result, TEST_EXECUTION, "read"); grant(result, DEFECTS, "read");
+                grant(result, TEST_EXECUTION, "read"); grant(result, DEFECTS, "read"); grant(result, WIKI, "read");
             }
             case "Viewer" -> {
-                for (String domain : List.of(USER_STORIES, SPRINT_BOARD, TEST_CASES, TEST_EXECUTION, DEFECTS, CICD)) {
+                for (String domain : List.of(USER_STORIES, SPRINT_BOARD, TEST_CASES, TEST_EXECUTION, DEFECTS, CICD, WIKI)) {
                     grant(result, domain, "read");
                 }
             }
@@ -209,5 +266,9 @@ final class TeamAuthorization {
 
     private static void grant(Map<String, List<String>> permissions, String domain, String... actions) {
         permissions.put(domain, actions.length == 0 ? List.of("read", "write") : List.of(actions));
+    }
+
+    private String normalizeAction(String action) {
+        return "view".equals(action) ? "read" : Set.of("create", "edit", "delete", "assign", "execute", "manage-members", "manage-permissions").contains(action) ? "write" : "";
     }
 }

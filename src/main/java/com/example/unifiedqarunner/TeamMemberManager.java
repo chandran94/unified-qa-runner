@@ -56,12 +56,13 @@ final class TeamMemberManager {
         String username = required(values, "username");
         String role = normalizeRole(stringValue(values, "role", "Viewer"), roleCatalog);
         String status = normalizeStatus(stringValue(values, "status", ACTIVE));
-        ensureUnique(members, null, email, username);
+        String registeredUserId = stringValue(values, "registeredUserId", "").trim();
+        ensureUnique(members, null, email, username, registeredUserId);
         List<String> projects = projectIds(values, validProjects);
         Map<String, String> projectRoles = projectRoles(values, projects, roleCatalog, Map.of());
         String now = Instant.now().toString();
         Member member = new Member(UUID.randomUUID().toString(), name, email, username, status, role,
-                stringValue(values, "registeredUserId", ""), projects, now, now,
+                registeredUserId, projects, now, now,
                 stringValue(values, "roleId", builtInRoleId(role)), projectRoles);
         List<Map<String, Object>> raw = read();
         raw.add(toMap(member));
@@ -81,11 +82,12 @@ final class TeamMemberManager {
         String email = optional(values, "email", current.email());
         String username = optional(values, "username", current.username());
         String name = optional(values, "name", current.name());
-        ensureUnique(members, id, email, username);
+        String registeredUserId = stringValue(values, "registeredUserId", current.registeredUserId()).trim();
+        ensureUnique(members, id, email, username, registeredUserId);
         Member updated = new Member(id, name, email, username,
                 normalizeStatus(stringValue(values, "status", current.status())),
                 normalizeRole(stringValue(values, "role", current.role()), roleCatalog),
-                stringValue(values, "registeredUserId", current.registeredUserId()),
+                registeredUserId,
                 values.containsKey("projectIds") ? projectIds(values, validProjects) : current.projectIds(),
                 current.createdAt(), Instant.now().toString(),
                 stringValue(values, "roleId", current.roleId()),
@@ -99,12 +101,16 @@ final class TeamMemberManager {
         return updated;
     }
 
-    private void ensureUnique(List<Member> members, String id, String email, String username) {
+    private void ensureUnique(List<Member> members, String id, String email, String username, String registeredUserId) {
         if (members.stream().anyMatch(item -> !item.id().equals(id) && item.email().equalsIgnoreCase(email))) {
             throw new IllegalArgumentException("A team member with this email already exists.");
         }
         if (members.stream().anyMatch(item -> !item.id().equals(id) && item.username().equalsIgnoreCase(username))) {
             throw new IllegalArgumentException("A team member with this username already exists.");
+        }
+        if (!registeredUserId.isBlank() && members.stream().anyMatch(item -> !item.id().equals(id)
+                && registeredUserId.equals(item.registeredUserId()))) {
+            throw new IllegalArgumentException("This registered user is already linked to a team member.");
         }
     }
 

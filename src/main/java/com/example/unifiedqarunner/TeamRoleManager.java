@@ -15,7 +15,7 @@ import java.util.UUID;
 /** Persistent built-in and custom team-role catalog in qa-runner.json. */
 final class TeamRoleManager {
     static final List<String> DOMAINS = List.of("projects", "team-management", "user-stories", "sprints",
-            "test-cases", "test-execution", "defects", "ci-cd");
+            "test-cases", "test-execution", "defects", "ci-cd", "wiki");
     static final List<String> ACTIONS = List.of("view", "create", "edit", "delete", "assign", "execute",
             "manage-members", "manage-permissions");
     private static final String KEY = "teamRoles";
@@ -151,12 +151,13 @@ final class TeamRoleManager {
                 "projects", List.of("view", "edit", "manage-members"), "team-management", List.of("view", "manage-members"),
                 "user-stories", List.of("view", "create", "edit", "assign"), "sprints", List.of("view", "create", "edit", "assign"),
                 "test-cases", List.of("view", "create", "edit", "assign"), "test-execution", List.of("view", "execute"),
-                "defects", List.of("view", "create", "edit", "assign"), "ci-cd", List.of("view", "execute"))));
-        roles.add(defaultRole("qa-lead", "QA Lead", "Quality ownership and planning", Map.of("user-stories", List.of("view", "edit", "assign"), "sprints", List.of("view", "edit", "assign"), "test-cases", List.of("view", "create", "edit", "assign"), "test-execution", List.of("view", "execute"), "defects", List.of("view", "create", "edit", "assign"))));
-        roles.add(defaultRole("qa-engineer", "QA Engineer", "Test design and execution", Map.of("user-stories", List.of("view"), "sprints", List.of("view"), "test-cases", List.of("view", "create", "edit"), "test-execution", List.of("view", "execute"), "defects", List.of("view", "create", "edit"))));
-        roles.add(defaultRole("developer", "Developer", "Development and defect resolution", Map.of("user-stories", List.of("view"), "sprints", List.of("view"), "test-cases", List.of("view"), "test-execution", List.of("view"), "defects", List.of("view", "edit"))));
-        roles.add(defaultRole("product-owner", "Product Owner", "Requirement ownership", Map.of("projects", List.of("view"), "user-stories", List.of("view", "create", "edit", "assign"), "sprints", List.of("view", "create", "edit"), "test-cases", List.of("view"), "defects", List.of("view"))));
-        roles.add(defaultRole("viewer", "Viewer", "Read-only access", Map.of("projects", List.of("view"), "user-stories", List.of("view"), "sprints", List.of("view"), "test-cases", List.of("view"), "test-execution", List.of("view"), "defects", List.of("view"), "ci-cd", List.of("view"))));
+                "defects", List.of("view", "create", "edit", "assign"), "ci-cd", List.of("view", "execute"),
+                "wiki", List.of("view", "create", "edit", "delete"))));
+        roles.add(defaultRole("qa-lead", "QA Lead", "Quality ownership and planning", Map.of("user-stories", List.of("view", "edit", "assign"), "sprints", List.of("view", "edit", "assign"), "test-cases", List.of("view", "create", "edit", "assign"), "test-execution", List.of("view", "execute"), "defects", List.of("view", "create", "edit", "assign"), "wiki", List.of("view", "create", "edit", "delete"))));
+        roles.add(defaultRole("qa-engineer", "QA Engineer", "Test design and execution", Map.of("user-stories", List.of("view"), "sprints", List.of("view"), "test-cases", List.of("view", "create", "edit"), "test-execution", List.of("view", "execute"), "defects", List.of("view", "create", "edit"), "wiki", List.of("view"))));
+        roles.add(defaultRole("developer", "Developer", "Development and defect resolution", Map.of("user-stories", List.of("view"), "sprints", List.of("view"), "test-cases", List.of("view"), "test-execution", List.of("view"), "defects", List.of("view", "edit"), "wiki", List.of("view"))));
+        roles.add(defaultRole("product-owner", "Product Owner", "Requirement ownership", Map.of("projects", List.of("view"), "user-stories", List.of("view", "create", "edit", "assign"), "sprints", List.of("view", "create", "edit"), "test-cases", List.of("view"), "defects", List.of("view"), "wiki", List.of("view"))));
+        roles.add(defaultRole("viewer", "Viewer", "Read-only access", Map.of("projects", List.of("view"), "user-stories", List.of("view"), "sprints", List.of("view"), "test-cases", List.of("view"), "test-execution", List.of("view"), "defects", List.of("view"), "ci-cd", List.of("view"), "wiki", List.of("view"))));
         return roles;
     }
 

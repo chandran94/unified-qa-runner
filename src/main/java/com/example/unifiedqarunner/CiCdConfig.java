@@ -23,7 +23,11 @@ import javax.crypto.spec.SecretKeySpec;
 public class CiCdConfig {
 
     private static final String CONFIG_FILE = "qa-runner.json";
-    private static final String ENCRYPTION_KEY = "unified-qa-runner-cicd-key-2026";
+    private final Path configPath;
+
+    public CiCdConfig() { this(Path.of("qa-runner.json"), true); }
+    public CiCdConfig(Path projectRoot) { this(projectRoot.resolve(CONFIG_FILE), true); }
+    private CiCdConfig(Path configPath, boolean ignored) { this.configPath = configPath.toAbsolutePath().normalize(); }
 
     public record CiCdSettings(
             String platform,
@@ -52,7 +56,7 @@ public class CiCdConfig {
     @SuppressWarnings("unchecked")
     public CiCdSettings load() {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             if (!Files.exists(path)) {
                 return null;
             }
@@ -87,13 +91,36 @@ public class CiCdConfig {
         }
     }
 
+    /** Loads only the configuration explicitly owned by the supplied project. */
+    @SuppressWarnings("unchecked")
+    public CiCdSettings load(String projectId) {
+        if (projectId == null || projectId.isBlank()) return null;
+        try {
+            if (!Files.exists(configPath)) return null;
+            Object parsed = JsonParser.parse(Files.readString(configPath));
+            if (!(parsed instanceof Map<?, ?> root) || !(root.get("ciCdConfigurations") instanceof Map<?, ?> configurations)) return null;
+            Object value = configurations.get(projectId);
+            if (!(value instanceof Map<?, ?> ciCd)) return null;
+            String encryptedToken = stringVal(ciCd, "token", "");
+            String token = encryptedToken.isEmpty() ? "" : decryptToken(encryptedToken);
+            List<String> frameworks = new ArrayList<>();
+            Object fwObj = ciCd.get("frameworks");
+            if (fwObj instanceof List<?> fwList) for (Object fw : fwList) if (fw instanceof String s) frameworks.add(s);
+            return new CiCdSettings(stringVal(ciCd, "platform", "github"), stringVal(ciCd, "repoUrl", ""), token,
+                    stringVal(ciCd, "branch", "main"), frameworks, stringVal(ciCd, "triggerType", "push"),
+                    stringVal(ciCd, "scheduleCron", ""), stringVal(ciCd, "jenkinsUrl", ""));
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
     /**
      * Save CI/CD settings to qa-runner.json.
      */
     @SuppressWarnings("unchecked")
     public void save(CiCdSettings settings) {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             Map<String, Object> root;
             if (Files.exists(path)) {
                 Object parsed = JsonParser.parse(Files.readString(path));
@@ -111,12 +138,53 @@ public class CiCdConfig {
             ciCd.put("scheduleCron", settings.scheduleCron());
             ciCd.put("jenkinsUrl", settings.jenkinsUrl());
             ciCd.put("frameworks", settings.frameworks());
+            ciCd.putIfAbsent("projectId", "");
             root.put("ciCd", ciCd);
 
             Files.writeString(path, toJson(root));
         } catch (Exception e) {
             throw new RuntimeException("Failed to save CI/CD config: " + e.getMessage(), e);
         }
+    }
+
+    public void save(CiCdSettings settings, String projectId) {
+        saveScoped(settings, projectId);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void saveScoped(CiCdSettings settings, String projectId) {
+        try {
+            Object parsed = Files.exists(configPath) ? JsonParser.parse(Files.readString(configPath)) : new LinkedHashMap<>();
+            Map<String,Object> root = parsed instanceof Map<?,?> map ? new LinkedHashMap<>((Map<String,Object>) map) : new LinkedHashMap<>();
+            Map<String,Object> configurations = root.get("ciCdConfigurations") instanceof Map<?,?> map
+                    ? new LinkedHashMap<>((Map<String,Object>) map) : new LinkedHashMap<>();
+            Map<String,Object> ciCd = new LinkedHashMap<>();
+            ciCd.put("platform", settings.platform());
+            ciCd.put("repoUrl", settings.repoUrl());
+            ciCd.put("token", settings.token().isEmpty() ? "" : encryptToken(settings.token()));
+            ciCd.put("branch", settings.branch());
+            ciCd.put("triggerType", settings.triggerType());
+            ciCd.put("scheduleCron", settings.scheduleCron());
+            ciCd.put("jenkinsUrl", settings.jenkinsUrl());
+            ciCd.put("frameworks", settings.frameworks());
+            ciCd.put("projectId", projectId);
+            configurations.put(projectId, ciCd);
+            root.put("ciCdConfigurations", configurations);
+            Files.writeString(configPath, toJson(root));
+        } catch (Exception error) { throw new RuntimeException("Failed to save CI/CD ownership: " + error.getMessage(), error); }
+    }
+
+    @SuppressWarnings("unchecked")
+    public String projectId() {
+        try {
+            if (!Files.exists(configPath)) return "";
+            Object parsed = JsonParser.parse(Files.readString(configPath));
+            if (parsed instanceof Map<?,?> root && root.get("ciCd") instanceof Map<?,?> ciCd) {
+                Object value = ciCd.get("projectId");
+                return value == null ? "" : String.valueOf(value);
+            }
+        } catch (Exception ignored) { }
+        return "";
     }
 
     /**
@@ -218,7 +286,7 @@ public class CiCdConfig {
      */
     String encryptToken(String token) {
         try {
-            byte[] keyBytes = deriveKey(ENCRYPTION_KEY);
+            byte[] keyBytes = deriveKey(configuredEncryptionKey());
             SecretKey key = new SecretKeySpec(keyBytes, "AES");
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             byte[] iv = new byte[12];
@@ -247,7 +315,7 @@ public class CiCdConfig {
             buffer.get(iv);
             byte[] ciphertext = new byte[buffer.remaining()];
             buffer.get(ciphertext);
-            byte[] keyBytes = deriveKey(ENCRYPTION_KEY);
+            byte[] keyBytes = deriveKey(configuredEncryptionKey());
             SecretKey key = new SecretKeySpec(keyBytes, "AES");
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
@@ -261,6 +329,13 @@ public class CiCdConfig {
     private byte[] deriveKey(String password) throws Exception {
         MessageDigest sha = MessageDigest.getInstance("SHA-256");
         return sha.digest(password.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String configuredEncryptionKey() {
+        String key = System.getProperty("qa.runner.cicd.encryption.key");
+        if (key == null || key.isBlank()) key = System.getenv("QA_RUNNER_CICD_ENCRYPTION_KEY");
+        if (key == null || key.isBlank()) throw new IllegalStateException("CI/CD encryption key is not configured.");
+        return key;
     }
 
     @SuppressWarnings("unchecked")

@@ -30,13 +30,13 @@ public final class AuthBootstrap {
         char[] password = console.readPassword("Password (12+ characters): ");
         char[] confirmation = console.readPassword("Repeat password: ");
         if (!java.util.Arrays.equals(password, confirmation)) throw new IllegalArgumentException("Passwords do not match.");
-        AuthUserDirectory.User user = users.create(username, email, password, false);
+        AuthUserDirectory.User user = users.create(name, username, email, "", password, true, AuthUserDirectory.ACTIVE);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", name); values.put("email", email); values.put("username", username);
         values.put("registeredUserId", user.id()); values.put("role", "Admin"); values.put("projectIds", List.of());
         TeamRoleManager roles = new TeamRoleManager(root);
         members.create(values, Set.of(), roles.list());
         roles.recordAudit("AUTH_BOOTSTRAP_COMPLETED", user.id(), "operator", "Local operator");
-        System.out.println("Bootstrap completed for the explicitly approved local operator. Email verification remains required before production use.");
+        System.out.println("Bootstrap completed for the explicitly approved local operator. The operator identity was verified by the local console flow.");
     }
 }

@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Unified QA Runner",
+      "request": "launch",
+      "mainClass": "com.example.unifiedqarunner.Main",
+      "projectName": "unified-qa-runner",
+      "args": "${workspaceFolder}"
+    }
+  ]
+}

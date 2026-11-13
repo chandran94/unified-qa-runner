@@ -45,4 +45,18 @@ class TeamMemberManagerTest {
                 "name", "Third", "email", "third@example.com", "username", "third", "projectIds", List.of("missing")));
         assertThrows(IllegalArgumentException.class, () -> manager.create(unknownProject, Set.of("project-1")));
     }
+
+    @Test
+    void rejectsLinkingTheSameRegisteredUserTwice() throws Exception {
+        Path project = Files.createTempDirectory("qa-team-registered-user-");
+        Files.writeString(project.resolve("qa-runner.json"), "{}");
+        TeamMemberManager manager = new TeamMemberManager(project);
+        manager.create(new LinkedHashMap<>(Map.of(
+                "name", "First", "email", "first@example.com", "username", "first",
+                "registeredUserId", "user-1", "projectIds", List.of())), Set.of());
+        Map<String, Object> duplicate = new LinkedHashMap<>(Map.of(
+                "name", "Second", "email", "second@example.com", "username", "second",
+                "registeredUserId", "user-1", "projectIds", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> manager.create(duplicate, Set.of()));
+    }
 }

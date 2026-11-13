@@ -48,6 +48,26 @@ Install Newman once if you want to run collections:
 npm install
 ```
 
+### Email verification configuration
+
+Registration email OTP delivery uses SMTP when these process environment variables are configured. For Gmail, use `smtp.gmail.com`, port `587`, STARTTLS, the Gmail account address as the username/from address, and a Google App Password as the password. Never commit these values to `qa-runner.json`, source control or a `.env` file.
+
+Required variables:
+
+```text
+QA_RUNNER_SMTP_HOST
+QA_RUNNER_SMTP_PORT=587
+QA_RUNNER_SMTP_USERNAME
+QA_RUNNER_SMTP_PASSWORD
+QA_RUNNER_SMTP_FROM
+QA_RUNNER_SMTP_STARTTLS=true
+QA_RUNNER_SMTP_SSL=false
+```
+
+SMTP connection setup is bounded to five seconds and I/O to ten seconds. If SMTP is only partially configured, registration fails closed with a configuration error; credentials and OTP values are never logged or returned by the API. The existing HTTPS webhook adapter remains available when SMTP is not configured.
+
+For local automated testing only, explicitly set `QA_RUNNER_AUTH_DEV_VERIFICATION=true` with `QA_RUNNER_ENV=development` before starting the application. The development adapter is disabled when `QA_RUNNER_ENV=production`, does not bypass OTP verification, and does not expose the code through public API responses. Use the injected delivery adapter in focused tests to capture the code.
+
 For a local end-to-end Newman smoke run, start the included fixture in a
 separate PowerShell window, then choose `local-health.postman_collection.json`
 in the runner with `http://127.0.0.1:8080` as the target:

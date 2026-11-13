@@ -333,7 +333,9 @@
     .wiki-nav{border-right:1px solid var(--line)}.wiki-info{border-left:1px solid var(--line)}
     .wiki-main{padding:24px;min-width:0}.wiki-list{display:grid;gap:6px;margin-top:12px}.wiki-list button{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:7px;padding:8px;cursor:pointer;color:#334155}.wiki-list button:hover,.wiki-list button.active{background:#e9e7ff;color:#4338ca;font-weight:700}
     .wiki-tree-child{margin-left:14px;border-left:1px solid #dbe2ef;padding-left:6px}.wiki-toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}.wiki-toolbar-actions{display:flex;gap:8px;flex-wrap:wrap}.wiki-editor{min-height:330px;border:1px solid #cfd6e4;border-radius:9px;padding:14px;outline:none;line-height:1.6;background:#fff}.wiki-editor:focus{border-color:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,.12)}.wiki-meta{font-size:12px;color:#64748b}.wiki-status{display:inline-flex;padding:3px 8px;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:11px;font-weight:700}.wiki-info dt{font-size:11px;text-transform:uppercase;color:#64748b;margin-top:14px}.wiki-info dd{margin:3px 0 0;color:#172033;overflow-wrap:anywhere}.wiki-empty{padding:28px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:10px}
+.database-subnav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:8px;border:1px solid var(--line);border-radius:10px;background:#f8fafc}.database-subnav button{border:0;background:transparent;color:#475569;padding:9px 12px;border-radius:7px;cursor:pointer;font:inherit}.database-subnav button:hover,.database-subnav button.active{background:#e9e7ff;color:#4338ca;font-weight:700}.database-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.database-result-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.database-result-grid>div{padding:14px;border:1px solid var(--line);border-radius:9px;text-align:center}.database-result-grid strong{display:block;font-size:24px;color:#1e293b}.database-result-grid span{font-size:12px;color:#64748b}.database-failure{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}.database-failure:last-child{border-bottom:0}.database-failure span{color:#64748b;text-align:right;overflow-wrap:anywhere}.database-connections-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.database-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.database-toolbar-actions input{min-width:220px}.database-toolbar-actions select{width:76px}.database-row-actions{display:flex;gap:6px;flex-wrap:wrap}.database-pagination{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:14px;color:#64748b;font-size:13px}.database-auth-note{margin-top:16px;padding:12px;border:1px solid #f5d28b;background:#fffbeb;border-radius:8px;color:#92400e}.status-badge{display:inline-flex;padding:4px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:700}
     @media(max-width:950px){.wiki-workspace{grid-template-columns:210px minmax(0,1fr)}.wiki-info{display:none}}
+@media(max-width:800px){.database-overview-grid{grid-template-columns:1fr}.database-result-grid{grid-template-columns:repeat(2,1fr)}.database-connections-toolbar{display:block}.database-toolbar-actions{justify-content:flex-start;margin-top:10px}.database-toolbar-actions input{min-width:0;flex:1}.database-pagination{justify-content:space-between;flex-wrap:wrap}}
     @media(max-width:640px){.wiki-workspace{display:block;min-height:0}.wiki-nav{border-right:0;border-bottom:1px solid var(--line);max-height:220px;overflow:auto}.wiki-main{padding:16px}.wiki-toolbar{align-items:stretch}.wiki-toolbar-actions{width:100%}.wiki-toolbar-actions .btn{flex:1}}
     .team-tabs .active{background:#5b55d9;color:#fff}
     .team-role-permissions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
@@ -1019,9 +1021,20 @@
       /* Collection bar */
       .collection-bar{flex-direction:column;align-items:flex-start}
     }
+    body.auth-pending .layout{visibility:hidden}
+    #authPageRoot{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top right,#e0e7ff 0,#f4f6fb 42%,#eef2ff 100%)}
+    #authPageRoot[hidden]{display:none}
+    .auth-card{width:min(440px,100%);padding:36px;background:#fff;border:1px solid #e1e6ef;border-radius:22px;box-shadow:0 18px 60px rgba(15,23,42,.14)}
+    .auth-card .auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}.auth-card .auth-mark{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#315eea,#6366f1);color:#fff;font-size:22px}.auth-card h1{font-size:26px;margin:0}.auth-card h2{font-size:20px;margin:0 0 6px}.auth-card .auth-subtitle{margin:0 0 22px;color:var(--muted);font-size:13px}.auth-card .auth-field{margin-bottom:14px}.auth-card .auth-field label{margin:0 0 6px}.auth-card .auth-field input{width:100%;padding:12px 13px;border:1px solid #d5dce8;border-radius:10px;font:inherit}.auth-card .auth-field input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(49,94,234,.14)}.auth-card .auth-password{display:flex;gap:8px}.auth-card .auth-password input{flex:1}.auth-card .auth-password button{white-space:nowrap}.auth-card .auth-error{min-height:22px;color:#b32b3b;font-size:13px;margin:8px 0}.auth-card .auth-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}.auth-card .auth-actions .btn{flex:1}.auth-card .auth-link{display:block;margin-top:16px;text-align:center;color:#315eea;background:none;border:0;cursor:pointer;font:inherit;font-size:13px;text-decoration:underline}.auth-card .auth-back{margin-bottom:20px;border:0;background:none;color:#315eea;cursor:pointer;font:inherit;padding:0}
+    .top{position:relative;z-index:3001}
+    .tenant-context-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding:10px 12px;border:1px solid #dfe5f0;border-radius:12px;background:linear-gradient(135deg,#f8faff,#fff);box-shadow:0 4px 16px rgba(31,41,55,.05)}
+    .tenant-context-bar label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748b}.tenant-context-bar select{min-width:190px;max-width:280px;padding:9px 32px 9px 11px;border:1px solid #cfd7e6;border-radius:9px;background:#fff;color:#172033;font:inherit;font-weight:700}.tenant-context-bar select:focus{outline:none;border-color:#5b55d9;box-shadow:0 0 0 3px rgba(91,85,217,.14)}.tenant-context-project{font-size:12px;color:#64748b;padding-left:8px;border-left:1px solid #dfe5f0}.tenant-context-actions{margin-left:auto;display:flex;gap:8px;align-items:center}.tenant-context-status{font-size:12px;color:#64748b}.tenant-context-status.error{color:#b42318}.organization-panel{max-width:900px}.organization-panel-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.organization-panel-card{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.organization-panel-card h3{margin:0 0 12px;color:#172033;font-size:15px}.organization-member-row,.organization-project-row,.organization-invite-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eef1f6}.organization-member-row:last-child,.organization-project-row:last-child,.organization-invite-row:last-child{border-bottom:0}.organization-row-main{flex:1;min-width:0}.organization-row-main strong,.organization-row-main small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.organization-row-main small{color:#64748b;margin-top:3px}.organization-panel input,.organization-panel select{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #cfd7e6;border-radius:8px;font:inherit}.organization-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.organization-form-field{display:flex;flex-direction:column;gap:5px}.organization-form-field.full{grid-column:1/-1}.organization-form-field label{font-size:12px;font-weight:700;color:#344054}.organization-note{padding:10px 12px;border-radius:8px;background:#f6f8fc;color:#64748b;font-size:12px;line-height:1.5}.organization-danger{color:#b42318}
+    @media(max-width:700px){.tenant-context-actions{margin-left:0;width:100%}.tenant-context-actions .btn{flex:1}.organization-panel-grid,.organization-form-grid{grid-template-columns:1fr}.organization-form-field.full{grid-column:auto}.tenant-context-project{border-left:0;padding-left:0;width:100%}}
+    @media (max-width:520px){#authPageRoot{padding:14px}.auth-card{padding:25px 20px;border-radius:16px}.auth-card .auth-actions{flex-direction:column}}
   </style>
 </head>
-<body>
+<body class="auth-pending">
+<div id="authPageRoot" hidden></div>
 <div class="layout">
   <aside>
     <div class="brand">🚀 Unified QA Runner</div>
@@ -1035,12 +1048,18 @@
     <a class="nav" href="#userstories">🧩 User Stories</a>
     <a class="nav" href="#instructions">📖 Instructions</a>
     <a class="nav" href="#wiki">📚 Documentation / Wiki</a>
+    <a class="nav" href="#database">🗄️ Database</a>
   </aside>
   <main id="dashboard">
     <header class="top">
       <div><div class="eyebrow" style="color:#6c5ce7">Quality Engineering Platform</div><h1 style="color:#1a1a2e">QA Test Management Dashboard</h1>
         <div class="muted">Comprehensive test management for modern QA teams.</div></div>
-      <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div id="tenantContextBar" class="tenant-context-bar" aria-label="Organization context">
+          <label for="organizationSelector">Organization</label><select id="organizationSelector" aria-label="Select organization" disabled><option>Loading organizations…</option></select>
+          <span id="tenantContextProject" class="tenant-context-project">Project context: none selected</span>
+          <div class="tenant-context-actions"><span id="tenantContextStatus" class="tenant-context-status" role="status"></span><button type="button" class="btn secondary" onclick="openAcceptOrganizationInvitationModal()">Accept invite</button><button type="button" class="btn secondary" onclick="openOrganizationManager()">Manage</button><button type="button" class="btn primary" onclick="openCreateOrganizationModal()">+ Organization</button></div>
+        </div>
         <div class="runner-toggle">
           <label class="toggle-switch" title="Enable or disable the runner">
             <input type="checkbox" id="runnerToggle" checked onchange="toggleRunner()">
@@ -1049,7 +1068,7 @@
           <span class="toggle-label" id="toggleLabel">Runner enabled</span>
         </div>
         <div class="status enabled" id="connectionStatus">Local runner connected</div>
-        <div class="auth-status" id="authStatus"><span class="auth-user">Not signed in</span><button type="button" class="btn secondary" id="authActionButton" onclick="openLoginModal()">Sign in</button></div>
+        <div class="auth-status" id="authStatus"><span class="auth-user">Not signed in</span><button type="button" class="btn secondary" id="authActionButton" onclick="openLoginModal()">Sign in</button><button type="button" class="btn secondary" onclick="openRegisterModal()">Register</button></div>
       </div>
     </header>
     <div id="toast" class="toast" role="status"></div>
@@ -3699,6 +3718,18 @@ paths:
   ];
   let mode = "frontend", selectedFramework = "all", assets = [], runs = [], activeRunId = null, pollTimer = null, runnerEnabled = true;
   let authState = { user: null, csrfToken: '' };
+  let tenantState = { organizations: [], organizationId: localStorage.getItem('qa.selectedOrganization') || '', generation: 0, controller: null, ready: false, projectId: '', membershipRole: '' };
+  const tenantReadPaths = ['/api/user-stories/projects', '/api/user-stories/epics', '/api/user-stories/sprints', '/api/user-stories/stories', '/api/testcases', '/api/wiki/spaces', '/api/team-members'];
+
+  function tenantScopedUrl(url, method) {
+    if (String(method || 'GET').toUpperCase() !== 'GET' || !tenantState.organizationId) return url;
+    try {
+      const parsed = new URL(url, location.origin);
+      if (!tenantReadPaths.some(path => parsed.pathname === path) || parsed.searchParams.has('organizationId')) return url;
+      parsed.searchParams.set('organizationId', tenantState.organizationId);
+      return parsed.pathname + parsed.search + parsed.hash;
+    } catch (_) { return url; }
+  }
 
   function notify(message) {
     const toast = document.getElementById("toast");
@@ -3707,36 +3738,250 @@ paths:
     window.setTimeout(() => toast.classList.remove("show"), 5000);
   }
   async function api(url, options = {}) {
+    const method = String(options.method || 'GET').toUpperCase();
+    const scopedUrl = tenantScopedUrl(url, method);
     const request = {cache: "no-store", ...options, headers: {...(options.headers || {})}};
+    if (method === 'GET' && tenantState.organizationId && tenantReadPaths.some(path => scopedUrl.split('?', 1)[0] === path) && !request.signal) {
+      if (!tenantState.controller) tenantState.controller = new AbortController();
+      request.signal = tenantState.controller.signal;
+    }
     if (authState.csrfToken && String(request.method || 'GET').toUpperCase() !== 'GET') request.headers['X-CSRF-Token'] = authState.csrfToken;
-    const response = await fetch(url, request);
+    const response = await fetch(scopedUrl, request);
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || `Runner returned HTTP ${response.status}`);
     return body;
   }
-  async function loadAuthState() {
+  let authReturnDestination = '';
+  const protectedHashes = new Set(['#dashboard','#runner','#assets','#history','#testcases','#userstories','#instructions','#wiki','#database']);
+  function safeAuthDestination(value) {
+    if (protectedHashes.has(value)) return value;
+    const pathMap = {'/dashboard':'#dashboard','/testcases':'#testcases','/userstories':'#userstories','/runner':'#runner','/assets':'#assets','/history':'#history','/wiki':'#wiki','/database':'#database'};
+    return pathMap[value] || '';
+  }
+  function updateAuthHeader() {
+    const status = document.getElementById('authStatus');
+    if (!status) return;
+    if (authState.user) status.innerHTML = `<span class="auth-user">${escapeHtml(authState.user.fullName || authState.user.username)}</span><button type="button" class="btn secondary" onclick="logoutUser()">Sign out</button>`;
+    else status.innerHTML = '<span class="auth-user">Not signed in</span><button type="button" class="btn secondary" onclick="openLoginModal()">Sign in</button><button type="button" class="btn secondary" onclick="openRegisterModal()">Register</button>';
+  }
+  function currentOrganization() { return tenantState.organizations.find(item => item.organizationId === tenantState.organizationId) || null; }
+  document.addEventListener('change', event => {
+    const target = event.target;
+    if (target?.id && target.id.toLowerCase().includes('project') && target.value) { tenantState.projectId = target.value; renderTenantContextBar(); }
+  });
+  function renderTenantContextBar(message = '') {
+    const selector = document.getElementById('organizationSelector');
+    const status = document.getElementById('tenantContextStatus');
+    const project = document.getElementById('tenantContextProject');
+    if (!selector) return;
+    selector.replaceChildren();
+    if (!tenantState.organizations.length) {
+      selector.add(new Option(tenantState.ready ? 'No authorized organizations' : 'Loading organizations…', ''));
+      selector.disabled = true;
+    } else {
+      tenantState.organizations.forEach(item => selector.add(new Option(`${item.organizationName} · ${item.organizationSlug}`, item.organizationId)));
+      selector.value = tenantState.organizationId;
+      selector.disabled = false;
+    }
+    selector.onchange = () => switchOrganization(selector.value);
+    const organization = currentOrganization();
+    if (project) project.textContent = tenantState.projectId ? `Project context: ${tenantState.projectId}` : `Project context: ${organization ? 'select a project in a module' : 'none available'}`;
+    if (status) { status.textContent = message || (organization ? `${organization.status} · ${organization.organizationSlug}` : tenantState.ready ? 'No active organization membership' : 'Loading…'); status.className = `tenant-context-status${message ? ' error' : ''}`; }
+  }
+  async function loadOrganizations() {
+    if (!authState.user) return;
+    tenantState.ready = false; renderTenantContextBar();
     try {
-      const result = await api('/api/auth/me');
-      authState = result;
-      const status = document.getElementById('authStatus');
-      if (status) status.innerHTML = `<span class="auth-user">${escapeHtml(result.user.username)}</span><button type="button" class="btn secondary" onclick="logoutUser()">Sign out</button>`;
+      const organizations = await api('/api/organizations');
+      tenantState.organizations = Array.isArray(organizations) ? organizations : [];
+      const stored = localStorage.getItem('qa.selectedOrganization');
+      if (stored && tenantState.organizations.some(item => item.organizationId === stored)) tenantState.organizationId = stored;
+      else if (!stored && tenantState.organizations.length) { tenantState.organizationId = tenantState.organizations[0].organizationId; localStorage.setItem('qa.selectedOrganization', tenantState.organizationId); }
+      else if (stored && !tenantState.organizations.some(item => item.organizationId === stored)) {
+        tenantState.organizationId = '';
+        localStorage.removeItem('qa.selectedOrganization');
+      }
+      tenantState.membershipRole = currentOrganization()?.organizationRole || '';
+      tenantState.ready = true; renderTenantContextBar();
+      if (tenantState.organizationId) await refreshTenantModule();
     } catch (error) {
-      authState = { user: null, csrfToken: '' };
+      tenantState.ready = true; tenantState.organizations = []; tenantState.organizationId = '';
+      localStorage.removeItem('qa.selectedOrganization'); renderTenantContextBar('Organization access could not be loaded.');
+    }
+  }
+  async function switchOrganization(organizationId) {
+    if (!organizationId || organizationId === tenantState.organizationId) return;
+    if (!tenantState.organizations.some(item => item.organizationId === organizationId)) { renderTenantContextBar('That organization is not authorized.'); return; }
+    tenantState.controller?.abort(); tenantState.controller = null; tenantState.generation++;
+    tenantState.organizationId = organizationId; tenantState.projectId = '';
+    tenantState.membershipRole = tenantState.organizations.find(item => item.organizationId === organizationId)?.organizationRole || '';
+    localStorage.setItem('qa.selectedOrganization', organizationId);
+    userStoryProjects = []; userStoryEpics = []; userStorySprints = []; userStoryStories = {items: [], total: 0};
+    allTestCases = []; wikiSpaces = []; wikiPages = []; wikiSelectedSpaceId = ''; wikiSelectedPageId = '';
+    ['userStoryContent','wikiSpacesList','teamContent','testCaseOverview'].forEach(id => { const node = document.getElementById(id); if (node) node.innerHTML = '<div class="module-empty">Loading organization data…</div>'; });
+    renderTenantContextBar('Switching organization…');
+    await refreshTenantModule();
+    renderTenantContextBar();
+  }
+  async function refreshTenantModule() {
+    const generation = tenantState.generation;
+    const hash = location.hash;
+    try {
+      if (hash === '#userstories') await loadUserStoryModule();
+      else if (hash === '#testcases') await loadTestCases();
+      else if (hash === '#wiki') await loadWikiSpaces();
+      else if (hash === '#team') { const content = document.getElementById('moduleDetailContent'); if (content && document.getElementById('teamContent')) await loadTeamStats(); }
+      else if (document.getElementById('repositoryTree')) await loadRepositoryData();
+      if (generation !== tenantState.generation) return;
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      if (generation === tenantState.generation) notify(`Unable to refresh organization data: ${error.message || 'access denied'}`);
+    }
+  }
+  function openCreateOrganizationModal() {
+    const overlay = modalShell('Create organization', `<form onsubmit="event.preventDefault();saveOrganization(this)"><div class="organization-panel"><div class="organization-form-grid"><div class="organization-form-field"><label for="organizationNameInput">Organization name</label><input id="organizationNameInput" name="organizationName" maxlength="120" required></div><div class="organization-form-field"><label for="organizationSlugInput">Unique slug</label><input id="organizationSlugInput" name="organizationSlug" pattern="[a-z0-9][a-z0-9-]{0,61}[a-z0-9]" maxlength="63" required></div></div><p class="organization-note" style="margin-top:14px">You will become the initial organization Owner. The slug is normalized and cannot be used to bypass authorization.</p><div id="organizationFormError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary">Create organization</button></div></div></form>`);
+    overlay.querySelector('#organizationNameInput')?.focus();
+  }
+  async function saveOrganization(form) {
+    const error = form.querySelector('#organizationFormError');
+    try { await api('/api/organizations', {method:'POST', body:JSON.stringify({organizationName:form.organizationName.value.trim(), organizationSlug:form.organizationSlug.value.trim()})}); closeModalOverlay(form.closest('.modal-overlay')); notify('Organization created.'); await loadOrganizations(); }
+    catch (e) { if (error) error.textContent = e.message || 'Unable to create organization.'; }
+  }
+  async function openOrganizationManager() {
+    const organization = currentOrganization();
+    if (!organization) { openCreateOrganizationModal(); return; }
+    const overlay = modalShell('Organization management', '<div class="organization-panel"><div class="module-empty">Loading organization details…</div></div>');
+    overlay.classList.add('organization-panel-overlay');
+    try {
+      const [detail, members, invitations, projects] = await Promise.all([
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}`),
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}/members`),
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}/invitations`),
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}/projects`)
+      ]);
+      const canManage = ['OWNER','ADMIN'].includes(detail.organizationRole || tenantState.membershipRole || '');
+      const body = overlay.querySelector('.user-story-modal-body');
+      if (body) body.innerHTML = renderOrganizationManagement(detail, members, invitations, projects, canManage);
+    } catch (e) {
+      const body = overlay.querySelector('.user-story-modal-body'); if (body) body.innerHTML = `<div class="organization-empty organization-danger">Unable to load organization management: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+  function renderOrganizationManagement(org, members, invitations, projects, canManage) {
+    const memberRows = (members || []).filter(item => item.membershipStatus === 'ACTIVE').map(item => `<div class="organization-member-row"><div class="organization-row-main"><strong>${escapeHtml(item.userId)}</strong><small>${escapeHtml(item.membershipStatus)}</small></div><select aria-label="Role for ${escapeHtml(item.userId)}" ${canManage ? '' : 'disabled'} onchange="updateOrganizationMembership('${escapeHtml(item.membershipId)}',this.value)"><option ${item.organizationRole==='OWNER'?'selected':''}>OWNER</option><option ${item.organizationRole==='ADMIN'?'selected':''}>ADMIN</option><option ${item.organizationRole==='MEMBER'?'selected':''}>MEMBER</option><option ${item.organizationRole==='VIEWER'?'selected':''}>VIEWER</option></select><button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="revokeOrganizationMembership('${escapeHtml(item.membershipId)}')">Revoke</button></div>`).join('') || '<div class="organization-empty">No active members found.</div>';
+    const inviteRows = (invitations || []).map(item => `<div class="organization-invite-row"><div class="organization-row-main"><strong>${escapeHtml(item.invitedEmail)}</strong><small>${escapeHtml(item.intendedRole)} · ${escapeHtml(item.status)} · expires ${escapeHtml(item.expiresAt)}</small></div></div>`).join('') || '<div class="organization-empty">No pending invitations.</div>';
+    const projectRows = (projects || []).map(item => `<div class="organization-project-row"><div class="organization-row-main"><strong>${escapeHtml(item.key)} · ${escapeHtml(item.name)}</strong><small>${escapeHtml(item.id)}</small></div></div>`).join('') || '<div class="organization-empty">No projects visible in this organization.</div>';
+    return `<div class="organization-panel"><div class="organization-note"><strong>${escapeHtml(org.organizationName)}</strong> · ${escapeHtml(org.organizationSlug)} · ${escapeHtml(org.status)}<br>Only server-authorized organization data is displayed.</div><div class="organization-panel-grid" style="margin-top:16px"><section class="organization-panel-card"><h3>Members</h3>${memberRows}</section><section class="organization-panel-card"><h3>Projects</h3>${projectRows}<button type="button" class="btn primary" style="margin-top:12px" ${canManage?'':'disabled'} onclick="openOrganizationProjectModal()">+ Project</button></section><section class="organization-panel-card"><h3>Invitations</h3>${inviteRows}<button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="openOrganizationInvitationModal()">Invite member</button><p class="organization-note" style="margin-top:10px">Invitation delivery is pending when email delivery is unavailable. No invitation token is displayed.</p></section><section class="organization-panel-card"><h3>Settings</h3><button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="openOrganizationSettingsModal()">Edit name or slug</button><p class="organization-note" style="margin-top:10px">Ownership and lifecycle status are protected by the server.</p></section></div></div>`;
+  }
+  let organizationManagerRefresh = Promise.resolve();
+  function refreshOrganizationManager() {
+    organizationManagerRefresh = organizationManagerRefresh.catch(() => {}).then(async () => {
+      document.querySelectorAll('.organization-panel-overlay').forEach(node => node.remove());
+      await openOrganizationManager();
+    });
+    return organizationManagerRefresh;
+  }
+  async function updateOrganizationMembership(membershipId, role) {
+    try { await api(`/api/organizations/${encodeURIComponent(tenantState.organizationId)}/members/${encodeURIComponent(membershipId)}`, {method:'PATCH', body:JSON.stringify({role})}); notify('Member role updated.'); await refreshOrganizationManager(); }
+    catch (e) { notify(`Unable to update member: ${e.message}`); await refreshOrganizationManager(); }
+  }
+  async function revokeOrganizationMembership(membershipId) {
+    if (!confirm('Revoke this organization membership?')) return;
+    try { await api(`/api/organizations/${encodeURIComponent(tenantState.organizationId)}/members/${encodeURIComponent(membershipId)}`, {method:'DELETE', body:'{}'}); notify('Membership revoked.'); await refreshOrganizationManager(); }
+    catch (e) { notify(`Unable to revoke membership: ${e.message}`); }
+  }
+  function openOrganizationInvitationModal() {
+    const overlay = modalShell('Invite organization member', `<form onsubmit="event.preventDefault();saveOrganizationInvitation(this)"><div class="organization-panel"><div class="organization-form-grid"><div class="organization-form-field full"><label>Verified email</label><input name="invitedEmail" type="email" maxlength="320" required></div><div class="organization-form-field"><label>Role</label><select name="intendedRole"><option>MEMBER</option><option>VIEWER</option>${tenantState.membershipRole==='OWNER'?'<option>ADMIN</option>':''}</select></div></div><p class="organization-note" style="margin-top:14px">The invitation will remain pending until delivered and accepted by the verified identity. The invitation token is never shown here.</p><div id="organizationInviteError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary">Create pending invitation</button></div></div></form>`);
+    overlay.querySelector('input[name="invitedEmail"]')?.focus();
+  }
+  async function saveOrganizationInvitation(form) {
+    const error = form.querySelector('#organizationInviteError');
+    try { const result = await api(`/api/organizations/${encodeURIComponent(tenantState.organizationId)}/invitations`, {method:'POST', body:JSON.stringify({invitedEmail:form.invitedEmail.value.trim(), intendedRole:form.intendedRole.value})}); closeModalOverlay(form.closest('.modal-overlay')); notify(`Invitation recorded as ${result.deliveryStatus || 'PENDING'}.`); await refreshOrganizationManager(); }
+    catch (e) { if (error) error.textContent = e.message || 'Unable to create invitation.'; }
+  }
+  function openAcceptOrganizationInvitationModal() {
+    const overlay = modalShell('Accept organization invitation', `<form onsubmit="event.preventDefault();acceptOrganizationInvitation(this)"><div class="organization-panel"><div class="organization-form-grid"><div class="organization-form-field full"><label>Invitation ID</label><input name="invitationId" maxlength="80" required></div><div class="organization-form-field full"><label>Invitation token</label><input name="token" type="password" maxlength="512" autocomplete="off" required></div></div><p class="organization-note" style="margin-top:14px">Use the token received through the verified invitation delivery channel. Tokens are submitted only to the normal authenticated acceptance endpoint and are never displayed after submission.</p><div id="organizationAcceptError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary">Accept invitation</button></div></div></form>`);
+    overlay.querySelector('input[name="invitationId"]')?.focus();
+  }
+  async function acceptOrganizationInvitation(form) {
+    const error = form.querySelector('#organizationAcceptError');
+    try { await api('/api/organization-invitations/accept', {method:'POST', body:JSON.stringify({invitationId:form.invitationId.value.trim(), token:form.token.value})}); closeModalOverlay(form.closest('.modal-overlay')); notify('Invitation accepted.'); await loadOrganizations(); }
+    catch (e) { if (error) error.textContent = e.message || 'Unable to accept invitation.'; }
+  }
+  function openOrganizationProjectModal() {
+    const overlay = modalShell('Create organization project', `<form onsubmit="event.preventDefault();saveOrganizationProject(this)"><div class="organization-panel"><div class="organization-form-grid"><div class="organization-form-field"><label>Project key</label><input name="key" maxlength="10" pattern="[A-Z][A-Z0-9]{1,9}" required></div><div class="organization-form-field"><label>Project name</label><input name="name" maxlength="160" required></div><div class="organization-form-field full"><label>Description</label><textarea name="description" maxlength="1000"></textarea></div></div><div id="organizationProjectError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary">Create project</button></div></div></form>`);
+    overlay.querySelector('input[name="key"]')?.focus();
+  }
+  async function saveOrganizationProject(form) {
+    const error = form.querySelector('#organizationProjectError');
+    try { await api(`/api/organizations/${encodeURIComponent(tenantState.organizationId)}/projects`, {method:'POST', body:JSON.stringify({key:form.key.value.trim(), name:form.name.value.trim(), description:form.description.value.trim()})}); closeModalOverlay(form.closest('.modal-overlay')); notify('Project created in the current organization.'); await loadOrganizations(); await refreshOrganizationManager(); }
+    catch (e) { if (error) error.textContent = e.message || 'Unable to create project.'; }
+  }
+  function openOrganizationSettingsModal() {
+    const organization = currentOrganization(); if (!organization) return;
+    const overlay = modalShell('Organization settings', `<form onsubmit="event.preventDefault();saveOrganizationSettings(this)"><div class="organization-panel"><div class="organization-form-grid"><div class="organization-form-field"><label>Organization name</label><input name="organizationName" maxlength="120" value="${escapeHtml(organization.organizationName)}" required></div><div class="organization-form-field"><label>Organization slug</label><input name="organizationSlug" maxlength="63" pattern="[a-z0-9][a-z0-9-]{0,61}[a-z0-9]" value="${escapeHtml(organization.organizationSlug)}" required></div></div><div id="organizationSettingsError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary">Save settings</button></div></div></form>`);
+    overlay.querySelector('input[name="organizationName"]')?.focus();
+  }
+  async function saveOrganizationSettings(form) {
+    const error = form.querySelector('#organizationSettingsError');
+    try { await api(`/api/organizations/${encodeURIComponent(tenantState.organizationId)}`, {method:'PATCH', body:JSON.stringify({organizationName:form.organizationName.value.trim(), organizationSlug:form.organizationSlug.value.trim()})}); closeModalOverlay(form.closest('.modal-overlay')); notify('Organization settings saved.'); await loadOrganizations(); }
+    catch (e) { if (error) error.textContent = e.message || 'Unable to save organization settings.'; }
+  }
+  function renderAuthPage(mode) {
+    const root = document.getElementById('authPageRoot');
+    const layout = document.querySelector('.layout');
+    if (!root || !layout) return;
+    layout.style.display = 'none'; root.hidden = false; document.body.classList.remove('auth-pending');
+    if (mode === 'register') {
+      root.innerHTML = `<div class="auth-card"><button class="auth-back" type="button" onclick="showAuthPage('login')">← Back to sign in</button><div class="auth-brand"><div class="auth-mark">✓</div><div><h1>Unified QA Runner</h1><div class="muted">Quality engineering platform</div></div></div><h2>Create your account</h2><p class="auth-subtitle">Register with an email address or mobile number. Verification is required before sign in.</p><form onsubmit="event.preventDefault();submitRegistration(this)"><div class="auth-field"><label for="registerFullName">Full name</label><input id="registerFullName" name="fullName" autocomplete="name" required maxlength="160"></div><div class="auth-field"><label for="registerUsername">Username</label><input id="registerUsername" name="username" autocomplete="username" required pattern="[A-Za-z0-9._-]{3,40}"></div><div class="auth-field"><label for="registerContact">Email or mobile number</label><input id="registerContact" name="contact" autocomplete="email tel" required></div><div class="auth-field"><label for="registerPassword">Password</label><input id="registerPassword" name="password" type="password" autocomplete="new-password" required minlength="12"></div><div class="auth-field"><label for="registerConfirmPassword">Confirm password</label><input id="registerConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required minlength="12"></div><div id="registerError" class="auth-error" role="alert"></div><div class="auth-actions"><button type="submit" class="btn primary" id="registerSubmitButton">Create account</button></div></form><button class="auth-link" type="button" onclick="showAuthPage('login')">Already have an account? Sign in</button></div>`;
+      return;
+    }
+    if (mode === 'forgot') {
+      root.innerHTML = `<div class="auth-card"><button class="auth-back" type="button" onclick="showAuthPage('login')">← Back to sign in</button><div class="auth-brand"><div class="auth-mark">✓</div><div><h1>Unified QA Runner</h1><div class="muted">Quality engineering platform</div></div></div><h2>Password help</h2><p class="auth-subtitle">Password reset is not enabled in this phase. Return to sign in or contact an administrator.</p><div class="auth-actions"><button class="btn primary" type="button" onclick="showAuthPage('login')">Back to sign in</button></div></div>`;
+      return;
+    }
+    root.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="auth-mark">✓</div><div><h1>Unified QA Runner</h1><div class="muted">Quality engineering platform</div></div></div><h2>Welcome back</h2><p class="auth-subtitle">Sign in to continue to your QA workspace.</p><form onsubmit="event.preventDefault();submitLogin(this)"><div class="auth-field"><label for="authUsername">Username, email or mobile</label><input id="authUsername" name="username" autocomplete="username" required autofocus></div><div class="auth-field"><label for="authPassword">Password</label><div class="auth-password"><input id="authPassword" name="password" type="password" autocomplete="current-password" required><button type="button" class="btn secondary" onclick="togglePasswordVisibility()">Show</button></div></div><div id="authError" class="auth-error" role="alert"></div><div class="auth-actions"><button type="submit" class="btn primary" id="authSubmitButton">Sign In</button></div></form><button class="auth-link" type="button" onclick="showAuthPage('forgot')">Forgot password?</button><button class="auth-link" type="button" onclick="showAuthPage('register')">Create an account</button></div>`;
+  }
+  function showAuthPage(mode) { history.replaceState({}, '', mode === 'login' ? '/login' : '/' + mode); renderAuthPage(mode); }
+  function showApplication(destination) {
+    const root = document.getElementById('authPageRoot'), layout = document.querySelector('.layout');
+    if (root) { root.hidden = true; root.innerHTML = ''; }
+    if (layout) layout.style.display = '';
+    document.body.classList.remove('auth-pending'); updateAuthHeader();
+    renderTenantContextBar();
+    loadOrganizations();
+    const target = safeAuthDestination(destination) || safeAuthDestination(location.hash) || '#dashboard';
+    history.replaceState({}, '', '/dashboard');
+    if (location.hash !== target) location.hash = target.substring(1); else updateInstructionsVisibility();
+  }
+  async function loadAuthState() {
+    authReturnDestination = safeAuthDestination(location.hash) || safeAuthDestination(new URLSearchParams(location.search).get('return')) || '#dashboard';
+    try {
+      const result = await api('/api/auth/me'); authState = result; showApplication(location.pathname === '/login' ? '#dashboard' : authReturnDestination);
+    } catch (error) {
+      authState = { user: null, csrfToken: '' }; renderAuthPage(location.pathname === '/register' ? 'register' : location.pathname === '/forgot-password' ? 'forgot' : 'login');
     }
   }
   function openLoginModal() {
-    const overlay = modalShell('Sign in to Unified QA Runner', `<form onsubmit="event.preventDefault();submitLogin(this)"><div class="user-story-form-grid"><div class="user-story-field full"><label for="authUsername">Username or email</label><input id="authUsername" name="username" autocomplete="username" required autofocus></div><div class="user-story-field full"><label for="authPassword">Password</label><div style="display:flex;gap:8px"><input id="authPassword" name="password" type="password" autocomplete="current-password" required style="flex:1"><button type="button" class="btn secondary" onclick="togglePasswordVisibility()">Show</button></div></div><div class="user-story-field full"><div id="authError" class="muted" role="alert"></div></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="authSubmitButton">Sign In</button></div></form>`);
+    const overlay = modalShell('Sign in to Unified QA Runner', `<form onsubmit="event.preventDefault();submitLogin(this)"><div class="user-story-form-grid"><div class="user-story-field full"><label for="authUsername">Username or email</label><input id="authUsername" name="username" autocomplete="username" required autofocus></div><div class="user-story-field full"><label for="authPassword">Password</label><div style="display:flex;gap:8px"><input id="authPassword" name="password" type="password" autocomplete="current-password" required style="flex:1"><button type="button" class="btn secondary" onclick="togglePasswordVisibility()">Show</button></div></div><div class="user-story-field full"><div id="authError" class="muted" role="alert"></div></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="openRegisterModal();closeModalOverlay(this.closest('.modal-overlay'))">Register</button><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="authSubmitButton">Sign In</button></div></form>`);
     overlay.dataset.authModal = 'true';
   }
   function togglePasswordVisibility() { const input = document.getElementById('authPassword'); if (input) input.type = input.type === 'password' ? 'text' : 'password'; }
   async function submitLogin(form) {
     const button = document.getElementById('authSubmitButton'); const error = document.getElementById('authError');
     button.disabled = true; button.textContent = 'Signing in…'; if (error) error.textContent = '';
-    try { authState = await api('/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:form.username.value, password:form.password.value})}); closeModalOverlay(form.closest('.modal-overlay')); const status=document.getElementById('authStatus'); if(status) status.innerHTML=`<span class="auth-user">${escapeHtml(authState.user.username)}</span><button type="button" class="btn secondary" onclick="logoutUser()">Sign out</button>`; notify('Signed in successfully.'); }
+    try { authState = await api('/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:form.username.value, password:form.password.value})}); if (form.closest('.modal-overlay')) closeModalOverlay(form.closest('.modal-overlay')); showApplication(authReturnDestination || '#dashboard'); notify('Signed in successfully.'); }
     catch (requestError) { if (error) error.textContent = requestError.message || 'Unable to sign in.'; }
     finally { button.disabled = false; button.textContent = 'Sign In'; }
   }
-  async function logoutUser() { try { await api('/api/auth/logout', {method:'POST'}); } catch (error) { notify(error.message || 'Unable to sign out.'); return; } authState={user:null,csrfToken:''}; const status=document.getElementById('authStatus'); if(status) status.innerHTML='<span class="auth-user">Not signed in</span><button type="button" class="btn secondary" onclick="openLoginModal()">Sign in</button>'; notify('Signed out.'); }
+  async function logoutUser() { try { await api('/api/auth/logout', {method:'POST'}); } catch (error) { notify(error.message || 'Unable to sign out.'); return; } authState={user:null,csrfToken:''}; authReturnDestination='#dashboard'; history.replaceState({}, '', '/login'); renderAuthPage('login'); notify('Signed out.'); }
+  let authVerificationToken = '';
+  function openRegisterModal(){modalShell('Create your Unified QA Runner account',`<form onsubmit="event.preventDefault();submitRegistration(this)"><div class="user-story-form-grid"><div class="user-story-field full"><label for="registerFullName">Full name</label><input id="registerFullName" name="fullName" autocomplete="name" required maxlength="160"></div><div class="user-story-field"><label for="registerUsername">Username</label><input id="registerUsername" name="username" autocomplete="username" required pattern="[A-Za-z0-9._-]{3,40}"></div><div class="user-story-field"><label for="registerContact">Email or mobile number</label><input id="registerContact" name="contact" autocomplete="email tel" required></div><div class="user-story-field"><label for="registerPassword">Password</label><input id="registerPassword" name="password" type="password" autocomplete="new-password" required minlength="12"></div><div class="user-story-field"><label for="registerConfirmPassword">Confirm password</label><input id="registerConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required minlength="12"></div><div class="user-story-field full"><div id="registerError" class="muted" role="alert"></div></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="openLoginModal();closeModalOverlay(this.closest('.modal-overlay'))">Sign In</button><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="registerSubmitButton">Register</button></div></form>`);}
+  async function submitRegistration(form){const button=document.getElementById('registerSubmitButton'),error=document.getElementById('registerError');if(form.password.value!==form.confirmPassword.value){error.textContent='Passwords do not match.';return;}button.disabled=true;button.textContent='Registering…';error.textContent='';try{const result=await api('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fullName:form.fullName.value.trim(),username:form.username.value.trim(),contact:form.contact.value.trim(),password:form.password.value,confirmPassword:form.confirmPassword.value})});if(!result.verificationToken){error.textContent=result.message||'If eligible, verification instructions will be sent.';return;}authVerificationToken=result.verificationToken;if(form.closest('.modal-overlay')) closeModalOverlay(form.closest('.modal-overlay'));openVerificationModal(result);}catch(e){error.textContent=e.message||'Unable to register.';}finally{button.disabled=false;button.textContent='Register';}}
+  let verificationCountdownTimer;
+  function startVerificationCountdown(expiresAt){window.clearInterval(verificationCountdownTimer);const tick=()=>{const target=new Date(expiresAt).getTime(),remaining=Math.max(0,target-Date.now()),node=document.getElementById('verificationCountdown');if(node)node.textContent=remaining?'Code expires in '+Math.ceil(remaining/1000)+' seconds.':'Code expired. Please register again.';if(!remaining)window.clearInterval(verificationCountdownTimer);};tick();verificationCountdownTimer=window.setInterval(tick,1000);}
+  function openVerificationModal(result){modalShell('Verify your account',`<form onsubmit="event.preventDefault();confirmRegistration(this)"><div class="user-story-field"><p>Enter the code sent to <strong>${escapeHtml(result.destination||'your contact')}</strong>.</p><p id="verificationCountdown" class="muted"></p><label for="verificationOtp">Verification code</label><input id="verificationOtp" name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus><div id="verificationError" class="muted" role="alert"></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="resendRegistration(this)">Resend OTP</button><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="verificationSubmitButton">Verify</button></div></form>`);startVerificationCountdown(result.expiresAt);}
+  async function confirmRegistration(form){const button=document.getElementById('verificationSubmitButton'),error=document.getElementById('verificationError');button.disabled=true;error.textContent='';try{const result=await api('/api/auth/verification/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verificationToken:authVerificationToken,otp:form.otp.value.trim()})});window.clearInterval(verificationCountdownTimer);if(form.closest('.modal-overlay'))closeModalOverlay(form.closest('.modal-overlay'));authVerificationToken='';showAuthPage('login');notify(result.message||'Account verified. Please sign in.');}catch(e){error.textContent=e.message||'Verification failed.';}finally{button.disabled=false;}}
+  async function resendRegistration(button){button.disabled=true;try{const result=await api('/api/auth/verification/resend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verificationToken:authVerificationToken})});startVerificationCountdown(result.expiresAt);notify('A new verification code was requested.');}catch(e){notify(e.message||'Unable to resend verification code.');}finally{button.disabled=false;}}
   function chooseMode(nextMode) {
     mode = nextMode;
     document.querySelectorAll(".mode").forEach(button =>
@@ -5312,7 +5557,7 @@ paths:
     overlay.classList.add("show");
     // Load existing config
     try {
-      const config = await api("/api/cicd/config");
+      const config = await api(`/api/cicd/config?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`);
       if (config.configured) {
         document.getElementById("cicdPlatform").value = config.platform || "github";
         document.getElementById("cicdRepoUrl").value = config.repoUrl || "";
@@ -5491,7 +5736,9 @@ paths:
       triggerType: document.getElementById("cicdTriggerType").value,
       scheduleCron: getCiCdScheduleCron(),
       jenkinsUrl: document.getElementById("cicdJenkinsUrl").value.trim(),
-      frameworks: selectedFrameworks
+      frameworks: selectedFrameworks,
+      organizationId: tenantState.organizationId,
+      projectId: tenantState.projectId
     };
   }
 
@@ -5559,7 +5806,7 @@ paths:
     }
     showCiCdResult("cicdResultConnection", "Testing Connection...", "Connecting to " + (data.platform === "github" ? "GitHub" : "Jenkins") + "...", "info");
     try {
-      const result = await api("/api/cicd/test-connection", {
+      const result = await api(`/api/cicd/test-connection?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`, {
         method: "POST",
         body: JSON.stringify(data)
       });
@@ -5592,7 +5839,7 @@ paths:
     }
     showCiCdResult("cicdResultSave", "Saving...", "Saving CI/CD configuration...", "info");
     try {
-      const result = await api("/api/cicd/config", {
+      const result = await api(`/api/cicd/config?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`, {
         method: "POST",
         body: JSON.stringify(data)
       });
@@ -5615,7 +5862,7 @@ paths:
   async function downloadWorkflow() {
     showCiCdResult("cicdResultDownload", "Generating...", "Generating workflow file...", "info");
     try {
-      const response = await fetch("/api/cicd/generate", {cache: "no-store"});
+      const response = await fetch(`/api/cicd/generate?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`, {cache: "no-store"});
       if (!response.ok) {
         const err = await response.json();
         showCiCdResult("cicdResultDownload", "Generation Failed", err.error || "Failed to generate workflow", "error");
@@ -5646,7 +5893,7 @@ paths:
   async function commitWorkflow() {
     showCiCdResult("cicdResultCommit", "Committing...", "Committing workflow file to repository...", "info");
     try {
-      const result = await api("/api/cicd/commit", {
+      const result = await api(`/api/cicd/commit?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`, {
         method: "POST"
       });
       if (result.success) {
@@ -5664,7 +5911,7 @@ paths:
 
   async function loadPipelineStatus() {
     try {
-      const status = await api("/api/cicd/status");
+      const status = await api(`/api/cicd/status?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`);
       const badge = document.getElementById("cicdStatusBadge");
       const text = document.getElementById("cicdStatusText");
       const sub = document.getElementById("cicdStatusSub");
@@ -5703,7 +5950,7 @@ paths:
   async function refreshPipelineStatus() {
     try {
       // Clear cache by calling status again
-      const status = await api("/api/cicd/status");
+       const status = await api(`/api/cicd/status?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`);
       loadPipelineStatus();
       notify("✅ Pipeline status refreshed");
     } catch (e) {
@@ -6070,10 +6317,11 @@ paths:
 
   async function loadUserStoryModule() {
     try {
-      [userStoryProjects, userStoryEpics, userStorySprints] = await Promise.all([
-        api('/api/user-stories/projects'),
-        api('/api/user-stories/epics'),
-        api('/api/user-stories/sprints?includeCompleted=true')
+      userStoryProjects = await api('/api/user-stories/projects');
+      const scopedProjectId = userStoryProjects[0]?.id || '';
+      [userStoryEpics, userStorySprints] = await Promise.all([
+        scopedProjectId ? api('/api/user-stories/epics?projectId=' + encodeURIComponent(scopedProjectId)) : Promise.resolve([]),
+        scopedProjectId ? api('/api/user-stories/sprints?projectId=' + encodeURIComponent(scopedProjectId) + '&includeCompleted=true') : Promise.resolve([])
       ]);
       await loadUserStoryList();
       renderUserStoryView();
@@ -6083,7 +6331,7 @@ paths:
   }
 
   async function loadUserStoryList() {
-    const projectId = document.getElementById('userStoryProjectFilter')?.value || '';
+    const projectId = document.getElementById('userStoryProjectFilter')?.value || userStoryProjects[0]?.id || '';
     const search = document.getElementById('userStorySearch')?.value || '';
     const query = new URLSearchParams({ offset: String(userStoryPage * USER_STORY_PAGE_SIZE), limit: String(USER_STORY_PAGE_SIZE) });
     if (projectId) query.set('projectId', projectId);
@@ -9410,6 +9658,7 @@ paths:
   }
 
   let wikiSpaces = [], wikiPages = [], wikiSelectedSpaceId = '', wikiSelectedPageId = '', wikiPageVersion = 0, wikiInfoCollapsed = false;
+  let databaseOverview = null, databaseConnections = [], databaseConnectionPage = 0, databaseConnectionPageSize = 10, databaseConnectionSearch = '', databaseConnectionTestTimers = {};
   function renderWikiModule() { return `<div class="wiki-workspace"><nav class="wiki-nav" aria-label="Wiki navigation"><div class="wiki-toolbar"><strong>Spaces</strong><button type="button" class="btn secondary" onclick="openWikiSpaceModal()">+ Space</button></div><input id="wikiSpaceSearch" type="search" placeholder="Search spaces" aria-label="Search spaces" oninput="renderWikiSpaces()" style="width:100%;margin-top:12px"><div id="wikiSpacesList" class="wiki-list"><div class="wiki-empty">Loading spaces…</div></div></nav><main class="wiki-main"><div id="wikiPageArea" class="wiki-empty">Select a space to begin.</div></main><aside class="wiki-info" id="wikiInfoPanel"><div class="wiki-toolbar"><strong>Page information</strong><button id="wikiInfoToggle" type="button" class="btn secondary" onclick="toggleWikiInfo()">Hide</button></div><div id="wikiPageInfo" class="wiki-meta" style="margin-top:18px">Select a page to view metadata.</div></aside></div>`; }
   async function loadWikiSpaces() { const list=document.getElementById('wikiSpacesList'); if(!list)return; list.innerHTML='<div class="wiki-empty">Loading spaces…</div>'; try { wikiSpaces=await api('/api/wiki/spaces'); renderWikiSpaces(); const activeSpaces=wikiSpaces.filter(s=>s.status!=='ARCHIVED'); if(wikiSelectedSpaceId && activeSpaces.some(s=>s.id===wikiSelectedSpaceId)) await selectWikiSpace(wikiSelectedSpaceId); else if(activeSpaces[0]) await selectWikiSpace(activeSpaces[0].id); else { wikiSelectedSpaceId=''; wikiSelectedPageId=''; document.getElementById('wikiPageArea').innerHTML='<div class="wiki-empty">Create a space to begin documenting.</div>'; } } catch(e){ list.innerHTML=`<div class="wiki-empty">Unable to load spaces: ${escapeHtml(e.message)}</div>`; } }
   function renderWikiSpaces() { const list=document.getElementById('wikiSpacesList'); if(!list)return; const query=(document.getElementById('wikiSpaceSearch')?.value||'').toLowerCase(); const spaces=wikiSpaces.filter(s=>s.status!=='ARCHIVED').filter(s=>(s.name+' '+s.key).toLowerCase().includes(query)); list.innerHTML=spaces.length?spaces.map(s=>`<button type="button" class="${s.id===wikiSelectedSpaceId?'active':''}" onclick="selectWikiSpace('${escapeHtml(s.id)}')"><strong>${escapeHtml(s.key)}</strong><br><small>${escapeHtml(s.name)}</small></button>`).join(''):'<div class="wiki-empty">No spaces found.</div>'; }
@@ -9425,6 +9674,18 @@ paths:
   async function wikiArchivePage(){ const page=wikiPages.find(p=>p.id===wikiSelectedPageId); if(!page||!confirm('Archive this page?'))return; try{await api(`/api/wiki/pages/${encodeURIComponent(page.id)}/archive`,{method:'POST',body:JSON.stringify({version:page.version})});notify('Page archived.');await selectWikiSpace(page.spaceId);}catch(e){notify('Unable to archive page: '+e.message);} }
   async function wikiArchiveSpace(){ const space=wikiSpaces.find(s=>s.id===wikiSelectedSpaceId); if(!space||!confirm('Archive this space?'))return; try{await api(`/api/wiki/spaces/${encodeURIComponent(space.id)}/archive`,{method:'POST'});notify('Space archived.');wikiSelectedSpaceId='';wikiSelectedPageId='';await loadWikiSpaces();}catch(e){notify('Unable to archive space: '+e.message);} }
   function toggleWikiInfo(){ wikiInfoCollapsed=!wikiInfoCollapsed; const panel=document.getElementById('wikiInfoPanel'); const button=document.getElementById('wikiInfoToggle'); if(panel) panel.hidden=wikiInfoCollapsed; if(button) button.textContent=wikiInfoCollapsed?'Show':'Hide'; }
+
+  function renderDatabaseModule() { return `<div class="database-module"><nav class="database-subnav" aria-label="Database navigation"><button data-section="overview" type="button" class="active" onclick="showDatabaseSection('overview')">Overview</button><button data-section="connections" type="button" onclick="showDatabaseSection('connections')">Connections</button><button data-section="sql" type="button" onclick="showDatabaseSection('sql')">SQL Editor</button><button data-section="schema" type="button" onclick="showDatabaseSection('schema')">Schema Explorer</button><button data-section="cases" type="button" onclick="showDatabaseSection('cases')">Database Test Cases</button><button data-section="data" type="button" onclick="showDatabaseSection('data')">Test Data</button><button data-section="history" type="button" onclick="showDatabaseSection('history')">Execution History</button><button data-section="reports" type="button" onclick="showDatabaseSection('reports')">Reports</button></nav><div id="databaseSectionBody"><div class="module-empty">Loading database overview…</div></div></div>`; }
+  async function loadDatabaseOverview() { const body=document.getElementById('databaseSectionBody'); if(!body)return; body.innerHTML='<div class="module-empty">Loading database overview…</div>'; try { databaseOverview=await api('/api/database/overview'); renderDatabaseOverview(); } catch(e){ body.innerHTML=`<div class="module-empty">Unable to load database overview: ${escapeHtml(e.message)}</div>`; } }
+  function renderDatabaseOverview() { const body=document.getElementById('databaseSectionBody'); const data=databaseOverview||{}; if(!body)return; const results=data.results||{}; const latest=data.latestExecution; const failures=Array.isArray(data.recentConnectionFailures)?data.recentConnectionFailures:[]; body.innerHTML=`<div class="module-actions"><button type="button" class="btn secondary" onclick="loadDatabaseOverview()">🔄 Refresh</button></div><div class="module-stats"><div class="module-stat"><div class="module-stat-value">${data.configuredConnections??0}</div><div class="module-stat-label">Configured Connections</div></div><div class="module-stat"><div class="module-stat-value">${data.connectedConnections??0}</div><div class="module-stat-label">Connected</div></div><div class="module-stat"><div class="module-stat-value">${data.databaseTestCases??0}</div><div class="module-stat-label">Database Test Cases</div></div><div class="module-stat"><div class="module-stat-value">${data.databaseAssets??0}</div><div class="module-stat-label">Discovered SQL Assets</div></div></div><div class="database-overview-grid"><section class="panel"><div class="panel-head"><h2>Execution results</h2></div><div class="database-result-grid"><div><strong>${results.PASSED||0}</strong><span>Passed</span></div><div><strong>${results.FAILED||0}</strong><span>Failed</span></div><div><strong>${results.SKIPPED||0}</strong><span>Skipped</span></div><div><strong>${results.NOT_RUN||0}</strong><span>Not run</span></div></div></section><section class="panel"><div class="panel-head"><h2>Latest database execution</h2></div>${latest?`<p><strong>${escapeHtml(latest.selection||latest.id||'Database run')}</strong></p><p class="muted">${escapeHtml(latest.status||'Unknown')} · ${escapeHtml(latest.startedAt||'')}</p>`:'<div class="module-empty">No database execution recorded.</div>'}</section><section class="panel"><div class="panel-head"><h2>Connection failures</h2></div>${failures.length?failures.map(item=>`<div class="database-failure"><strong>${escapeHtml(item.selection||item.id||'Connection')}</strong><span>${escapeHtml(item.error||item.status||'Failed')}</span></div>`).join(''):'<div class="module-empty">No connection failures recorded.</div>'}</section><section class="panel"><div class="panel-head"><h2>Database engine distribution</h2></div>${data.engineDistribution?.length?data.engineDistribution.map(item=>`<div class="database-failure"><strong>${escapeHtml(item.engine)}</strong><span>${item.count}</span></div>`).join(''):'<div class="module-empty">No database connections configured yet.</div>'}</section></div>`; }
+  function showDatabaseSection(section) { document.querySelectorAll('.database-subnav button').forEach(button=>button.classList.toggle('active',button.dataset.section===section)); if(section==='overview'){loadDatabaseOverview();return;} if(section==='connections'){loadDatabaseConnections();return;} const labels={sql:'The read-only SQL Editor is planned for Phase 3.',schema:'Schema Explorer is planned for Phase 3.',cases:'Database Test Cases will reuse the existing TCM in Phase 4.',data:'Test Data management is planned for Phase 6.',history:'Database execution history will reuse the existing run store in Phase 4.',reports:'Database reporting will be added with execution integration in Phase 5.'}; const body=document.getElementById('databaseSectionBody'); if(body)body.innerHTML=`<div class="panel"><div class="panel-head"><h2>${escapeHtml(section[0].toUpperCase()+section.slice(1))}</h2></div><div class="module-empty">${escapeHtml(labels[section]||'This Database section is not available yet.')}</div></div>`; }
+  async function loadDatabaseConnections(){const body=document.getElementById('databaseSectionBody');if(!body)return;body.innerHTML='<div class="module-empty">Loading database connections…</div>';try{const result=await api(`/api/database/connections?organizationId=${encodeURIComponent(tenantState.organizationId)}&search=${encodeURIComponent(databaseConnectionSearch)}&page=${databaseConnectionPage}&pageSize=${databaseConnectionPageSize}`);databaseConnections=result.items||[];renderDatabaseConnections(result);}catch(e){body.innerHTML=`<div class="panel"><div class="module-empty">${e.message.includes('Authentication')?'Sign in is required to view database connections.':`Unable to load connections: ${escapeHtml(e.message)}`}</div></div>`;}}
+  function renderDatabaseConnections(result={total:databaseConnections.length,page:databaseConnectionPage,pageSize:databaseConnectionPageSize}){const body=document.getElementById('databaseSectionBody');if(!body)return;const signedIn=Boolean(authState.user);const rows=databaseConnections.map(c=>`<tr><td><strong>${escapeHtml(c.name)}</strong><div class="muted">${escapeHtml(c.host)}:${c.port}/${escapeHtml(c.databaseName)}</div></td><td>${escapeHtml(c.type)}</td><td>${escapeHtml(c.environment)}</td><td><span class="status-badge">${escapeHtml(c.status||'DISCONNECTED')}</span></td><td>${c.readOnly?'Read-only':'Restricted'}</td><td><div class="database-row-actions"><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="testDatabaseConnection('${escapeHtml(c.id)}')">Test</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="connectDatabaseConnection('${escapeHtml(c.id)}','${c.status==='CONNECTED'?'disconnect':'connect'}')">${c.status==='CONNECTED'?'Disconnect':'Connect'}</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionModal('${escapeHtml(c.id)}')">Edit</button><button class="btn danger" type="button" ${signedIn?'':'disabled'} onclick="deleteDatabaseConnection('${escapeHtml(c.id)}')">Delete</button></div><div id="db-test-${escapeHtml(c.id)}" class="muted"></div></td></tr>`).join('');const total=Number(result.total||0),from=total?result.page*result.pageSize+1:0,to=Math.min((result.page+1)*result.pageSize,total);body.innerHTML=`<div class="database-connections-toolbar"><div><h2>Connections</h2><p class="muted">Credentials are encrypted and never returned to the browser.</p></div><div class="database-toolbar-actions"><input type="search" placeholder="Search connections" aria-label="Search connections" value="${escapeHtml(databaseConnectionSearch)}" oninput="databaseConnectionSearch=this.value;databaseConnectionPage=0;loadDatabaseConnections()"><select aria-label="Rows per page" onchange="databaseConnectionPageSize=Number(this.value);databaseConnectionPage=0;loadDatabaseConnections()"><option value="10" ${databaseConnectionPageSize===10?'selected':''}>10</option><option value="20" ${databaseConnectionPageSize===20?'selected':''}>20</option><option value="50" ${databaseConnectionPageSize===50?'selected':''}>50</option></select><button type="button" class="btn primary" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionModal()">+ Add Connection</button></div></div><div class="tablewrap"><table class="instructions-table"><thead><tr><th>Name</th><th>Type</th><th>Environment</th><th>Status</th><th>Access</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="module-empty">No database connections configured.</div></td></tr>'}</tbody></table></div><div class="database-pagination"><span>Showing ${from}–${to} of ${total}</span><button type="button" class="btn secondary" ${databaseConnectionPage<1?'disabled':''} onclick="databaseConnectionPage--;loadDatabaseConnections()">Previous</button><button type="button" class="btn secondary" ${(to>=total||!total)?'disabled':''} onclick="databaseConnectionPage++;loadDatabaseConnections()">Next</button></div>${signedIn?'':'<div class="database-auth-note">Sign in with an authorized team role to create, edit, test or delete connections.</div>'}`;}
+  function openDatabaseConnectionModal(id=''){const item=databaseConnections.find(c=>c.id===id);const types=['MYSQL','POSTGRESQL','SQLSERVER','ORACLE'];const overlay=modalShell(item?'Edit Database Connection':'Add Database Connection',`<form id="databaseConnectionForm" onsubmit="event.preventDefault();saveDatabaseConnection(this)"><div class="user-story-form-grid"><div class="user-story-field"><label>Connection name</label><input name="name" required maxlength="160" value="${escapeHtml(item?.name||'')}"></div><div class="user-story-field"><label>Database type</label><select name="type">${types.map(t=>`<option value="${t}" ${t===item?.type?'selected':''}>${t}</option>`).join('')}</select></div><div class="user-story-field"><label>Host</label><input name="host" required value="${escapeHtml(item?.host||'localhost')}"></div><div class="user-story-field"><label>Port</label><input name="port" type="number" min="1" max="65535" required value="${item?.port||5432}"></div><div class="user-story-field"><label>Database / service name</label><input name="databaseName" required value="${escapeHtml(item?.databaseName||'')}"></div><div class="user-story-field"><label>Username</label><input name="username" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Password</label><input name="password" type="password" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Environment</label><select name="environment">${['LOCAL','QA','STAGING','PRODUCTION'].map(x=>`<option ${x===(item?.environment||'LOCAL')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>TLS / SSL</label><select name="tlsMode">${['VERIFY','REQUIRED','DISABLED'].map(x=>`<option ${x===(item?.tlsMode||'VERIFY')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>Connection timeout (seconds)</label><input name="connectionTimeoutSeconds" type="number" min="1" max="60" value="${item?.connectionTimeoutSeconds||5}"></div><div class="user-story-field"><label><input name="readOnly" type="checkbox" ${item?.readOnly!==false?'checked':''}> Read-only mode</label></div></div><div id="databaseConnectionError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="databaseConnectionSave">${item?'Save Changes':'Add Connection'}</button></div></form>`);overlay.dataset.connectionId=id;}
+  async function saveDatabaseConnection(form){const button=document.getElementById('databaseConnectionSave'),error=document.getElementById('databaseConnectionError');button.disabled=true;button.textContent='Saving…';if(error)error.textContent='';const values={organizationId:tenantState.organizationId,name:form.name.value.trim(),type:form.type.value,host:form.host.value.trim(),port:Number(form.port.value),databaseName:form.databaseName.value.trim(),username:form.username.value,password:form.password.value,environment:form.environment.value,tlsMode:form.tlsMode.value,connectionTimeoutSeconds:Number(form.connectionTimeoutSeconds.value),readOnly:form.readOnly.checked};const id=form.closest('.modal-overlay').dataset.connectionId;try{await api(id?`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`:'/api/database/connections',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});closeModalOverlay(form.closest('.modal-overlay'));notify('Database connection saved.');await loadDatabaseConnections();}catch(e){if(error)error.textContent=e.message||'Unable to save connection.';else notify(e.message);}finally{button.disabled=false;button.textContent=id?'Save Changes':'Add Connection';}}
+  async function deleteDatabaseConnection(id){if(!confirm('Delete this connection metadata?'))return;try{await api(`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'DELETE'});notify('Connection deleted.');await loadDatabaseConnections();}catch(e){notify(e.message);}}
+  async function connectDatabaseConnection(id,action){try{await api(`/api/database/connections/${encodeURIComponent(id)}/${action}?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'POST'});notify(action==='connect'?'Connection opened.':'Connection closed.');await loadDatabaseConnections();}catch(e){notify(e.message);}}
+  async function testDatabaseConnection(id){const target=document.getElementById('db-test-'+id);if(target)target.textContent='Queued…';try{const started=await api(`/api/database/connections/${encodeURIComponent(id)}/test?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'POST'});let attempts=0;const poll=async()=>{const state=await api(`/api/database/connection-tests/${encodeURIComponent(started.id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`);if(target)target.textContent=state.status+(state.error?`: ${state.error}`:'');if(!['QUEUED','RUNNING'].includes(state.status)||++attempts>=20){delete databaseConnectionTestTimers[id];return;}databaseConnectionTestTimers[id]=setTimeout(poll,500);};poll();}catch(e){if(target)target.textContent=e.message;}}
 
   // QA Test Management Dashboard - Module Navigation
   function openModule(moduleId) {
@@ -9456,6 +9717,7 @@ paths:
       team: { title: '👥 Team Management', icon: '👥' },
       configuration: { title: '⚙️ Configuration', icon: '⚙️' },
       wiki: { title: '📚 Documentation / Wiki', icon: '📚' }
+      ,database: { title: '🗄️ Database', icon: '🗄️' }
     };
     
     const mod = modules[moduleId] || { title: moduleId, icon: '📋' };
@@ -9473,6 +9735,7 @@ paths:
       if (moduleId === 'defects') loadDefectStats();
       if (moduleId === 'team') loadTeamStats();
       if (moduleId === 'wiki') loadWikiSpaces();
+      if (moduleId === 'database') loadDatabaseOverview();
     }
   }
   
@@ -9655,10 +9918,14 @@ paths:
             <div class="team-member-toolbar" aria-label="Team member filters"><input id="teamMemberSearch" type="search" placeholder="Search members" aria-label="Search members" oninput="teamPage=0;loadTeamStats()"><select id="teamMemberProject" aria-label="Project" onchange="teamPage=0;loadTeamStats()"><option value="">All projects</option></select><select id="teamMemberStatus" aria-label="Status" onchange="teamPage=0;loadTeamStats()"><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select><select id="teamMemberRole" aria-label="Role" onchange="teamPage=0;loadTeamStats()"><option value="">All roles</option>${TeamMemberRoles.map(role => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join('')}</select><select id="teamMemberPageSize" aria-label="Rows per page" onchange="teamPage=0;loadTeamStats()"><option value="10">10</option><option value="20">20</option><option value="50">50</option></select><button type="button" class="btn secondary" onclick="clearTeamMemberFilters()">Clear</button></div>
             <div id="teamMembersList"><div class="module-empty">Loading team members…</div></div>
             <div id="teamMemberPagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"></div>
-          </div></div><div id="teamRolesTab" hidden><div class="panel"><div class="panel-head"><h2>Roles &amp; Permissions</h2><button id="teamCreateRoleButton" type="button" class="btn primary" onclick="openTeamRoleModal()">Create Role</button></div><div id="teamRolesList"><div class="module-empty">Loading roles…</div></div></div></div>`;
+          </div><div id="teamRegisteredUsersPanel" class="panel" hidden><div class="panel-head"><h2>Registered Users</h2><span class="muted">Verified identities available for membership mapping</span></div><div id="teamRegisteredUsersList"><div class="module-empty">Loading registered users…</div></div></div></div><div id="teamRolesTab" hidden><div class="panel"><div class="panel-head"><h2>Roles &amp; Permissions</h2><button id="teamCreateRoleButton" type="button" class="btn primary" onclick="openTeamRoleModal()">Create Role</button></div><div id="teamRolesList"><div class="module-empty">Loading roles…</div></div></div></div>`;
       
       case 'wiki':
         return renderWikiModule();
+
+      case 'database':
+        setTimeout(loadDatabaseOverview, 0);
+        return renderDatabaseModule();
 
       case 'configuration':
         return `
@@ -10186,6 +10453,7 @@ paths:
       const canManage = teamPermissionSnapshot?.permissions?.['team.manage'] === true;
       const addButton = document.getElementById('teamAddMemberButton');
       if (addButton) { addButton.hidden = !canManage; addButton.title = canManage ? '' : 'Team management is not authorized for the current identity.'; }
+      if (teamPermissionSnapshot?.role === 'Admin') loadRegisteredUsers();
       const query = new URLSearchParams({ search, projectId, status, role, offset: String(teamPage * limit), limit: String(limit), sort: 'name' });
       const result = await api('/api/team-members?' + query.toString());
       const items = Array.isArray(result?.items) ? result.items : [];
@@ -10214,6 +10482,20 @@ paths:
       if (pagination) pagination.innerHTML = `<button type="button" class="btn secondary" ${teamPage === 0 ? 'disabled' : ''} onclick="teamPage--;loadTeamStats()">Previous</button><span>Page ${teamPage + 1} of ${totalPages}</span><button type="button" class="btn secondary" ${teamPage + 1 >= totalPages ? 'disabled' : ''} onclick="teamPage++;loadTeamStats()">Next</button>`;
     } catch (error) {
       list.innerHTML = `<div class="module-empty" style="color:#b42318">Unable to load team members: ${escapeHtml(error.message || 'Request failed')}</div>`;
+    }
+  }
+
+  async function loadRegisteredUsers() {
+    const panel = document.getElementById('teamRegisteredUsersPanel');
+    const list = document.getElementById('teamRegisteredUsersList');
+    if (!panel || !list) return;
+    panel.hidden = false;
+    list.innerHTML = '<div class="module-empty">Loading registered users…</div>';
+    try {
+      const users = await api('/api/team-registered-users');
+      list.innerHTML = Array.isArray(users) && users.length ? `<div style="overflow-x:auto"><table class="team-member-table"><thead><tr><th>Name</th><th>Username</th><th>Contact</th><th>Status</th><th>Verification</th></tr></thead><tbody>${users.map(user => `<tr><td>${escapeHtml(user.fullName || '—')}</td><td>${escapeHtml(user.username || '—')}</td><td>${escapeHtml(user.email || user.mobile || '—')}</td><td><span class="tag">${escapeHtml(user.status || '—')}</span></td><td><span class="tag">${user.verified ? 'Verified' : 'Pending verification'}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No registered users are available.</div>';
+    } catch (error) {
+      panel.hidden = true;
     }
   }
 
@@ -10502,6 +10784,7 @@ paths:
     const isAssets = location.hash === '#assets';
     const isHistory = location.hash === '#history';
     const isWiki = location.hash === '#wiki';
+    const isDatabase = location.hash === '#database';
     const isDashboard = location.hash === '#dashboard' || location.hash === '' || location.hash === undefined;
     
     // Hide all sections first
@@ -10541,6 +10824,12 @@ paths:
       document.getElementById('moduleDetailContent').innerHTML = renderWikiModule();
       aiAssistantSection.hidden = true;
       loadWikiSpaces();
+    } else if (isDatabase) {
+      moduleDetail.hidden = false;
+      document.getElementById('moduleDetailTitle').textContent = '🗄️ Database';
+      document.getElementById('moduleDetailContent').innerHTML = renderDatabaseModule();
+      aiAssistantSection.hidden = true;
+      loadDatabaseOverview();
     } else {
       // Default: show dashboard grid
       qaDashboardGrid.hidden = false;
@@ -10555,7 +10844,6 @@ paths:
 
   window.addEventListener('hashchange', updateInstructionsVisibility);
   window.addEventListener('load', function() {
-    updateInstructionsVisibility();
     initChatbotDrag();
     loadAuthState();
   });

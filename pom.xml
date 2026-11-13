@@ -16,9 +16,15 @@
         <junit.version>5.11.3</junit.version>
         <selenium.version>4.27.0</selenium.version>
         <rest-assured.version>5.5.0</rest-assured.version>
+        <qa.runner.windows.package.skip>false</qa.runner.windows.package.skip>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.sun.mail</groupId>
+            <artifactId>jakarta.mail</artifactId>
+            <version>2.0.1</version>
+        </dependency>
         <dependency>
             <groupId>io.cucumber</groupId>
             <artifactId>cucumber-java</artifactId>
@@ -60,6 +66,18 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>42.7.3</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>12.8.1.jre11</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+            <version>23.5.0.24.07</version>
             <scope>compile</scope>
         </dependency>
         <!-- DB2 driver - download from https://mvnrepository.com/artifact/com.ibm.db2/jcc and place in lib/ -->
@@ -120,7 +138,19 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/SIG-*</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.example.unifiedqarunner.Main</mainClass>
                                 </transformer>
@@ -141,6 +171,7 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
+                            <skip>${qa.runner.windows.package.skip}</skip>
                             <target>
                                 <mkdir dir="${project.build.directory}/qa-runner-app-input"/>
                                 <copy file="${project.build.directory}/${project.build.finalName}.jar"

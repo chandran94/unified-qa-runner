@@ -22,14 +22,31 @@ class AuthenticationFoundationTest {
         Path root = Files.createTempDirectory("qa-auth-");
         Files.writeString(root.resolve("qa-runner.json"), "{}");
         AuthUserDirectory directory = new AuthUserDirectory(root);
-        AuthUserDirectory.User created = directory.create(" Alice ", "Alice@Example.test", "long enough password".toCharArray(), false);
+        AuthUserDirectory.User created = directory.create(" Alice ", "Alice@Example.test", "long enough password".toCharArray(), true);
         assertEquals("alice", created.username());
         assertEquals("alice@example.test", created.email());
         assertNull(directory.authenticate("alice", "wrong password".toCharArray()));
         AuthUserDirectory.User authenticated = directory.authenticate("ALICE@EXAMPLE.TEST", "long enough password".toCharArray());
         assertNotNull(authenticated);
         assertFalse(authenticated.lastLoginAt().isBlank());
+        directory.create("Pending User", "pending", "pending@example.test", "", "long enough password".toCharArray(), false, AuthUserDirectory.ACTIVE);
+        assertNull(directory.authenticate("pending", "long enough password".toCharArray()));
         assertThrows(IllegalArgumentException.class, () -> directory.create("ALICE", "other@example.test", "another long password".toCharArray(), false));
+    }
+
+    @Test
+    void fullNameAndMobileAreNormalizedUniqueAndAudited() throws Exception {
+        Path root = Files.createTempDirectory("qa-auth-mobile-");
+        Files.writeString(root.resolve("qa-runner.json"), "{}");
+        AuthUserDirectory directory = new AuthUserDirectory(root);
+        AuthUserDirectory.User created = directory.create("Alice Example", "Alice2", "", "+91 (98765)-43210", "long enough password".toCharArray(), false, AuthUserDirectory.PENDING);
+        assertEquals("Alice Example", created.fullName());
+        assertEquals("+919876543210", created.mobile());
+        assertEquals(AuthUserDirectory.PENDING, created.status());
+        assertThrows(IllegalArgumentException.class, () -> directory.create("Other", "other", "other@example.test", "+919876543210", "another long password".toCharArray(), false));
+        String persisted = Files.readString(root.resolve("qa-runner.json"));
+        assertTrue(persisted.contains("authAuditLog"));
+        assertTrue(persisted.contains("USER_CREATED"));
     }
 
     @Test

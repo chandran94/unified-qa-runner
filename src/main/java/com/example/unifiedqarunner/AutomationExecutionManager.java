@@ -37,6 +37,7 @@ final class AutomationExecutionManager {
         String executionId = String.valueOf(execution.get("executionId"));
         String testCaseId = String.valueOf(execution.getOrDefault("testCaseId", ""));
         String assetId = String.valueOf(execution.getOrDefault("assetId", ""));
+        requireOwnedExecutionMetadata(execution);
         List<Map<String, Object>> executions = read();
         // An execution is idempotent by run ID and test case. A retried callback updates the same row.
         executions.removeIf(item -> executionId.equals(String.valueOf(item.get("executionId")))
@@ -44,6 +45,19 @@ final class AutomationExecutionManager {
                 && assetId.equals(String.valueOf(item.getOrDefault("assetId", ""))));
         executions.add(new LinkedHashMap<>(execution));
         write(executions);
+    }
+
+    private void requireOwnedExecutionMetadata(Map<String, Object> execution) {
+        String organizationId = String.valueOf(execution.getOrDefault("organizationId", "")).trim();
+        String projectId = String.valueOf(execution.getOrDefault("projectId", "")).trim();
+        if (organizationId.isBlank() || projectId.isBlank()) {
+            throw new IllegalArgumentException("An automation execution requires authoritative organization and project ownership.");
+        }
+        try {
+            java.util.UUID.fromString(organizationId);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("Automation execution organization ownership is invalid.");
+        }
     }
 
     synchronized Map<String, Object> latest(String testCaseId, String assetId) {

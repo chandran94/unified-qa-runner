@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -24,12 +25,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Locale;
+import java.util.Base64;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class RunnerServer implements AutoCloseable {
@@ -62,12 +68,29 @@ final class RunnerServer implements AutoCloseable {
     private final AutomationExecutionManager automationExecutionManager;
     private final TeamMemberManager teamMemberManager;
     private final TeamRoleManager teamRoleManager;
-    private final TeamAuthorization teamAuthorization;
     private final AuthUserDirectory authUserDirectory;
     private final AuthSessionManager authSessionManager;
+    private final AuthVerificationManager authVerificationManager;
+    private final AuthRegistrationRateLimiter authRegistrationRateLimiter = new AuthRegistrationRateLimiter();
+    private final AuthRegistrationRateLimiter organizationInvitationRateLimiter = new AuthRegistrationRateLimiter();
     private final WikiManager wikiManager;
+    private final ProjectOwnershipManager projectOwnershipManager;
+    private final OrganizationStore organizationStore;
+    private final TenantContextResolver tenantContextResolver;
+    private final SecureRandom invitationRandom = new SecureRandom();
+    private final DatabaseOverviewService databaseOverviewService = new DatabaseOverviewService();
+    private final DatabaseConnectionService databaseConnectionService;
 
     RunnerServer(Path projectRoot) throws IOException {
+        this(projectRoot, Integer.getInteger("qa.runner.port", DEFAULT_PORT), null, null);
+    }
+
+    /**
+     * Test-only construction path. A zero port selects an ephemeral loopback
+     * port and injected delivery keeps OTPs in the test process only.
+     */
+    RunnerServer(Path projectRoot, int port, VerificationDelivery testEmailDelivery,
+                 VerificationDelivery testSmsDelivery) throws IOException {
         this.projectRoot = projectRoot;
         this.executionService = new ExecutionService(projectRoot);
         this.sharedPathConfig = new SharedPathConfig(projectRoot);
@@ -76,21 +99,40 @@ final class RunnerServer implements AutoCloseable {
         this.automationExecutionManager = new AutomationExecutionManager(projectRoot);
         this.teamMemberManager = new TeamMemberManager(projectRoot);
         this.teamRoleManager = new TeamRoleManager(projectRoot);
-        this.teamAuthorization = new TeamAuthorization(CURRENT_USER_ID, CURRENT_USER_NAME);
         this.authUserDirectory = new AuthUserDirectory(projectRoot);
         this.authSessionManager = new AuthSessionManager();
+        this.authVerificationManager = testEmailDelivery == null || testSmsDelivery == null
+                ? new AuthVerificationManager(authUserDirectory)
+                : new AuthVerificationManager(authUserDirectory, testEmailDelivery, testSmsDelivery,
+                java.time.Clock.systemUTC());
         this.wikiManager = new WikiManager(projectRoot);
-        server = HttpServer.create(new InetSocketAddress(DEFAULT_PORT), 0);
+        this.projectOwnershipManager = new ProjectOwnershipManager(projectRoot);
+        this.organizationStore = new OrganizationStore(projectRoot);
+        this.tenantContextResolver = new TenantContextResolver(authSessionManager, authUserDirectory,
+                organizationStore, teamMemberManager, teamRoleManager, projectOwnershipManager);
+        this.ciCdConfig = new CiCdConfig(projectRoot);
+        // Additive and idempotent: ambiguous legacy records remain unresolved.
+        this.projectOwnershipManager.migrate(userStoryStore, defectManager.list(null));
+        this.databaseConnectionService = new DatabaseConnectionService(projectRoot);
+        // A local-only verification profile must never expose the development server beyond loopback.
+        server = HttpServer.create(new InetSocketAddress(
+                (port == 0 || isLocalOnlyProfile()) ? "127.0.0.1" : "0.0.0.0", port), 0);
         httpExecutor = Executors.newCachedThreadPool(runnable -> daemonThread(runnable, "qa-http"));
-        runExecutor = Executors.newSingleThreadExecutor(
-                runnable -> daemonThread(runnable, "qa-execution"));
+        runExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(1),
+                runnable -> daemonThread(runnable, "qa-execution"),
+                new ThreadPoolExecutor.AbortPolicy());
         server.setExecutor(httpExecutor);
         server.createContext("/", this::handle);
     }
 
+    private static boolean isLocalOnlyProfile() {
+        return "true".equalsIgnoreCase(System.getenv("QA_RUNNER_LOCAL_ONLY"));
+    }
+
     URI start() {
         server.start();
-        return URI.create("http://localhost:" + DEFAULT_PORT + "/");
+        return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/");
     }
 
     void awaitTermination() throws InterruptedException {
@@ -112,6 +154,8 @@ final class RunnerServer implements AutoCloseable {
         }
         server.stop(0);
         executionService.cancel();
+        databaseConnectionService.close();
+        authVerificationManager.close();
         runExecutor.shutdownNow();
         httpExecutor.shutdownNow();
         shutdownLatch.countDown();
@@ -136,13 +180,21 @@ final class RunnerServer implements AutoCloseable {
                 String path = exchange.getRequestURI().getPath();
                 if (exchange.getRequestURI().getRawQuery() != null && !queryParametersAllowed(path)) {
                     sendError(exchange, 400, "Query parameters are not supported.");
-                } else if (path.equals("/") || path.equals("/index.html")) {
+                } else if (path.equals("/") || path.equals("/index.html") || isPublicAuthPage(path)) {
                     servePage(exchange);
+                } else if (isProtectedApplicationPage(path)) {
+                    if (session(exchange) == null) {
+                        redirect(exchange, "/login?return=" + java.net.URLEncoder.encode(path, StandardCharsets.UTF_8));
+                    } else {
+                        servePage(exchange);
+                    }
                 } else if (path.startsWith("/api/")) {
                     handleApi(exchange, path);
                 } else if (path.startsWith("/screenshots/")) {
+                    requireAuthenticatedUser(exchange);
                     serveScreenshot(exchange, path);
                 } else if (path.startsWith("/videos/")) {
+                    requireAuthenticatedUser(exchange);
                     serveVideo(exchange, path);
                 } else {
                     sendError(exchange, 404, "Not found.");
@@ -160,12 +212,34 @@ final class RunnerServer implements AutoCloseable {
         }
     }
 
+    private static boolean isPublicAuthPage(String path) {
+        return Set.of("/login", "/register", "/verify", "/forgot-password", "/reset-password").contains(path);
+    }
+
+    private static boolean isPublicAuthApi(String path) {
+        return Set.of("/api/auth/login", "/api/auth/register", "/api/auth/verification/send",
+                "/api/auth/verification/resend", "/api/auth/verification/confirm", "/api/auth/me",
+                "/api/auth/logout").contains(path);
+    }
+
+    private static boolean isProtectedApplicationPage(String path) {
+        return Set.of("/dashboard", "/testcases", "/userstories", "/runner", "/assets", "/history", "/wiki", "/database", "/team").contains(path);
+    }
+
+    private static void redirect(HttpExchange exchange, String location) throws IOException {
+        exchange.getResponseHeaders().set("Location", location);
+        exchange.sendResponseHeaders(302, -1);
+    }
+
     private static boolean queryParametersAllowed(String path) {
-        return path.startsWith("/api/user-stories/stories") || path.startsWith("/api/user-stories/sprints") || path.startsWith("/api/user-stories/board") || path.equals("/api/user-stories/work-items") || path.equals("/api/user-stories/test-case-links") || path.equals("/api/stories/testcases") || path.equals("/api/defects") || path.equals("/api/testcase-automation-mappings") || path.equals("/api/automation-executions") || path.equals("/api/automation-assets/scenarios") || path.equals("/api/team-members") || path.equals("/api/team-permissions") || path.equals("/api/team-roles") || path.startsWith("/api/wiki/spaces");
+        return isPublicAuthPage(path) || path.startsWith("/api/organizations") || path.startsWith("/api/organization-invitations") || path.startsWith("/api/user-stories/projects") || path.startsWith("/api/user-stories/epics") || path.startsWith("/api/user-stories/stories") || path.startsWith("/api/user-stories/sprints") || path.startsWith("/api/user-stories/board") || path.equals("/api/user-stories/work-items") || path.equals("/api/user-stories/test-case-links") || path.equals("/api/stories/testcases") || path.equals("/api/testcases") || path.equals("/api/defects") || path.equals("/api/testcase-automation-mappings") || path.equals("/api/automation-executions") || path.equals("/api/automation-assets/scenarios") || path.equals("/api/team-members") || path.equals("/api/team-permissions") || path.equals("/api/team-roles") || path.startsWith("/api/wiki/spaces") || path.equals("/api/database/connections") || path.startsWith("/api/database/connections/") || path.startsWith("/api/database/connection-tests/") || path.startsWith("/api/cicd/");
     }
 
     private void handleApi(HttpExchange exchange, String path) throws Exception {
         String method = exchange.getRequestMethod();
+        if (!isPublicAuthApi(path)) {
+            requireAuthenticatedUser(exchange);
+        }
         if (path.equals("/api/auth/login") && method.equals("POST")) {
             requireSameOrigin(exchange);
             Map<String, Object> values = requestObject(exchange);
@@ -182,6 +256,7 @@ final class RunnerServer implements AutoCloseable {
             java.util.Arrays.fill(passwordChars, '\0');
             if (user == null) {
                 authSessionManager.recordFailure(rateKey);
+                authUserDirectory.recordAudit("LOGIN_FAILED", login);
                 sendError(exchange, 401, "Invalid username or password.");
                 return;
             }
@@ -190,6 +265,41 @@ final class RunnerServer implements AutoCloseable {
             exchange.getResponseHeaders().add("Set-Cookie", authSessionManager.cookie(session, secureCookies()));
             sendJson(exchange, 200, Map.of("user", authUserToMap(user), "csrfToken", session.csrfToken()));
             return;
+        }
+        if (path.equals("/api/auth/register") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            String source = exchange.getRemoteAddress().getAddress().getHostAddress();
+            if (!authRegistrationRateLimiter.allow(source)) { sendError(exchange, 429, "Registration is temporarily unavailable. Try again later."); return; }
+            Map<String,Object> values=requestObject(exchange);
+            String fullName=stringField(values,"fullName").trim(); String username=stringField(values,"username").trim();
+            String contact=stringField(values,"contact").trim(); String password=stringField(values,"password"); String confirmation=stringField(values,"confirmPassword");
+            if (!password.equals(confirmation)) throw new IllegalArgumentException("Passwords do not match.");
+            String email=contact.contains("@")?AuthUserDirectory.normalizeEmail(contact):"";
+            String mobile=contact.contains("@")?"":AuthUserDirectory.normalizeMobile(contact);
+            AuthUserDirectory.User user;
+            char[] passwordChars=password.toCharArray();
+            try { user=authUserDirectory.create(fullName,username,email,mobile,passwordChars,false,AuthUserDirectory.PENDING); }
+            catch (IllegalArgumentException error) {
+                if (error.getMessage()!=null && error.getMessage().contains("already registered")) { sendJson(exchange,202,Map.of("accepted",true,"message","If the account can be registered, verification instructions will be sent.")); return; }
+                throw error;
+            } finally { java.util.Arrays.fill(passwordChars,'\0'); }
+            try {
+                AuthVerificationManager.Result result=authVerificationManager.send(user.id());
+                sendJson(exchange,202,verificationToMap(result));
+            } catch (Exception error) {
+                try { authUserDirectory.delete(user.id()); } catch (Exception ignored) { }
+                sendError(exchange,503,"Verification delivery is not available. Please try again later.");
+            }
+            return;
+        }
+        if (path.equals("/api/auth/verification/send") && method.equals("POST")) {
+            requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthVerificationManager.Result result=authVerificationManager.resend(stringField(values,"verificationToken")); sendJson(exchange,202,verificationToMap(result)); return;
+        }
+        if (path.equals("/api/auth/verification/resend") && method.equals("POST")) {
+            requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthVerificationManager.Result result=authVerificationManager.resend(stringField(values,"verificationToken")); sendJson(exchange,202,verificationToMap(result)); return;
+        }
+        if (path.equals("/api/auth/verification/confirm") && method.equals("POST")) {
+            requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthUserDirectory.User user=authVerificationManager.confirm(stringField(values,"verificationToken"),stringField(values,"otp")); sendJson(exchange,200,Map.of("verified",true,"userId",user.id(),"message","Account verified. Please sign in.")); return;
         }
         if (path.equals("/api/auth/me") && method.equals("GET")) {
             AuthSessionManager.Session session = session(exchange);
@@ -207,78 +317,161 @@ final class RunnerServer implements AutoCloseable {
             sendJson(exchange, 200, Map.of("loggedOut", true));
             return;
         }
+        if (path.startsWith("/api/organizations") || path.startsWith("/api/organization-invitations")) {
+            handleOrganizationApi(exchange, path, method);
+            return;
+        }
+        // These legacy stores do not yet carry an authoritative project key.
+        // Deny ordinary access until an explicit ownership migration exists;
+        // never infer ownership from a filename, display name, or array index.
+        requireAdminForUnownedResource(exchange, path);
+        if (path.equals("/api/admin/project-ownership/unresolved") && method.equals("GET")) {
+            requireAuthenticatedAdmin(exchange);
+            sendJson(exchange, 200, projectOwnershipManager.unresolved().stream().map(this::ownershipToMap).toList());
+            return;
+        }
+        if (path.startsWith("/api/admin/project-ownership/") && method.equals("POST")) {
+            requireAuthenticatedCsrf(exchange);
+            requireAuthenticatedAdmin(exchange);
+            String remainder = path.substring("/api/admin/project-ownership/".length());
+            int separator = remainder.indexOf('/');
+            if (separator <= 0 || separator == remainder.length() - 1) throw new IllegalArgumentException("Resource type and ID are required.");
+            Map<String, Object> values = requestObject(exchange);
+            String projectId = stringField(values, "projectId").trim();
+            ProjectOwnershipManager.Ownership ownership = projectOwnershipManager.assign(
+                    remainder.substring(0, separator), remainder.substring(separator + 1), projectId,
+                    "ADMIN_MIGRATION", validProjectIds());
+            sendJson(exchange, 200, ownershipToMap(ownership));
+            return;
+        }
         if (path.startsWith("/api/wiki/") && !Set.of("GET", "HEAD", "OPTIONS").contains(method)) {
             requireAuthenticatedCsrf(exchange);
         }
         if (path.equals("/api/wiki/spaces") && method.equals("GET")) {
-            sendJson(exchange, 200, wikiManager.listSpaces(queryValue(exchange, "search")).stream().map(this::wikiSpaceToMap).toList());
+            sendJson(exchange, 200, wikiManager.listSpaces(queryValue(exchange, "search")).stream()
+                    .filter(space -> tenantVisibleOwnedResource(exchange, "WIKI_SPACE", space.id(), TeamAuthorization.WIKI, false))
+                    .map(this::wikiSpaceToMap).toList());
             return;
         }
         if (path.equals("/api/wiki/spaces") && method.equals("POST")) {
             Map<String, Object> values = requestObject(exchange);
-            sendJson(exchange, 201, wikiSpaceToMap(wikiManager.createSpace(stringField(values, "name"), stringField(values, "key"), optionalString(values, "description"), authActorName(exchange))));
+            String projectId = stringField(values, "projectId").trim();
+            requireProjectAccess(exchange, projectId, TeamAuthorization.WIKI, true);
+            WikiManager.Space created = wikiManager.createSpace(stringField(values, "name"), stringField(values, "key"), optionalString(values, "description"), authActorName(exchange));
+            projectOwnershipManager.assign("WIKI_SPACE", created.id(), projectId, "WIKI_SPACE_CREATE", validProjectIds());
+            sendJson(exchange, 201, wikiSpaceToMap(created));
             return;
         }
         if (path.startsWith("/api/wiki/spaces/")) {
             String remainder = path.substring("/api/wiki/spaces/".length());
             if (remainder.endsWith("/pages") && method.equals("GET")) {
                 String spaceId = remainder.substring(0, remainder.length() - "/pages".length());
+                requireOwnedProjectAccess(exchange, "WIKI_SPACE", spaceId, TeamAuthorization.WIKI, false);
                 sendJson(exchange, 200, wikiManager.listPages(spaceId, queryValue(exchange, "search"), "true".equalsIgnoreCase(queryValue(exchange, "includeArchived"))).stream().map(this::wikiPageToMap).toList());
                 return;
             }
             String spaceId = remainder;
-            if (method.equals("GET")) { sendJson(exchange, 200, wikiSpaceToMap(wikiManager.getSpace(spaceId))); return; }
-            if (method.equals("PUT")) { sendJson(exchange, 200, wikiSpaceToMap(wikiManager.updateSpace(spaceId, requestObject(exchange)))); return; }
-            if (method.equals("POST") && remainder.endsWith("/archive")) { String id = remainder.substring(0, remainder.length() - "/archive".length()); sendJson(exchange, 200, wikiSpaceToMap(wikiManager.setSpaceStatus(id, WikiManager.ARCHIVED))); return; }
+            if (method.equals("GET")) { requireOwnedProjectAccess(exchange, "WIKI_SPACE", spaceId, TeamAuthorization.WIKI, false); sendJson(exchange, 200, wikiSpaceToMap(wikiManager.getSpace(spaceId))); return; }
+            if (method.equals("PUT")) { requireOwnedProjectAccess(exchange, "WIKI_SPACE", spaceId, TeamAuthorization.WIKI, true); sendJson(exchange, 200, wikiSpaceToMap(wikiManager.updateSpace(spaceId, requestObject(exchange)))); return; }
+            if (method.equals("POST") && remainder.endsWith("/archive")) { String id = remainder.substring(0, remainder.length() - "/archive".length()); requireOwnedProjectAccess(exchange, "WIKI_SPACE", id, TeamAuthorization.WIKI, true); sendJson(exchange, 200, wikiSpaceToMap(wikiManager.setSpaceStatus(id, WikiManager.ARCHIVED))); return; }
         }
         if (path.equals("/api/wiki/pages") && method.equals("POST")) {
-            sendJson(exchange, 201, wikiPageToMap(wikiManager.createPage(requestObject(exchange), authActorName(exchange))));
+            Map<String, Object> values = requestObject(exchange);
+            String spaceId = stringField(values, "spaceId");
+            requireOwnedProjectAccess(exchange, "WIKI_SPACE", spaceId, TeamAuthorization.WIKI, true);
+            WikiManager.Page created = wikiManager.createPage(values, authActorName(exchange));
+            projectOwnershipManager.assign("WIKI_PAGE", created.id(), projectOwnershipManager.projectId("WIKI_SPACE", spaceId), "WIKI_SPACE_RELATIONSHIP", validProjectIds());
+            sendJson(exchange, 201, wikiPageToMap(created));
             return;
         }
         if (path.startsWith("/api/wiki/pages/")) {
             String remainder = path.substring("/api/wiki/pages/".length());
             if (remainder.endsWith("/archive") || remainder.endsWith("/restore")) {
-                boolean restore = remainder.endsWith("/restore"); String id = remainder.substring(0, remainder.lastIndexOf('/')); Map<String,Object> values=requestObject(exchange); int version=Integer.parseInt(String.valueOf(values.getOrDefault("version", wikiManager.getPage(id).version()))); sendJson(exchange, 200, wikiPageToMap(wikiManager.setPageStatus(id, restore ? WikiManager.DRAFT : WikiManager.ARCHIVED, authActorName(exchange), version))); return;
+                boolean restore = remainder.endsWith("/restore"); String id = remainder.substring(0, remainder.lastIndexOf('/')); requireOwnedProjectAccess(exchange, "WIKI_PAGE", id, TeamAuthorization.WIKI, true); Map<String,Object> values=requestObject(exchange); int version=Integer.parseInt(String.valueOf(values.getOrDefault("version", wikiManager.getPage(id).version()))); sendJson(exchange, 200, wikiPageToMap(wikiManager.setPageStatus(id, restore ? WikiManager.DRAFT : WikiManager.ARCHIVED, authActorName(exchange), version))); return;
             }
-            if (method.equals("GET")) { sendJson(exchange, 200, wikiPageToMap(wikiManager.getPage(remainder))); return; }
-            if (method.equals("PUT")) { sendJson(exchange, 200, wikiPageToMap(wikiManager.updatePage(remainder, requestObject(exchange), authActorName(exchange)))); return; }
+            if (method.equals("GET")) { requireOwnedProjectAccess(exchange, "WIKI_PAGE", remainder, TeamAuthorization.WIKI, false); sendJson(exchange, 200, wikiPageToMap(wikiManager.getPage(remainder))); return; }
+            if (method.equals("PUT")) { requireOwnedProjectAccess(exchange, "WIKI_PAGE", remainder, TeamAuthorization.WIKI, true); sendJson(exchange, 200, wikiPageToMap(wikiManager.updatePage(remainder, requestObject(exchange), authActorName(exchange)))); return; }
+        }
+        if (path.equals("/api/database/connections") && method.equals("GET")) {
+            String organizationId = requireDatabaseViewForOrganization(exchange, queryValue(exchange, "organizationId"));
+            int page = parseQueryInt(exchange, "page", 0); int pageSize = parseQueryInt(exchange, "pageSize", 10);
+            sendJson(exchange, 200, databaseConnectionService.listForOrganization(organizationId, queryValue(exchange, "search"), page, pageSize)); return;
+        }
+        if (path.equals("/api/database/connections") && method.equals("POST")) {
+            Map<String,Object> values=requestObject(exchange); String organizationId = requireDatabaseManageForOrganization(exchange, stringField(values, "organizationId"));
+            sendJson(exchange, 201, databaseConnectionService.createForOrganization(organizationId, values)); return;
+        }
+        if (path.startsWith("/api/database/connections/")) {
+            String remainder=path.substring("/api/database/connections/".length());
+            String organizationId = queryValue(exchange, "organizationId");
+            if (remainder.endsWith("/test") && method.equals("POST")) { requireDatabaseManageForOrganization(exchange, organizationId); String id=remainder.substring(0,remainder.length()-5); requireDatabaseConnectionOrganization(id, organizationId); ConnectionTestService.TestState state=databaseConnectionService.submitTestForOrganization(organizationId,id); sendJson(exchange,202,databaseTestToMap(state)); return; }
+            if (remainder.endsWith("/connect") && method.equals("POST")) { requireDatabaseManageForOrganization(exchange, organizationId); String id=remainder.substring(0,remainder.length()-8); requireDatabaseConnectionOrganization(id, organizationId); sendJson(exchange,200,databaseConnectionService.connectForOrganization(organizationId,id)); return; }
+            if (remainder.endsWith("/disconnect") && method.equals("POST")) { requireDatabaseManageForOrganization(exchange, organizationId); String id=remainder.substring(0,remainder.length()-11); requireDatabaseConnectionOrganization(id, organizationId); sendJson(exchange,200,databaseConnectionService.disconnectForOrganization(organizationId,id)); return; }
+            if (remainder.matches("[^/]+") && method.equals("GET")) { requireDatabaseViewForOrganization(exchange, organizationId); requireDatabaseConnectionOrganization(remainder, organizationId); sendJson(exchange,200,databaseConnectionService.get(remainder)); return; }
+            if (remainder.matches("[^/]+") && method.equals("PUT")) { Map<String,Object> values=requestObject(exchange); String bodyOrganizationId=stringField(values,"organizationId"); requireDatabaseManageForOrganization(exchange, bodyOrganizationId); requireDatabaseConnectionOrganization(remainder, bodyOrganizationId); sendJson(exchange,200,databaseConnectionService.updateForOrganization(bodyOrganizationId,remainder,values)); return; }
+            if (remainder.matches("[^/]+") && method.equals("DELETE")) { requireDatabaseManageForOrganization(exchange, organizationId); requireDatabaseConnectionOrganization(remainder, organizationId); databaseConnectionService.delete(remainder); sendJson(exchange,200,Map.of("deleted",true)); return; }
+        }
+        if (path.startsWith("/api/database/connection-tests/")) {
+            String id=path.substring("/api/database/connection-tests/".length()); String organizationId=queryValue(exchange,"organizationId");
+            requireDatabaseViewForOrganization(exchange, organizationId); requireDatabaseConnectionOrganization(databaseConnectionService.testConnectionId(id), organizationId);
+            if (method.equals("GET")) { sendJson(exchange,200,databaseTestToMap(databaseConnectionService.testStatus(id))); return; }
+            if (method.equals("DELETE")) { requireDatabaseManageForOrganization(exchange, organizationId); sendJson(exchange,200,databaseTestToMap(databaseConnectionService.cancelTestForOrganization(organizationId,id))); return; }
         }
         if (!Set.of("GET", "HEAD", "OPTIONS").contains(method)) {
             requireAuthenticatedCsrf(exchange);
         }
         if (path.equals("/api/team-permissions") && method.equals("GET")) {
-            sendJson(exchange, 200, teamAuthorization.permissionSnapshot(queryValue(exchange, "projectId"), teamMemberManager.list()));
+            requireAuthenticatedUser(exchange);
+            sendJson(exchange, 200, teamAuthorization(exchange).permissionSnapshot(queryValue(exchange, "projectId"), teamMemberManager.list()));
             return;
         }
         if (path.equals("/api/team-roles") && method.equals("GET")) {
+            requireAuthenticatedUser(exchange);
             sendJson(exchange, 200, teamRoleManager.list().stream().map(role -> teamRoleToMap(role, teamMemberManager.list())).toList());
             return;
         }
         if (path.equals("/api/team-roles") && method.equals("POST")) {
-            requireSameOrigin(exchange); requireAuthenticatedAdmin();
+            requireSameOrigin(exchange); requireAuthenticatedAdmin(exchange);
             TeamRoleManager.Role role = teamRoleManager.create(requestObject(exchange));
-            teamRoleManager.recordAudit("ROLE_CREATED", role.id(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            AuthUserDirectory.User actor = requireAuthenticatedUser(exchange);
+            teamRoleManager.recordAudit("ROLE_CREATED", role.id(), actor.id(), actor.username());
             sendJson(exchange, 201, teamRoleToMap(role, teamMemberManager.list()));
             return;
         }
         if (path.startsWith("/api/team-roles/") && method.equals("PUT")) {
-            requireSameOrigin(exchange); requireAuthenticatedAdmin();
+            requireSameOrigin(exchange); requireAuthenticatedAdmin(exchange);
             String id = path.substring("/api/team-roles/".length());
             TeamRoleManager.Role role = teamRoleManager.update(id, requestObject(exchange), teamMemberManager.list());
-            teamRoleManager.recordAudit("ROLE_UPDATED", role.id(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            AuthUserDirectory.User actor = requireAuthenticatedUser(exchange);
+            teamRoleManager.recordAudit("ROLE_UPDATED", role.id(), actor.id(), actor.username());
             sendJson(exchange, 200, teamRoleToMap(role, teamMemberManager.list()));
             return;
         }
         if (path.equals("/api/team-members") && method.equals("GET")) {
-            requireTeamView();
-            sendJson(exchange, 200, listTeamMembers(exchange));
+            TenantContext tenant = tenantContextForProject(exchange, queryValue(exchange, "projectId"),
+                    TeamAuthorization.TEAM_VIEW, "read", true);
+            if (tenant == null) requireTeamView(exchange);
+            sendJson(exchange, 200, listTeamMembers(exchange, tenant));
+            return;
+        }
+        if (path.equals("/api/team-registered-users") && method.equals("GET")) {
+            requireAuthenticatedAdmin(exchange);
+            List<Map<String, Object>> users = authUserDirectory.list().stream().map(user -> {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("id", user.id()); result.put("fullName", user.fullName());
+                result.put("username", user.username()); result.put("email", user.email());
+                result.put("mobile", user.mobile()); result.put("status", user.status());
+                result.put("verified", user.emailVerified() || user.mobileVerified());
+                return result;
+            }).toList();
+            sendJson(exchange, 200, users);
             return;
         }
         if (path.equals("/api/team-members") && method.equals("POST")) {
             requireSameOrigin(exchange);
             Map<String, Object> values = normalizeMemberRole(requestObject(exchange));
-            requireTeamManage(values, null);
-            validateRegisteredUser(values);
+            requireTeamManage(exchange, values, null);
+            validateRegisteredUser(exchange, values);
             sendJson(exchange, 201, teamMemberToMap(teamMemberManager.create(values, validProjectIds(), teamRoleManager.list())));
             return;
         }
@@ -286,8 +479,8 @@ final class RunnerServer implements AutoCloseable {
             requireSameOrigin(exchange);
             String id = path.substring("/api/team-members/".length());
             Map<String, Object> values = normalizeMemberRole(requestObject(exchange));
-            requireTeamManage(values, id);
-            validateRegisteredUser(values);
+            requireTeamManage(exchange, values, id);
+            validateRegisteredUser(exchange, values);
             sendJson(exchange, 200, teamMemberToMap(teamMemberManager.update(id, values, validProjectIds(), teamRoleManager.list())));
             return;
         }
@@ -296,23 +489,40 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         if (path.equals("/api/catalog") && method.equals("GET")) {
-            sendJson(exchange, 200, catalogResponse());
+            sendJson(exchange, 200, visibleCatalogResponse(exchange));
+            return;
+        }
+        if (path.equals("/api/database/overview") && method.equals("GET")) {
+            Map<String, Object> catalog = catalogResponse(exchange);
+            List<Map<String, Object>> assets = catalog.get("assets") instanceof List<?> values
+                    ? values.stream().filter(Map.class::isInstance).map(value -> (Map<String, Object>) value).toList()
+                    : List.of();
+            List<Map<String, Object>> runs = runListResponse().get("runs") instanceof List<?> values
+                    ? values.stream().filter(Map.class::isInstance).map(value -> (Map<String, Object>) value).toList()
+                    : List.of();
+            sendJson(exchange, 200, databaseOverviewService.build(testCaseManager.list(), assets, runs,
+                    new DatabaseConnectionRepository(projectRoot).list()));
             return;
         }
         if (path.equals("/api/automation-assets/scenarios") && method.equals("GET")) {
             String assetId = queryParameter(exchange, "assetId");
-            Map<String, Object> asset = catalogResponse().get("assets") instanceof List<?> assets
+            Map<String, Object> asset = catalogResponse(exchange).get("assets") instanceof List<?> assets
                     ? assets.stream().filter(item -> item instanceof Map<?, ?> map
                             && assetId != null && assetId.equals(String.valueOf(map.get("assetId"))))
                     .map(item -> (Map<String, Object>) item).findFirst().orElse(null) : null;
             if (asset == null) throw new IllegalArgumentException("Automation asset was not discovered in the current catalog.");
+            if (!assetAccessible(exchange, assetId, false)) {
+                throw new AuthorizationException(403, "This automation asset has no accessible project ownership.");
+            }
             sendJson(exchange, 200, cucumberScenarios(asset));
             return;
         }
         if (path.equals("/api/testcase-automation-mappings") && method.equals("GET")) {
             String testCaseId = queryParameter(exchange, "testCaseId");
             String assetId = queryParameter(exchange, "assetId");
-            List<Map<String, Object>> mappings = automationMappingManager.list();
+            List<Map<String, Object>> mappings = automationMappingManager.list().stream()
+                    .filter(item -> ownedProjectAccess(exchange, "AUTOMATION_EXECUTION", stringField(item, "executionId"),
+                            TeamAuthorization.TEST_CASES, false)).toList();
             if (testCaseId != null && !testCaseId.isBlank()) {
                 mappings = mappings.stream().filter(item -> testCaseId.equals(String.valueOf(item.get("testCaseId")))).toList();
             }
@@ -328,20 +538,25 @@ final class RunnerServer implements AutoCloseable {
             String testCaseId = stringField(values, "testCaseId");
             String assetId = stringField(values, "assetId");
             if (testCaseManager.getById(testCaseId) == null) throw new IllegalArgumentException("Test case not found: " + testCaseId);
-            Map<String, Object> asset = catalogResponse().get("assets") instanceof List<?> assets
+            requireOwnedProjectAccess(exchange, "TEST_CASE", testCaseId, TeamAuthorization.TEST_CASES, true);
+            Map<String, Object> asset = catalogResponse(exchange).get("assets") instanceof List<?> assets
                     ? assets.stream().filter(item -> item instanceof Map<?, ?> map && assetId.equals(String.valueOf(map.get("assetId"))))
                         .map(item -> (Map<String, Object>) item).findFirst().orElse(null)
                     : null;
             if (asset == null) throw new IllegalArgumentException("Automation asset was not discovered in the current catalog.");
-            sendJson(exchange, 201, automationMappingManager.link(testCaseId, assetId,
+            Map<String, Object> mapping = automationMappingManager.link(testCaseId, assetId,
                     stringField(asset, "kind"), stringField(asset, "sourceProject"), stringField(asset, "selection"),
-                    Boolean.TRUE.equals(values.get("confirmShared"))));
+                    Boolean.TRUE.equals(values.get("confirmShared")));
+            projectOwnershipManager.assign("AUTOMATION_MAPPING", stringField(mapping, "id"),
+                    projectOwnershipManager.projectId("TEST_CASE", testCaseId), "TEST_CASE_RELATIONSHIP", validProjectIds());
+            sendJson(exchange, 201, mapping);
             return;
         }
         if (path.equals("/api/testcase-automation-mappings") && method.equals("DELETE")) {
             requireSameOrigin(exchange);
             String testCaseId = queryParameter(exchange, "testCaseId");
             String assetId = queryParameter(exchange, "assetId");
+            requireOwnedProjectAccess(exchange, "TEST_CASE", testCaseId, TeamAuthorization.TEST_CASES, true);
             if (!automationMappingManager.unlink(testCaseId, assetId)) {
                 sendError(exchange, 404, "Automation mapping not found.");
             } else {
@@ -350,8 +565,10 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         if (path.equals("/api/automation-executions") && method.equals("GET")) {
-            sendJson(exchange, 200, automationExecutionManager.list(
-                    queryParameter(exchange, "testCaseId"), queryParameter(exchange, "assetId")));
+            List<Map<String, Object>> executions = automationExecutionManager.list(
+                    queryParameter(exchange, "testCaseId"), queryParameter(exchange, "assetId"));
+            sendJson(exchange, 200, executions.stream()
+                    .filter(item -> automationExecutionVisible(exchange, item)).toList());
             return;
         }
         if (path.equals("/api/status") && method.equals("GET")) {
@@ -386,11 +603,15 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         if (path.equals("/api/runs") && method.equals("GET")) {
-            sendJson(exchange, 200, runListResponse());
+            List<Map<String, Object>> visible = runListResponse().get("runs") instanceof List<?> values
+                    ? values.stream().filter(item -> item instanceof Map<?, ?> map && ownedProjectAccess(exchange, "TEST_RUN", String.valueOf(map.get("id")), TeamAuthorization.TEST_EXECUTION, false)).map(item -> (Map<String, Object>) item).toList()
+                    : List.of();
+            sendJson(exchange, 200, Map.of("runs", visible));
             return;
         }
         if (path.equals("/api/shared-paths") && method.equals("GET")) {
             sendJson(exchange, 200, sharedPathConfig.getSharedPaths().stream()
+                    .filter(e -> isGlobalAdmin(exchange) || ownedProjectAccess(exchange, "SHARED_PATH", e.getName(), TeamAuthorization.TEST_EXECUTION, false))
                     .map(e -> Map.of("name", e.getName(), "path", e.getPath()))
                     .toList());
             return;
@@ -403,6 +624,7 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/shared-paths/") && method.equals("DELETE")) {
             requireSameOrigin(exchange);
             String name = path.substring("/api/shared-paths/".length());
+            requireOwnedProjectAccess(exchange, "SHARED_PATH", name, TeamAuthorization.TEST_EXECUTION, true);
             try {
                 sharedPathConfig.removeSharedPath(name);
                 sendJson(exchange, 200, Map.of("message", "Shared path '" + name + "' removed."));
@@ -414,12 +636,14 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/shared-paths/") && path.endsWith("/scan") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String name = path.substring("/api/shared-paths/".length(), path.length() - "/scan".length());
+            requireOwnedProjectAccess(exchange, "SHARED_PATH", name, TeamAuthorization.TEST_EXECUTION, false);
             scanSharedPath(exchange, name);
             return;
         }
         // === Remote Import Endpoints ===
         if (path.equals("/api/imports") && method.equals("GET")) {
             sendJson(exchange, 200, remoteImportConfig.getImports().stream()
+                    .filter(e -> isGlobalAdmin(exchange) || ownedProjectAccess(exchange, "REMOTE_IMPORT", e.getId(), TeamAuthorization.TEST_EXECUTION, false))
                     .map(e -> Map.of("id", e.getId(), "name", e.getName(), "type", e.getType(),
                             "source", e.getSource(), "path", e.getPath(), "importedAt", e.getImportedAt()))
                     .toList());
@@ -438,6 +662,7 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/imports/") && method.equals("DELETE")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/imports/".length());
+            requireOwnedProjectAccess(exchange, "REMOTE_IMPORT", id, TeamAuthorization.TEST_EXECUTION, true);
             try {
                 remoteImportConfig.removeImport(id);
                 sendJson(exchange, 200, Map.of("message", "Import '" + id + "' removed."));
@@ -449,12 +674,13 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/imports/") && path.endsWith("/scan") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/imports/".length(), path.length() - "/scan".length());
+            requireOwnedProjectAccess(exchange, "REMOTE_IMPORT", id, TeamAuthorization.TEST_EXECUTION, false);
             scanImport(exchange, id);
             return;
         }
         // === Screenshots & Videos Endpoints ===
         if (path.equals("/api/screenshots") && method.equals("GET")) {
-            sendJson(exchange, 200, listScreenshots());
+            sendJson(exchange, 200, listScreenshots(exchange));
             return;
         }
         if (path.equals("/api/screenshots") && method.equals("DELETE")) {
@@ -469,7 +695,7 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         if (path.equals("/api/videos") && method.equals("GET")) {
-            sendJson(exchange, 200, listVideos());
+            sendJson(exchange, 200, listVideos(exchange));
             return;
         }
         if (path.equals("/api/videos") && method.equals("DELETE")) {
@@ -496,17 +722,20 @@ final class RunnerServer implements AutoCloseable {
         if (parts.length == 4 && parts[1].equals("api") && parts[2].equals("runs")) {
             String id = parts[3];
             if (method.equals("GET")) {
+                requireOwnedProjectAccess(exchange, "TEST_RUN", id, TeamAuthorization.TEST_EXECUTION, false);
                 sendJson(exchange, 200, runResponse(requireRun(id)));
                 return;
             }
             if (method.equals("DELETE")) {
                 requireSameOrigin(exchange);
+                requireOwnedProjectAccess(exchange, "TEST_RUN", id, TeamAuthorization.TEST_EXECUTION, true);
                 cancelRun(exchange, requireRun(id));
                 return;
             }
         }
         if (parts.length == 5 && parts[1].equals("api") && parts[2].equals("runs")
                 && parts[4].equals("report") && method.equals("GET")) {
+            requireOwnedProjectAccess(exchange, "TEST_RUN", parts[3], TeamAuthorization.TEST_EXECUTION, false);
             serveReport(exchange, requireRun(parts[3]));
             return;
         }
@@ -524,37 +753,46 @@ final class RunnerServer implements AutoCloseable {
         }
         // === CI/CD Config Endpoints ===
         if (path.equals("/api/cicd/config") && method.equals("GET")) {
-            sendJson(exchange, 200, getCiCdConfig());
+            String projectId = requireCiCdProjectAccess(exchange, false);
+            sendJson(exchange, 200, getCiCdConfig(projectId));
             return;
         }
         if (path.equals("/api/cicd/config") && method.equals("POST")) {
             requireSameOrigin(exchange);
+            requireCiCdManage(exchange);
             saveCiCdConfig(exchange);
             return;
         }
         if (parts.length == 4 && parts[1].equals("api") && parts[2].equals("cicd")
                 && parts[3].equals("test-connection") && method.equals("POST")) {
             requireSameOrigin(exchange);
+            requireCiCdManage(exchange);
             testCiCdConnection(exchange);
             return;
         }
         if (path.equals("/api/cicd/generate") && method.equals("GET")) {
-            generateWorkflow(exchange);
+            String projectId = requireCiCdProjectAccess(exchange, false);
+            generateWorkflow(exchange, projectId);
             return;
         }
         if (path.equals("/api/cicd/status") && method.equals("GET")) {
-            sendJson(exchange, 200, getCiCdStatus());
+            String projectId = requireCiCdProjectAccess(exchange, false);
+            sendJson(exchange, 200, getCiCdStatus(projectId));
             return;
         }
         if (parts.length == 4 && parts[1].equals("api") && parts[2].equals("cicd")
                 && parts[3].equals("commit") && method.equals("POST")) {
             requireSameOrigin(exchange);
-            commitWorkflow(exchange);
+            requireCiCdManage(exchange);
+            commitWorkflow(exchange, queryValue(exchange, "projectId"));
             return;
         }
         // === Test Case Management Endpoints ===
         if (path.equals("/api/testcases") && method.equals("GET")) {
-            sendJson(exchange, 200, testCaseManager.list().stream()
+            List<TestCaseManager.TestCase> visible = testCaseManager.list().stream()
+                    .filter(testCase -> tenantVisibleOwnedResource(exchange, "TEST_CASE", testCase.id(), TeamAuthorization.TEST_CASES, false))
+                    .toList();
+            sendJson(exchange, 200, visible.stream()
                     .map(this::testCaseToMap)
                     .toList());
             return;
@@ -575,6 +813,7 @@ final class RunnerServer implements AutoCloseable {
             if (testCase == null) {
                 sendError(exchange, 404, "Test case not found: " + id);
             } else {
+                requireOwnedProjectAccess(exchange, "TEST_CASE", id, TeamAuthorization.TEST_CASES, false);
                 sendJson(exchange, 200, testCaseToMap(testCase));
             }
             return;
@@ -588,6 +827,7 @@ final class RunnerServer implements AutoCloseable {
             if (testCaseManager.getById(id) == null) {
                 sendError(exchange, 404, "Test case not found: " + id);
             } else {
+                requireOwnedProjectAccess(exchange, "TEST_CASE", id, TeamAuthorization.TEST_CASES, false);
                 sendJson(exchange, 200, testCaseManager.history(id));
             }
             return;
@@ -601,6 +841,7 @@ final class RunnerServer implements AutoCloseable {
                 return;
             }
             String id = historyParts[0];
+            requireOwnedProjectAccess(exchange, "TEST_CASE", id, TeamAuthorization.TEST_CASES, true);
             TestCaseManager.TestCase before = testCaseManager.getById(id);
             try {
                 TestCaseManager.TestCase restored = testCaseManager.restoreVersion(id, Integer.parseInt(historyParts[1]));
@@ -614,6 +855,7 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/testcases/") && path.endsWith("/archive") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/testcases/".length(), path.length() - "/archive".length());
+            requireOwnedProjectAccess(exchange, "TEST_CASE", id, TeamAuthorization.TEST_CASES, true);
             boolean archived = testCaseManager.archive(id, true);
             if (archived) sendJson(exchange, 200, Map.of("id", id, "archived", true));
             else sendError(exchange, 404, "Test case not found: " + id);
@@ -622,6 +864,7 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/testcases/") && path.endsWith("/restore") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/testcases/".length(), path.length() - "/restore".length());
+            requireOwnedProjectAccess(exchange, "TEST_CASE", id, TeamAuthorization.TEST_CASES, true);
             boolean restored = testCaseManager.archive(id, false);
             if (restored) sendJson(exchange, 200, Map.of("id", id, "archived", false));
             else sendError(exchange, 404, "Test case not found: " + id);
@@ -635,12 +878,14 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/testcases/") && method.equals("PUT")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/testcases/".length());
+            requireOwnedProjectAccess(exchange, "TEST_CASE", id, TeamAuthorization.TEST_CASES, true);
             updateTestCase(exchange, id);
             return;
         }
         if (path.startsWith("/api/testcases/") && method.equals("DELETE")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/testcases/".length());
+            requireOwnedProjectAccess(exchange, "TEST_CASE", id, TeamAuthorization.TEST_CASES, true);
             boolean deleted = testCaseManager.delete(id);
             if (deleted) {
                 sendJson(exchange, 200, Map.of("message", "Test case deleted."));
@@ -655,23 +900,32 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         if (path.equals("/api/defects") && method.equals("GET")) {
-            sendJson(exchange, 200, defectManager.list(queryParameter(exchange, "testCaseId"), queryParameter(exchange, "storyId")));
+            String requestedProject = queryParameter(exchange, "projectId");
+            if (!requestedProject.isBlank()) requireProjectAccess(exchange, requestedProject, TeamAuthorization.DEFECTS, false);
+            List<Map<String, Object>> defects = defectManager.list(queryParameter(exchange, "testCaseId"), queryParameter(exchange, "storyId"));
+            sendJson(exchange, 200, defects.stream().filter(defect -> requestedProject.isBlank()
+                    ? projectAccessForMap(exchange, defect, TeamAuthorization.DEFECTS, false)
+                    : requestedProject.equals(String.valueOf(defect.getOrDefault("projectId", "")))).toList());
             return;
         }
         if (path.equals("/api/defects") && method.equals("POST")) {
             requireSameOrigin(exchange);
-            sendJson(exchange, 201, defectManager.create(requestObject(exchange), CURRENT_USER_ID, CURRENT_USER_NAME));
+            Map<String, Object> values = requestObject(exchange);
+            requireProjectAccess(exchange, optionalString(values, "projectId"), TeamAuthorization.DEFECTS, true);
+            sendJson(exchange, 201, defectManager.create(values, authActorId(exchange), authActorName(exchange)));
             return;
         }
         if (path.startsWith("/api/defects/") && path.endsWith("/links") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/defects/".length(), path.length() - "/links".length());
+            requireDefectProjectAccess(exchange, id, true);
             Map<String, Object> values = requestObject(exchange);
             sendJson(exchange, 200, defectManager.link(id, optionalString(values, "testCaseId"), optionalString(values, "storyId"), optionalString(values, "executionId")));
             return;
         }
         if (path.startsWith("/api/defects/") && method.equals("GET")) {
             String id = path.substring("/api/defects/".length());
+            requireDefectProjectAccess(exchange, id, false);
             Map<String, Object> defect = defectManager.list(null).stream().filter(item -> id.equals(stringField(item, "id"))).findFirst().orElse(null);
             if (defect == null) sendError(exchange, 404, "Defect not found: " + id);
             else sendJson(exchange, 200, defect);
@@ -681,6 +935,7 @@ final class RunnerServer implements AutoCloseable {
             requireSameOrigin(exchange);
             String rest = path.substring("/api/defects/".length());
             int separator = rest.indexOf("/links/");
+            requireDefectProjectAccess(exchange, rest.substring(0, separator), true);
             String linkTarget = rest.substring(separator + "/links/".length());
             if (linkTarget.startsWith("story-")) defectManager.unlink(rest.substring(0, separator), null, linkTarget.substring("story-".length()));
             else defectManager.unlink(rest.substring(0, separator), linkTarget);
@@ -690,65 +945,80 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/defects/") && method.equals("PUT")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/defects/".length());
-            sendJson(exchange, 200, defectManager.update(id, requestObject(exchange)));
+            requireDefectProjectAccess(exchange, id, true);
+            Map<String, Object> values = requestObject(exchange);
+            if (values.containsKey("projectId")) requireProjectAccess(exchange, optionalString(values, "projectId"), TeamAuthorization.DEFECTS, true);
+            sendJson(exchange, 200, defectManager.update(id, values));
             return;
         }
         if (path.startsWith("/api/user-stories/attachments/") && method.equals("GET")) {
-            serveUserStoryAttachment(exchange, path.substring("/api/user-stories/attachments/".length()), false);
+            String attachmentId = path.substring("/api/user-stories/attachments/".length());
+            requireOwnedProjectAccess(exchange, "ATTACHMENT", attachmentId, TeamAuthorization.USER_STORIES, false);
+            serveUserStoryAttachment(exchange, attachmentId, false);
             return;
         }
         if (path.startsWith("/api/user-stories/attachments/") && method.equals("DELETE")) {
             requireSameOrigin(exchange);
-            deleteUserStoryAttachment(exchange, path.substring("/api/user-stories/attachments/".length()));
+            String attachmentId = path.substring("/api/user-stories/attachments/".length());
+            requireOwnedProjectAccess(exchange, "ATTACHMENT", attachmentId, TeamAuthorization.USER_STORIES, true);
+            deleteUserStoryAttachment(exchange, attachmentId);
             return;
         }
         if (path.startsWith("/api/user-stories/related-links/") && method.equals("PUT")) {
             requireSameOrigin(exchange);
             Map<String, Object> values = requestObject(exchange);
             String linkId = path.substring("/api/user-stories/related-links/".length());
+            UserStoryStore.RelatedLink existingLink = requireRelatedLinkAccess(exchange, linkId, true);
             validateRelatedWorkItemTarget(stringField(values, "url"), optionalString(values, "type"));
             UserStoryStore.RelatedLink updatedLink = userStoryStore.updateRelatedLink(linkId, stringField(values, "title"), stringField(values, "url"), optionalString(values, "type"));
-            userStoryStore.recordActivity(updatedLink.storyId(), "Link changed", updatedLink.title(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            userStoryStore.recordActivity(updatedLink.storyId(), "Link changed", updatedLink.title(), authActorId(exchange), authActorName(exchange));
             sendJson(exchange, 200, relatedLinkToMap(updatedLink));
             return;
         }
         if (path.startsWith("/api/user-stories/related-links/") && method.equals("DELETE")) {
             requireSameOrigin(exchange);
             String linkId = path.substring("/api/user-stories/related-links/".length());
-            UserStoryStore.RelatedLink existingLink = userStoryStore.findRelatedLink(linkId);
+            UserStoryStore.RelatedLink existingLink = requireRelatedLinkAccess(exchange, linkId, true);
             userStoryStore.removeRelatedLink(linkId);
-            if (existingLink != null) userStoryStore.recordActivity(existingLink.storyId(), "Link removed", existingLink.title(), CURRENT_USER_ID, CURRENT_USER_NAME);
+            if (existingLink != null) userStoryStore.recordActivity(existingLink.storyId(), "Link removed", existingLink.title(), authActorId(exchange), authActorName(exchange));
             sendJson(exchange, 204, Map.of());
             return;
         }
         // === Phase 1 User Story Management Endpoints ===
         if (path.equals("/api/user-stories/projects") && method.equals("GET")) {
-            sendJson(exchange, 200, userStoryStore.listProjects(queryBoolean(exchange, "includeArchived")).stream().map(this::projectToMap).toList());
+            sendJson(exchange, 200, userStoryStore.listProjects(queryBoolean(exchange, "includeArchived")).stream()
+                    .filter(project -> tenantVisibleProject(exchange, project.id()))
+                    .map(this::projectToMap).toList());
             return;
         }
         if (path.equals("/api/user-stories/projects") && method.equals("POST")) {
             requireSameOrigin(exchange);
+            requireAuthenticatedAdmin(exchange);
             sendJson(exchange, 201, projectToMap(createUserStoryProject(exchange)));
             return;
         }
         if (path.startsWith("/api/user-stories/projects/") && method.equals("PUT")) {
             requireSameOrigin(exchange);
+            requireAuthenticatedAdmin(exchange);
             sendJson(exchange, 200, projectToMap(updateUserStoryProject(exchange, path.substring("/api/user-stories/projects/".length()))));
             return;
         }
         if (path.startsWith("/api/user-stories/projects/") && method.equals("POST") && path.endsWith("/archive")) {
             requireSameOrigin(exchange);
+            requireAuthenticatedAdmin(exchange);
             String id = path.substring("/api/user-stories/projects/".length(), path.length() - "/archive".length());
             sendJson(exchange, 200, projectToMap(userStoryStore.archiveProject(id, true)));
             return;
         }
         if (path.startsWith("/api/user-stories/projects/") && method.equals("POST") && path.endsWith("/restore")) {
             requireSameOrigin(exchange);
+            requireAuthenticatedAdmin(exchange);
             String id = path.substring("/api/user-stories/projects/".length(), path.length() - "/restore".length());
             sendJson(exchange, 200, projectToMap(userStoryStore.archiveProject(id, false)));
             return;
         }
         if (path.equals("/api/user-stories/epics") && method.equals("GET")) {
+            requireProjectAccess(exchange, queryValue(exchange, "projectId"), TeamAuthorization.USER_STORIES, false);
             sendJson(exchange, 200, userStoryStore.listEpics(queryValue(exchange, "projectId"), queryBoolean(exchange, "includeArchived")).stream().map(this::epicToMap).toList());
             return;
         }
@@ -759,18 +1029,21 @@ final class RunnerServer implements AutoCloseable {
         }
         if (path.startsWith("/api/user-stories/epics/") && method.equals("PUT")) {
             requireSameOrigin(exchange);
+            requireEpicProjectAccess(exchange, path.substring("/api/user-stories/epics/".length()), true);
             sendJson(exchange, 200, epicToMap(updateUserStoryEpic(exchange, path.substring("/api/user-stories/epics/".length()))));
             return;
         }
         if (path.startsWith("/api/user-stories/epics/") && method.equals("POST") && path.endsWith("/archive")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/user-stories/epics/".length(), path.length() - "/archive".length());
+            requireEpicProjectAccess(exchange, id, true);
             sendJson(exchange, 200, epicToMap(userStoryStore.archiveEpic(id, true)));
             return;
         }
         if (path.startsWith("/api/user-stories/epics/") && method.equals("POST") && path.endsWith("/restore")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/user-stories/epics/".length(), path.length() - "/restore".length());
+            requireEpicProjectAccess(exchange, id, true);
             sendJson(exchange, 200, epicToMap(userStoryStore.archiveEpic(id, false)));
             return;
         }
@@ -779,6 +1052,7 @@ final class RunnerServer implements AutoCloseable {
             int offset = queryInt(exchange, "offset", 0);
             int limit = queryInt(exchange, "limit", 50);
             String projectId = queryValue(exchange, "projectId");
+            requireProjectAccess(exchange, projectId, TeamAuthorization.USER_STORIES, false);
             String sprintId = queryValue(exchange, "sprintId");
             boolean includeArchived = queryBoolean(exchange, "includeArchived");
             Map<String, Object> response = new LinkedHashMap<>();
@@ -805,6 +1079,7 @@ final class RunnerServer implements AutoCloseable {
         }
         if (path.equals("/api/user-stories/work-items") && method.equals("GET")) {
             String query = queryValue(exchange, "search");
+            requireProjectAccess(exchange, queryValue(exchange, "projectId"), TeamAuthorization.USER_STORIES, false);
             sendJson(exchange, 200, userStoryStore.searchWorkItems(queryValue(exchange, "projectId"), query, queryInt(exchange, "limit", 25)).stream().map(this::workItemToMap).toList());
             return;
         }
@@ -815,26 +1090,30 @@ final class RunnerServer implements AutoCloseable {
         }
         if (path.startsWith("/api/user-stories/stories/") && method.equals("PUT") && !path.contains("/comments/")) {
             requireSameOrigin(exchange);
+            requireStoryProjectAccess(exchange, path.substring("/api/user-stories/stories/".length()), true);
             sendJson(exchange, 200, userStoryToMap(updateUserStory(exchange, path.substring("/api/user-stories/stories/".length()))));
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && method.equals("POST") && path.endsWith("/status")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/user-stories/stories/".length(), path.length() - "/status".length());
+            requireStoryProjectAccess(exchange, id, true);
             Map<String, Object> values = requestObject(exchange);
             sendJson(exchange, 200, userStoryToMap(userStoryStore.updateStoryStatus(id, stringField(values, "status"), optionalString(values, "projectId"))));
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/activity") && method.equals("GET")) {
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/activity".length());
+            requireStoryProjectAccess(exchange, storyId, false);
             sendJson(exchange, 200, userStoryStore.listActivity(storyId).stream().map(this::activityToMap).toList());
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/comments") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/comments".length());
+            requireStoryProjectAccess(exchange, storyId, true);
             Map<String, Object> values = requestObject(exchange);
-            sendJson(exchange, 201, activityToMap(userStoryStore.addComment(storyId, stringField(values, "comment"), CURRENT_USER_ID, CURRENT_USER_NAME)));
+            sendJson(exchange, 201, activityToMap(userStoryStore.addComment(storyId, stringField(values, "comment"), authActorId(exchange), authActorName(exchange))));
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && path.contains("/comments/") && (method.equals("PUT") || method.equals("DELETE"))) {
@@ -843,33 +1122,38 @@ final class RunnerServer implements AutoCloseable {
             int markerIndex = path.indexOf(marker);
             String storyId = path.substring("/api/user-stories/stories/".length(), markerIndex);
             String commentId = path.substring(markerIndex + marker.length());
+            requireStoryProjectAccess(exchange, storyId, true);
             if (method.equals("PUT")) {
                 Map<String, Object> values = requestObject(exchange);
-                sendJson(exchange, 200, activityToMap(userStoryStore.updateComment(storyId, commentId, stringField(values, "comment"), CURRENT_USER_ID, CURRENT_USER_NAME)));
+                sendJson(exchange, 200, activityToMap(userStoryStore.updateComment(storyId, commentId, stringField(values, "comment"), authActorId(exchange), authActorName(exchange))));
             } else {
-                sendJson(exchange, 200, activityToMap(userStoryStore.deleteComment(storyId, commentId, CURRENT_USER_ID, CURRENT_USER_NAME)));
+                sendJson(exchange, 200, activityToMap(userStoryStore.deleteComment(storyId, commentId, authActorId(exchange), authActorName(exchange))));
             }
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/attachments") && method.equals("GET")) {
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/attachments".length());
+            requireStoryProjectAccess(exchange, storyId, false);
             sendJson(exchange, 200, userStoryStore.listAttachments(storyId).stream().map(this::attachmentToMap).toList());
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/attachments") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/attachments".length());
+            requireStoryProjectAccess(exchange, storyId, true);
             sendJson(exchange, 201, uploadUserStoryAttachment(exchange, storyId));
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/related-links") && method.equals("GET")) {
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/related-links".length());
+            requireStoryProjectAccess(exchange, storyId, false);
             sendJson(exchange, 200, userStoryStore.listRelatedLinks(storyId).stream().map(this::relatedLinkToMap).toList());
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/related-links") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/related-links".length());
+            requireStoryProjectAccess(exchange, storyId, true);
             Map<String, Object> values = requestObject(exchange);
             validateRelatedWorkItemTarget(stringField(values, "url"), optionalString(values, "type"));
             sendJson(exchange, 201, relatedLinkToMap(userStoryStore.addRelatedLink(storyId, stringField(values, "title"), stringField(values, "url"), optionalString(values, "type"))));
@@ -877,6 +1161,7 @@ final class RunnerServer implements AutoCloseable {
         }
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/test-cases") && method.equals("GET")) {
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/test-cases".length());
+            requireStoryProjectAccess(exchange, storyId, false);
             String search = queryValue(exchange, "search");
             int offset = queryInt(exchange, "offset", 0);
             int limit = Math.min(100, Math.max(1, queryInt(exchange, "limit", 25)));
@@ -892,6 +1177,7 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/user-stories/stories/") && path.endsWith("/test-cases") && method.equals("POST")) {
             requireSameOrigin(exchange);
             String storyId = path.substring("/api/user-stories/stories/".length(), path.length() - "/test-cases".length());
+            requireStoryProjectAccess(exchange, storyId, true);
             Map<String, Object> values = requestObject(exchange);
             String testCaseId = stringField(values, "testCaseId");
             if (testCaseManager.list().stream().noneMatch(testCase -> testCase.id().equals(testCaseId))) {
@@ -905,6 +1191,7 @@ final class RunnerServer implements AutoCloseable {
             int marker = path.indexOf("/test-cases/");
             String storyId = path.substring("/api/user-stories/stories/".length(), marker);
             String testCaseId = path.substring(marker + "/test-cases/".length());
+            requireStoryProjectAccess(exchange, storyId, true);
             userStoryStore.unlinkTestCase(storyId, testCaseId);
             sendJson(exchange, 204, Map.of());
             return;
@@ -912,17 +1199,20 @@ final class RunnerServer implements AutoCloseable {
         if (path.startsWith("/api/user-stories/stories/") && method.equals("POST") && path.endsWith("/archive")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/user-stories/stories/".length(), path.length() - "/archive".length());
+            requireStoryProjectAccess(exchange, id, true);
             sendJson(exchange, 200, userStoryToMap(userStoryStore.archiveStory(id, true)));
             return;
         }
         if (path.startsWith("/api/user-stories/stories/") && method.equals("POST") && path.endsWith("/restore")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/user-stories/stories/".length(), path.length() - "/restore".length());
+            requireStoryProjectAccess(exchange, id, true);
             sendJson(exchange, 200, userStoryToMap(userStoryStore.archiveStory(id, false)));
             return;
         }
         // === Phase 2 Sprint and Kanban endpoints ===
         if (path.equals("/api/user-stories/sprints") && method.equals("GET")) {
+            requireProjectAccess(exchange, queryValue(exchange, "projectId"), TeamAuthorization.SPRINT_BOARD, false);
             sendJson(exchange, 200, userStoryStore.listSprints(queryValue(exchange, "projectId"), queryBoolean(exchange, "includeCompleted")).stream().map(this::sprintToMap).toList());
             return;
         }
@@ -933,18 +1223,21 @@ final class RunnerServer implements AutoCloseable {
         }
         if (path.startsWith("/api/user-stories/sprints/") && method.equals("PUT")) {
             requireSameOrigin(exchange);
+            requireSprintProjectAccess(exchange, path.substring("/api/user-stories/sprints/".length()), true);
             sendJson(exchange, 200, sprintToMap(updateSprint(exchange, path.substring("/api/user-stories/sprints/".length()))));
             return;
         }
         if (path.startsWith("/api/user-stories/sprints/") && method.equals("POST") && path.endsWith("/start")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/user-stories/sprints/".length(), path.length() - "/start".length());
+            requireSprintProjectAccess(exchange, id, true);
             sendJson(exchange, 200, sprintToMap(userStoryStore.startSprint(id)));
             return;
         }
         if (path.startsWith("/api/user-stories/sprints/") && method.equals("POST") && path.endsWith("/complete")) {
             requireSameOrigin(exchange);
             String id = path.substring("/api/user-stories/sprints/".length(), path.length() - "/complete".length());
+            requireSprintProjectAccess(exchange, id, true);
             sendJson(exchange, 200, sprintToMap(userStoryStore.completeSprint(id)));
             return;
         }
@@ -952,17 +1245,21 @@ final class RunnerServer implements AutoCloseable {
             requireSameOrigin(exchange);
             String sprintId = path.substring("/api/user-stories/sprints/".length(), path.length() - "/stories".length());
             Map<String, Object> values = requestObject(exchange);
+            requireSprintProjectAccess(exchange, sprintId, true);
+            requireStoryProjectAccess(exchange, stringField(values, "storyId"), true);
             sendJson(exchange, 200, userStoryToMap(userStoryStore.assignStoryToSprint(sprintId, stringField(values, "storyId"))));
             return;
         }
         if (path.startsWith("/api/user-stories/sprints/") && path.endsWith("/stories") && method.equals("DELETE")) {
             requireSameOrigin(exchange);
             Map<String, Object> values = requestObject(exchange);
+            requireStoryProjectAccess(exchange, stringField(values, "storyId"), true);
             sendJson(exchange, 200, userStoryToMap(userStoryStore.removeStoryFromSprint(stringField(values, "storyId"))));
             return;
         }
         if (path.equals("/api/user-stories/board") && method.equals("GET")) {
             String projectId = queryValue(exchange, "projectId");
+            requireProjectAccess(exchange, projectId, TeamAuthorization.SPRINT_BOARD, false);
             String sprintId = queryValue(exchange, "sprintId");
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("items", userStoryStore.listStories(projectId, sprintId, queryValue(exchange, "search"), queryInt(exchange, "offset", 0), queryInt(exchange, "limit", 100), false).stream().map(this::userStoryToMap).toList());
@@ -1105,10 +1402,20 @@ final class RunnerServer implements AutoCloseable {
         sendError(exchange, 404, "Not found.");
     }
 
-    private Map<String, Object> catalogResponse() throws IOException {
+    private Map<String, Object> catalogResponse(HttpExchange exchange) throws IOException {
         List<Path> allPaths = new ArrayList<>();
-        allPaths.addAll(sharedPathConfig.getExistingPaths());
-        allPaths.addAll(remoteImportConfig.getExistingPaths());
+        for (SharedPathConfig.SharedPathEntry configured : sharedPathConfig.getSharedPaths()) {
+            if (ownedProjectAccess(exchange, "SHARED_PATH", configured.getName(), TeamAuthorization.TEST_EXECUTION, false)
+                    && Files.isDirectory(Path.of(configured.getPath()))) {
+                allPaths.add(Path.of(configured.getPath()).toRealPath());
+            }
+        }
+        for (RemoteImportConfig.ImportEntry configured : remoteImportConfig.getImports()) {
+            if (ownedProjectAccess(exchange, "REMOTE_IMPORT", configured.getId(), TeamAuthorization.TEST_EXECUTION, false)
+                    && Files.isDirectory(Path.of(configured.getPath()))) {
+                allPaths.add(Path.of(configured.getPath()).toRealPath());
+            }
+        }
         List<Map<String, Object>> assets = executionService.pluginRegistry()
                 .discoverAllAssets(projectRoot, allPaths);
         String projectIdentity = stableHash(projectRoot.toAbsolutePath().normalize().toString());
@@ -1178,6 +1485,8 @@ final class RunnerServer implements AutoCloseable {
         if (!(parsed instanceof Map<?, ?> values)) {
             throw new IllegalArgumentException("Shared path settings must be a JSON object.");
         }
+        String projectId = stringField(values, "projectId").trim();
+        requireProjectAccess(exchange, projectId, TeamAuthorization.TEST_EXECUTION, true);
         // Name is optional — derived from path if not provided
         String name = null;
         Object nameObj = values.get("name");
@@ -1189,11 +1498,16 @@ final class RunnerServer implements AutoCloseable {
         if (!pathObj.isAbsolute()) {
             throw new IllegalArgumentException("Shared path must be an absolute path (e.g., C:\\shared\\tests). Relative paths are not supported.");
         }
+        if (!Files.isDirectory(pathObj) || !Files.isReadable(pathObj)) {
+            throw new IllegalArgumentException("Shared path must be an existing readable directory.");
+        }
+        path = pathObj.toRealPath().toString();
         // Derive name from path if not provided
         if (name == null || name.isBlank()) {
             name = pathObj.getFileName().toString();
         }
         sharedPathConfig.addSharedPath(name, path);
+        projectOwnershipManager.assign("SHARED_PATH", name, projectId, "SHARED_PATH_CREATE", validProjectIds());
         sendJson(exchange, 200, Map.of("message", "Shared path '" + name + "' added."));
     }
 
@@ -1203,7 +1517,7 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 404, "Shared path '" + name + "' not found.");
             return;
         }
-        Path sharedPath = Path.of(entry.getPath());
+        Path sharedPath = Path.of(entry.getPath()).toRealPath();
         if (!Files.isDirectory(sharedPath)) {
             String hint;
             if (!sharedPath.isAbsolute()) {
@@ -1224,6 +1538,8 @@ final class RunnerServer implements AutoCloseable {
         for (Map<String, Object> asset : assets) {
             String selection = (String) asset.get("selection");
             if (selection != null && selection.contains(sharedPathStr)) {
+                Path selected = Path.of(selection).toAbsolutePath().normalize();
+                if (!selected.toRealPath().startsWith(sharedPath)) continue;
                 pathAssets.add(asset);
             }
         }
@@ -1282,6 +1598,8 @@ final class RunnerServer implements AutoCloseable {
         if (!(parsed instanceof Map<?, ?> values)) {
             throw new IllegalArgumentException("Request must be a JSON object.");
         }
+        String projectId = stringField(values, "projectId").trim();
+        requireProjectAccess(exchange, projectId, TeamAuthorization.TEST_EXECUTION, true);
         String repoUrl = stringField(values, "repoUrl");
         if (repoUrl.isBlank()) {
             throw new IllegalArgumentException("GitHub repository URL is required.");
@@ -1292,6 +1610,7 @@ final class RunnerServer implements AutoCloseable {
         }
         try {
             RemoteImportConfig.ImportEntry entry = remoteImportConfig.cloneGitHubRepo(repoUrl);
+            projectOwnershipManager.assign("REMOTE_IMPORT", entry.getId(), projectId, "REMOTE_IMPORT_CREATE", validProjectIds());
             sendJson(exchange, 200, Map.of(
                     "message", "Repository cloned successfully.",
                     "id", entry.getId(),
@@ -1309,6 +1628,9 @@ final class RunnerServer implements AutoCloseable {
         if (contentType == null || !contentType.toLowerCase().contains("multipart/form-data")) {
             throw new IllegalArgumentException("Send ZIP file as multipart/form-data.");
         }
+
+        String projectId = queryParameter(exchange, "projectId");
+        requireProjectAccess(exchange, projectId, TeamAuthorization.TEST_EXECUTION, true);
 
         // Read the request body
         byte[] body = exchange.getRequestBody().readNBytes(50 * 1024 * 1024 + 1); // 50MB max
@@ -1342,6 +1664,7 @@ final class RunnerServer implements AutoCloseable {
 
         try {
             RemoteImportConfig.ImportEntry entry = remoteImportConfig.extractZipFile(tempZip, fileName);
+            projectOwnershipManager.assign("REMOTE_IMPORT", entry.getId(), projectId, "REMOTE_IMPORT_CREATE", validProjectIds());
             sendJson(exchange, 200, Map.of(
                     "message", "ZIP file extracted successfully.",
                     "id", entry.getId(),
@@ -1359,7 +1682,7 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 404, "Import '" + id + "' not found.");
             return;
         }
-        Path importPath = Path.of(entry.getPath());
+        Path importPath = Path.of(entry.getPath()).toRealPath();
         if (!Files.isDirectory(importPath)) {
             sendError(exchange, 404, "Import directory not found: " + entry.getPath());
             return;
@@ -1373,6 +1696,8 @@ final class RunnerServer implements AutoCloseable {
         for (Map<String, Object> asset : assets) {
             String selection = (String) asset.get("selection");
             if (selection != null && selection.contains(importPathStr)) {
+                Path selected = Path.of(selection).toAbsolutePath().normalize();
+                if (!selected.toRealPath().startsWith(importPath)) continue;
                 pathAssets.add(asset);
             }
         }
@@ -1512,6 +1837,11 @@ final class RunnerServer implements AutoCloseable {
         String requestedScope = stringField(values, "executionScope");
         String scenarioName = stringField(values, "scenarioName");
         String scenarioTag = stringField(values, "scenarioTag");
+        if (requestedTestCaseId.isBlank()) {
+            if (!isGlobalAdmin(exchange)) throw new AuthorizationException(403, "A project-owned Test Case is required for this execution.");
+        } else {
+            requireOwnedProjectAccess(exchange, "TEST_CASE", requestedTestCaseId, TeamAuthorization.TEST_EXECUTION, true);
+        }
         if (!scenarioName.isBlank() && !scenarioTag.isBlank()) {
             throw new IllegalArgumentException("Choose a scenario name or tag filter, not both.");
         }
@@ -1532,12 +1862,23 @@ final class RunnerServer implements AutoCloseable {
         // Check if this is a collection run (multiple selections)
         Object selectionsObj = values.get("selections");
         String runId = "RUN-" + UUID.randomUUID().toString().substring(0, 8);
+        TenantJobContext jobContext = createRunJobContext(exchange, runId, requestedTestCaseId);
         RunEntry entry;
 
         // Get all assets including from shared paths and imports
         List<Path> allPaths = new ArrayList<>();
-        allPaths.addAll(sharedPathConfig.getExistingPaths());
-        allPaths.addAll(remoteImportConfig.getExistingPaths());
+        for (SharedPathConfig.SharedPathEntry configured : sharedPathConfig.getSharedPaths()) {
+            if (ownedProjectAccess(exchange, "SHARED_PATH", configured.getName(), TeamAuthorization.TEST_EXECUTION, false)
+                    && Files.isDirectory(Path.of(configured.getPath()))) {
+                allPaths.add(Path.of(configured.getPath()).toRealPath());
+            }
+        }
+        for (RemoteImportConfig.ImportEntry configured : remoteImportConfig.getImports()) {
+            if (ownedProjectAccess(exchange, "REMOTE_IMPORT", configured.getId(), TeamAuthorization.TEST_EXECUTION, false)
+                    && Files.isDirectory(Path.of(configured.getPath()))) {
+                allPaths.add(Path.of(configured.getPath()).toRealPath());
+            }
+        }
         List<Map<String, Object>> allAssets = executionService.pluginRegistry()
                 .discoverAllAssets(projectRoot, allPaths);
 
@@ -1581,7 +1922,7 @@ final class RunnerServer implements AutoCloseable {
             if (targetUrl.isBlank()) {
                 targetUrl = String.valueOf(asset.getOrDefault("defaultTargetUrl", ""));
             }
-            entry = new RunEntry(runId, kind, selection, targetUrl);
+            entry = new RunEntry(runId, kind, selection, targetUrl, jobContext);
             entry.assetId = requestedAssetId;
             entry.testCaseId = requestedTestCaseId;
             entry.executionSource = executionSource.isBlank() ? "LOCAL_RUNNER" : executionSource;
@@ -1605,7 +1946,7 @@ final class RunnerServer implements AutoCloseable {
                 }
             }
             String selectionDisplay = "Collection (" + selections.size() + " features)";
-            entry = new RunEntry(runId, "cucumber", selectionDisplay, targetUrl);
+            entry = new RunEntry(runId, "cucumber", selectionDisplay, targetUrl, jobContext);
             entry.selections = new ArrayList<>((List<String>) selections);
             entry.browsers = new ArrayList<>(browsers);
         } else {
@@ -1618,7 +1959,7 @@ final class RunnerServer implements AutoCloseable {
             if (!knownAsset) {
                 throw new IllegalArgumentException("Choose a test asset discovered in this project.");
             }
-            entry = new RunEntry(runId, pluginKind, selection, targetUrl);
+            entry = new RunEntry(runId, pluginKind, selection, targetUrl, jobContext);
             entry.browsers = new ArrayList<>(browsers);
         }
         synchronized (runs) {
@@ -1629,15 +1970,90 @@ final class RunnerServer implements AutoCloseable {
             runs.put(entry.id, entry);
             trimRuns();
         }
+        String runProject = jobContext.projectId() == null ? "" : jobContext.projectId();
+        if (runProject.isBlank()) projectOwnershipManager.quarantine("TEST_RUN", runId, "RUN_WITHOUT_PROJECT");
+        else projectOwnershipManager.assign("TEST_RUN", runId, runProject, "TEST_CASE_RELATIONSHIP", validProjectIds());
         List<String> finalBrowsers = entry.browsers;
         String runTargetUrl = targetUrl;
-        runExecutor.execute(() -> executeRun(entry, runTargetUrl, authorized, headless, finalBrowsers));
+        try {
+            runExecutor.execute(() -> executeRun(entry, runTargetUrl, authorized, headless, finalBrowsers));
+        } catch (RejectedExecutionException error) {
+            synchronized (runs) {
+                runs.remove(entry.id);
+                if (entry.id.equals(activeRunId)) activeRunId = null;
+            }
+            throw new IllegalStateException("The execution queue is unavailable.");
+        }
         sendJson(exchange, 202, runResponse(entry));
+    }
+
+    private TenantJobContext createRunJobContext(HttpExchange exchange, String runId,
+                                                  String requestedTestCaseId) throws IOException {
+        AuthSessionManager.Session current = session(exchange);
+        if (current == null) throw new AuthorizationException(401, "Authentication is required.");
+        if (requestedTestCaseId == null || requestedTestCaseId.isBlank()) {
+            if (!isGlobalAdmin(exchange)) {
+                throw new AuthorizationException(403, "A project-owned Test Case is required for this execution.");
+            }
+            return new TenantJobContext(runId, null, null, current.userId(), "TEST_RUN",
+                    "TEST_RUN", runId, Instant.now().toString(), "PLATFORM_ADMIN_RUN");
+        }
+        String projectId = projectOwnershipManager.projectId("TEST_CASE", requestedTestCaseId);
+        if (projectId.isBlank()) {
+            throw new AuthorizationException(403, "The test case has no authorized project ownership.");
+        }
+        ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(projectId);
+        if (assignment == null) {
+            throw new AuthorizationException(403, "The project has no authorized organization ownership.");
+        }
+        try {
+            tenantContextResolver.resolveProject(current.id(), assignment.organizationId(), projectId,
+                    TeamAuthorization.TEST_EXECUTION, "write");
+        } catch (TenantAuthorizationException error) {
+            throw new AuthorizationException(error.statusCode(),
+                    "The requested tenant execution is not authorized.");
+        }
+        return new TenantJobContext(runId, assignment.organizationId(), projectId, current.userId(),
+                "TEST_RUN", "TEST_CASE", requestedTestCaseId, Instant.now().toString(),
+                "TENANT_PROJECT_TEST_EXECUTION_V1");
+    }
+
+    /** Rechecks current authoritative state at every sensitive async boundary. */
+    private void revalidateRunContext(RunEntry entry, String boundary) throws IOException {
+        TenantJobContext context = entry.jobContext;
+        if (context == null) throw new AuthorizationException(403, "The run has no tenant execution context.");
+        if (context.platformJob()) {
+            AuthUserDirectory.User user = authUserDirectory.findById(context.requesterUserId());
+            if (user == null || !AuthUserDirectory.ACTIVE.equals(user.status())
+                    || !isGlobalAdminUser(context.requesterUserId())) {
+                throw new AuthorizationException(403, "The platform execution is no longer authorized.");
+            }
+            return;
+        }
+        ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(context.projectId());
+        if (assignment == null || !context.organizationId().equals(assignment.organizationId())) {
+            throw new AuthorizationException(403, "The run ownership is no longer authoritative.");
+        }
+        try {
+            tenantContextResolver.resolveUser(context.requesterUserId(), context.organizationId(),
+                    context.projectId(), TeamAuthorization.TEST_EXECUTION, "write");
+        } catch (TenantAuthorizationException error) {
+            throw new AuthorizationException(error.statusCode(),
+                    "The run is no longer authorized for this tenant.");
+        }
+    }
+
+    private boolean isGlobalAdminUser(String userId) {
+        return teamMemberManager.list().stream()
+                .anyMatch(member -> userId.equals(member.registeredUserId())
+                        && TeamMemberManager.ACTIVE.equals(member.status())
+                        && "Admin".equals(member.role()));
     }
 
     private void executeRun(RunEntry entry, String targetUrl, boolean authorized,
                             boolean headless, List<String> browsers) {
         try {
+            revalidateRunContext(entry, "execute");
             entry.status = "RUNNING";
             if (entry.selections != null && !entry.selections.isEmpty()) {
                 // Collection run: dispatch to the first plugin that matches
@@ -1657,13 +2073,23 @@ final class RunnerServer implements AutoCloseable {
                         authorized, headless, browsers, entry.scenarioName, entry.scenarioTag, entry::addLog);
             }
             entry.status = entry.cancelRequested ? "CANCELLED" : resultStatus(entry.result);
+            if (!entry.cancelRequested) {
+                revalidateRunContext(entry, "artifact-write");
+                recordRunArtifacts(entry);
+            }
         } catch (Exception exception) {
             entry.error = exception.getMessage() == null
                     ? "The test run could not be completed." : exception.getMessage();
             entry.status = entry.cancelRequested ? "CANCELLED" : "ERROR";
         } finally {
             entry.finishedAt = Instant.now().toString();
-            persistAutomationExecution(entry);
+            try {
+                revalidateRunContext(entry, "result-write");
+                persistAutomationExecution(entry);
+            } catch (Exception exception) {
+                entry.error = "The run result could not be authorized for persistence.";
+                entry.status = "ERROR";
+            }
             synchronized (runs) {
                 if (entry.id.equals(activeRunId)) {
                     activeRunId = null;
@@ -1673,6 +2099,7 @@ final class RunnerServer implements AutoCloseable {
     }
 
     private void cancelRun(HttpExchange exchange, RunEntry entry) throws IOException {
+        revalidateRunContext(entry, "cancel");
         synchronized (runs) {
             if (!entry.id.equals(activeRunId) || !(entry.status.equals("QUEUED") || entry.status.equals("RUNNING"))) {
                 sendError(exchange, 409, "This run is no longer active.");
@@ -1720,6 +2147,28 @@ final class RunnerServer implements AutoCloseable {
         response.put("scenarioName", entry.scenarioName);
         response.put("scenarioTag", entry.scenarioTag);
         return response;
+    }
+
+    private Map<String, Object> visibleCatalogResponse(HttpExchange exchange) throws IOException {
+        Map<String, Object> response = catalogResponse(exchange);
+        if (isGlobalAdmin(exchange)) return response;
+        List<Map<String, Object>> visible = response.get("assets") instanceof List<?> values
+                ? values.stream().filter(Map.class::isInstance).map(value -> (Map<String, Object>) value)
+                .filter(asset -> assetAccessible(exchange, stringField(asset, "assetId"), false)).toList()
+                : List.of();
+        Map<String, Object> filtered = new LinkedHashMap<>(response);
+        filtered.put("assets", visible);
+        filtered.put("total", visible.size());
+        return filtered;
+    }
+
+    private boolean assetAccessible(HttpExchange exchange, String assetId, boolean write) {
+        if (assetId == null || assetId.isBlank()) return false;
+        if (isGlobalAdmin(exchange)) return true;
+        return automationMappingManager.list().stream()
+                .filter(mapping -> assetId.equals(stringField(mapping, "assetId")))
+                .anyMatch(mapping -> ownedProjectAccess(exchange, "TEST_CASE", stringField(mapping, "testCaseId"),
+                        write ? TeamAuthorization.TEST_EXECUTION : TeamAuthorization.TEST_CASES, write));
     }
 
     private List<Map<String, Object>> cucumberScenarios(Map<String, Object> asset) {
@@ -1786,6 +2235,9 @@ final class RunnerServer implements AutoCloseable {
             record.put("framework", entry.kindName);
             record.put("project", mapping.getOrDefault("sourceProject", projectRoot.getFileName().toString()));
             record.put("executionSource", entry.executionSource);
+            record.put("organizationId", entry.jobContext.organizationId() == null
+                    ? "" : entry.jobContext.organizationId().toString());
+            record.put("projectId", entry.jobContext.projectId() == null ? "" : entry.jobContext.projectId());
             record.put("startedAt", entry.startedAt);
             record.put("finishedAt", entry.finishedAt);
             record.put("durationMs", durationMillis(entry.startedAt, entry.finishedAt));
@@ -1796,7 +2248,19 @@ final class RunnerServer implements AutoCloseable {
             record.put("ciProvider", entry.ciProvider);
             record.put("pipelineRunId", entry.pipelineRunId);
             try {
+                String executionProject = projectOwnershipManager.projectId("TEST_CASE", String.valueOf(mapping.get("testCaseId")));
+                if (executionProject.isBlank() || !executionProject.equals(entry.jobContext.projectId())) {
+                    projectOwnershipManager.quarantine("AUTOMATION_EXECUTION", entry.id, "EXECUTION_OWNERSHIP_MISMATCH");
+                    continue;
+                }
+                ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(executionProject);
+                if (assignment == null || !assignment.organizationId().equals(entry.jobContext.organizationId())) {
+                    projectOwnershipManager.quarantine("AUTOMATION_EXECUTION", entry.id, "EXECUTION_TENANT_MISMATCH");
+                    continue;
+                }
                 automationExecutionManager.save(record);
+                projectOwnershipManager.assign("AUTOMATION_EXECUTION", entry.id, executionProject,
+                        "TEST_CASE_RELATIONSHIP", validProjectIds());
             } catch (IOException error) {
                 System.err.println("Failed to persist automated execution " + entry.id + ": " + error.getMessage());
             }
@@ -1877,6 +2341,7 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 404, "Screenshot not found.");
             return;
         }
+        requireArtifactAccess(exchange, "SCREENSHOT", fileName, TeamAuthorization.TEST_EXECUTION, false);
         byte[] content = Files.readAllBytes(screenshot);
         exchange.getResponseHeaders().set("Content-Type", "image/png");
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
@@ -1937,6 +2402,97 @@ final class RunnerServer implements AutoCloseable {
         }
     }
 
+    private AuthUserDirectory.User requireAuthenticatedUser(HttpExchange exchange) {
+        AuthSessionManager.Session current = session(exchange);
+        if (current == null) throw new AuthorizationException(401, "Authentication is required.");
+        AuthUserDirectory.User user = authUserDirectory.findById(current.userId());
+        if (user == null || !AuthUserDirectory.ACTIVE.equals(user.status())) {
+            authSessionManager.invalidate(current.id());
+            throw new AuthorizationException(401, "Authentication is required.");
+        }
+        return user;
+    }
+
+    private void requireDatabaseView(HttpExchange exchange) {
+        AuthUserDirectory.User user = requireAuthenticatedUser(exchange);
+        boolean member = teamMemberManager.list().stream()
+                .anyMatch(item -> user.id().equals(item.registeredUserId()) && TeamMemberManager.ACTIVE.equals(item.status()));
+        if (!member) throw new AuthorizationException(403, "An active project member is required to view database connections.");
+    }
+
+    private void requireDatabaseManage(HttpExchange exchange) {
+        requireAuthenticatedCsrf(exchange);
+        AuthUserDirectory.User user = requireAuthenticatedUser(exchange);
+        TeamMemberManager.Member member = teamMemberManager.list().stream()
+                .filter(item -> user.id().equals(item.registeredUserId()) && TeamMemberManager.ACTIVE.equals(item.status()))
+                .findFirst().orElse(null);
+        if (member == null) throw new AuthorizationException(403, "An active team member is required to manage database connections.");
+        if (!Set.of("Admin", "Project Manager", "QA Lead").contains(member.role())) {
+            throw new AuthorizationException(403, "Your role cannot manage database connections.");
+        }
+    }
+
+    private String requireDatabaseViewForOrganization(HttpExchange exchange, String rawOrganizationId) {
+        UUID organizationId = parseTenantOrganizationId(rawOrganizationId);
+        requireTenantOrganization(exchange, organizationId);
+        requireDatabaseView(exchange);
+        return organizationId.toString();
+    }
+
+    private String requireDatabaseManageForOrganization(HttpExchange exchange, String rawOrganizationId) {
+        UUID organizationId = parseTenantOrganizationId(rawOrganizationId);
+        requireTenantOrganization(exchange, organizationId);
+        requireDatabaseManage(exchange);
+        return organizationId.toString();
+    }
+
+    private void requireTenantOrganization(HttpExchange exchange, UUID organizationId) {
+        try {
+            AuthSessionManager.Session current = session(exchange);
+            if (current == null) throw new AuthorizationException(401, "Authentication is required.");
+            tenantContextResolver.resolve(current.id(), organizationId);
+        } catch (TenantAuthorizationException error) {
+            throw new AuthorizationException(error.statusCode(), error.statusCode() == 401
+                    ? "Authentication is required." : "You are not authorized for this organization.");
+        } catch (IOException error) {
+            throw new IllegalStateException("Tenant authorization data could not be loaded.", error);
+        }
+    }
+
+    private UUID parseTenantOrganizationId(String rawOrganizationId) {
+        try {
+            return UUID.fromString(OrganizationValidation.requiredText(rawOrganizationId, "organizationId", 80));
+        } catch (IllegalArgumentException error) {
+            throw new AuthorizationException(403, "An authorized organization scope is required.");
+        }
+    }
+
+    private void requireDatabaseConnectionOrganization(String connectionId, String organizationId) {
+        if (connectionId == null || connectionId.isBlank() || organizationId == null || organizationId.isBlank()) {
+            throw new AuthorizationException(404, "Database connection was not found.");
+        }
+        try {
+            if (!organizationId.equals(databaseConnectionService.connectionOrganizationId(connectionId))) {
+                throw new AuthorizationException(404, "Database connection was not found.");
+            }
+        } catch (IllegalArgumentException error) {
+            throw new AuthorizationException(404, "Database connection was not found.");
+        }
+    }
+
+    private static int parseQueryInt(HttpExchange exchange, String name, int fallback) {
+        String value = queryValue(exchange, name);
+        if (value == null || value.isBlank()) return fallback;
+        try { return Integer.parseInt(value); } catch (NumberFormatException error) { throw new IllegalArgumentException(name + " must be a number."); }
+    }
+
+    private static Map<String, Object> databaseTestToMap(ConnectionTestService.TestState state) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", state.id()); result.put("connectionId", state.connectionId()); result.put("status", state.status());
+        result.put("startedAt", state.startedAt()); result.put("completedAt", state.completedAt()); result.put("error", state.error());
+        return result;
+    }
+
     private static String requestCookie(HttpExchange exchange, String name) {
         String header = exchange.getRequestHeaders().getFirst("Cookie");
         if (header == null) return "";
@@ -1949,18 +2505,246 @@ final class RunnerServer implements AutoCloseable {
 
     private static boolean secureCookies() { return Boolean.getBoolean("qa.runner.secureCookies"); }
 
+    private void handleOrganizationApi(HttpExchange exchange, String path, String method) throws Exception {
+        if (path.equals("/api/organizations") && method.equals("POST")) {
+            requireAuthenticatedCsrf(exchange);
+            AuthUserDirectory.User actor = requireAuthenticatedUser(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            String name = OrganizationValidation.requiredText(stringField(values, "organizationName"), "organizationName", 120);
+            String slug = OrganizationValidation.slug(stringField(values, "organizationSlug"));
+            int limit = Math.max(1, Integer.getInteger("qa.runner.organizations.maxPerUser", 20));
+            long owned = organizationStore.organizations().stream().filter(item -> actor.id().equals(item.ownerUserId())).count();
+            if (owned >= limit) throw new AuthorizationException(403, "The organization creation limit has been reached.");
+            Organization organization = organizationStore.createOrganization(name, slug, actor.id());
+            auditOrganization("ORGANIZATION_CREATED", organization.organizationId(), actor.id(), organization.organizationId().toString());
+            sendJson(exchange, 201, organizationToApiMap(organization, false));
+            return;
+        }
+        if (path.equals("/api/organizations") && method.equals("GET")) {
+            AuthUserDirectory.User actor = requireAuthenticatedUser(exchange);
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Organization organization : organizationStore.organizations()) {
+                OrganizationMembership membership = organizationStore.findMembership(organization.organizationId(), actor.id());
+                if (membership != null && membership.membershipStatus() == MembershipStatus.ACTIVE
+                        && organization.status() == OrganizationStatus.ACTIVE) {
+                    Map<String, Object> safe = organizationToApiMap(organization, false);
+                    safe.put("organizationRole", membership.organizationRole().name());
+                    result.add(safe);
+                }
+            }
+            sendJson(exchange, 200, result);
+            return;
+        }
+        if (path.equals("/api/organization-invitations/accept") && method.equals("POST")) {
+            requireAuthenticatedCsrf(exchange);
+            AuthUserDirectory.User actor = requireAuthenticatedUser(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            UUID invitationId = parseUuid(stringField(values, "invitationId"), "invitationId");
+            String rawToken = OrganizationValidation.requiredText(stringField(values, "token"), "token", 512);
+            OrganizationMembership membership;
+            try {
+                membership = organizationStore.acceptInvitation(invitationId, rawToken, actor.id(), actor.email(), Instant.now());
+            } catch (IllegalArgumentException | IllegalStateException error) {
+                throw new AuthorizationException(403, "The invitation is not valid for this account.");
+            }
+            auditOrganization("INVITATION_ACCEPTED", membership.organizationId(), actor.id(), invitationId.toString());
+            sendJson(exchange, 200, membershipToApiMap(membership));
+            return;
+        }
+        if (!path.startsWith("/api/organizations/")) throw new AuthorizationException(404, "Not found.");
+        String remainder = path.substring("/api/organizations/".length());
+        String[] parts = remainder.split("/");
+        if (parts.length == 0 || parts[0].isBlank()) throw new AuthorizationException(404, "Not found.");
+        UUID organizationId = parseUuid(parts[0], "organizationId");
+        Organization organization = organizationStore.findOrganization(organizationId);
+        if (organization == null) throw new AuthorizationException(404, "Organization was not found.");
+        TenantContext tenant = requireOrganizationTenant(exchange, organizationId);
+
+        if (parts.length == 1 && method.equals("GET")) {
+            Map<String, Object> detail = organizationToApiMap(organization, true);
+            detail.put("organizationRole", tenant.organizationRole().name());
+            sendJson(exchange, 200, detail);
+            return;
+        }
+        if (parts.length == 1 && method.equals("PATCH")) {
+            requireAuthenticatedCsrf(exchange);
+            requireOrganizationManager(tenant);
+            if (organization.status() != OrganizationStatus.ACTIVE) throw new AuthorizationException(403, "The organization is not active.");
+            Map<String, Object> values = requestObject(exchange);
+            if (values.keySet().stream().anyMatch(key -> !Set.of("organizationName", "organizationSlug").contains(key))) {
+                throw new IllegalArgumentException("Only organization name and slug may be changed.");
+            }
+            String name = values.containsKey("organizationName") ? OrganizationValidation.requiredText(stringField(values, "organizationName"), "organizationName", 120) : organization.organizationName();
+            String slug = values.containsKey("organizationSlug") ? OrganizationValidation.slug(stringField(values, "organizationSlug")) : organization.organizationSlug();
+            Organization updated = organizationStore.updateOrganization(organizationId, name, slug, organization.status());
+            auditOrganization("ORGANIZATION_UPDATED", organizationId, tenant.authenticatedUserId(), organizationId.toString());
+            sendJson(exchange, 200, organizationToApiMap(updated, true));
+            return;
+        }
+        if (parts.length == 2 && parts[1].equals("members") && method.equals("GET")) {
+            requireOrganizationManager(tenant);
+            sendJson(exchange, 200, organizationStore.memberships(organizationId).stream().map(RunnerServer::membershipToApiMap).toList());
+            return;
+        }
+        if (parts.length == 3 && parts[1].equals("members") && (method.equals("PATCH") || method.equals("DELETE"))) {
+            requireAuthenticatedCsrf(exchange);
+            requireOrganizationManager(tenant);
+            if (organization.status() != OrganizationStatus.ACTIVE) throw new AuthorizationException(403, "The organization is not active.");
+            UUID membershipId = parseUuid(parts[2], "membershipId");
+            OrganizationMembership target = organizationStore.memberships(organizationId).stream().filter(item -> membershipId.equals(item.membershipId())).findFirst().orElse(null);
+            if (target == null) throw new AuthorizationException(404, "Membership was not found.");
+            OrganizationRole role = target.organizationRole();
+            MembershipStatus status = method.equals("DELETE") ? MembershipStatus.SUSPENDED : target.membershipStatus();
+            if (method.equals("PATCH")) {
+                Map<String, Object> values = requestObject(exchange);
+                if (values.containsKey("role")) role = parseEnum(values.get("role"), OrganizationRole.class, "role");
+                if (values.containsKey("status")) status = parseEnum(values.get("status"), MembershipStatus.class, "status");
+                if (tenant.organizationRole() == OrganizationRole.ADMIN && (role == OrganizationRole.OWNER || role == OrganizationRole.ADMIN || target.organizationRole() == OrganizationRole.OWNER)) {
+                    throw new AuthorizationException(403, "Organization admins cannot assign or change owner/admin roles.");
+                }
+                if (role == OrganizationRole.OWNER && !tenant.authenticatedUserId().equals(organization.ownerUserId())) throw new AuthorizationException(403, "Only the organization owner may assign the owner role.");
+            }
+            OrganizationMembership updated = organizationStore.updateMembership(membershipId, role, status);
+            auditOrganization(method.equals("DELETE") ? "MEMBERSHIP_REVOKED" : "MEMBERSHIP_UPDATED", organizationId, tenant.authenticatedUserId(), membershipId.toString());
+            sendJson(exchange, 200, membershipToApiMap(updated));
+            return;
+        }
+        if (parts.length == 2 && parts[1].equals("invitations") && method.equals("POST")) {
+            requireAuthenticatedCsrf(exchange);
+            requireOrganizationManager(tenant);
+            if (organization.status() != OrganizationStatus.ACTIVE) throw new AuthorizationException(403, "The organization is not active.");
+            String rateKey = exchange.getRemoteAddress().getAddress().getHostAddress() + ":" + organizationId;
+            if (!organizationInvitationRateLimiter.allow(rateKey)) throw new AuthorizationException(429, "Invitation requests are temporarily unavailable. Try again later.");
+            Map<String, Object> values = requestObject(exchange);
+            String email = OrganizationValidation.email(stringField(values, "invitedEmail"));
+            OrganizationRole intendedRole = values.containsKey("intendedRole") ? parseEnum(values.get("intendedRole"), OrganizationRole.class, "intendedRole") : OrganizationRole.MEMBER;
+            if (intendedRole == OrganizationRole.OWNER || (intendedRole == OrganizationRole.ADMIN && tenant.organizationRole() != OrganizationRole.OWNER)) throw new AuthorizationException(403, "This role cannot be assigned by the current organization role.");
+            String invitedUserId = optionalString(values, "invitedUserId");
+            if (invitedUserId != null) invitedUserId = OrganizationValidation.userId(invitedUserId, "invitedUserId");
+            String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes(32));
+            OrganizationInvitation invitation = organizationStore.createInvitation(organizationId, email, invitedUserId, intendedRole, rawToken, Instant.now().plusSeconds(86400), tenant.authenticatedUserId());
+            auditOrganization("INVITATION_CREATED", organizationId, tenant.authenticatedUserId(), invitation.invitationId().toString());
+            Map<String, Object> response = invitationToApiMap(invitation);
+            response.put("deliveryStatus", "PENDING");
+            sendJson(exchange, 201, response);
+            return;
+        }
+        if (parts.length == 2 && parts[1].equals("invitations") && method.equals("GET")) {
+            requireOrganizationManager(tenant);
+            sendJson(exchange, 200, organizationStore.invitations(organizationId).stream().map(RunnerServer::invitationToApiMap).toList());
+            return;
+        }
+        if (parts.length == 2 && parts[1].equals("projects") && method.equals("GET")) {
+            List<Map<String, Object>> projects = new ArrayList<>();
+            for (UserStoryStore.Project project : userStoryStore.listProjects(false)) {
+                ProjectOrganizationOwnership ownership = organizationStore.findProjectOwnership(project.id());
+                if (ownership == null || !organizationId.equals(ownership.organizationId())) continue;
+                boolean orgManager = tenant.organizationRole() == OrganizationRole.OWNER || tenant.organizationRole() == OrganizationRole.ADMIN;
+                if (orgManager || hasExplicitProjectMembership(exchange, project.id())) projects.add(projectToMap(project));
+            }
+            sendJson(exchange, 200, projects);
+            return;
+        }
+        if (parts.length == 2 && parts[1].equals("projects") && method.equals("POST")) {
+            requireAuthenticatedCsrf(exchange);
+            requireOrganizationManager(tenant);
+            if (organization.status() != OrganizationStatus.ACTIVE) throw new AuthorizationException(403, "The organization is not active.");
+            Map<String, Object> values = requestObject(exchange);
+            UserStoryStore.Project project = userStoryStore.createProject(stringField(values, "key"), stringField(values, "name"), optionalString(values, "description"), tenant.authenticatedUserId());
+            try {
+                organizationStore.assignProject(project.id(), organizationId, "ORGANIZATION_API_CREATE");
+            } catch (Exception error) {
+                organizationStore.quarantineProject(project.id());
+                throw new IllegalStateException("Project creation could not be completed safely.");
+            }
+            auditOrganization("PROJECT_CREATED", organizationId, tenant.authenticatedUserId(), project.id());
+            sendJson(exchange, 201, projectToMap(project));
+            return;
+        }
+        throw new AuthorizationException(404, "Not found.");
+    }
+
+    private TenantContext requireOrganizationTenant(HttpExchange exchange, UUID organizationId) throws IOException {
+        AuthUserDirectory.User actor = requireAuthenticatedUser(exchange);
+        try {
+            return tenantContextResolver.resolve(session(exchange).id(), organizationId);
+        } catch (TenantAuthorizationException error) {
+            throw new AuthorizationException(error.statusCode(), error.statusCode() == 401 ? "Authentication is required." : "You are not authorized for this organization.");
+        }
+    }
+
+    private void requireOrganizationManager(TenantContext tenant) {
+        try { TenantAuthorizationPrimitives.requireOrganizationRole(tenant, OrganizationRole.OWNER, OrganizationRole.ADMIN); }
+        catch (TenantAuthorizationException error) { throw new AuthorizationException(403, "An organization owner or admin is required."); }
+    }
+
+    private void auditOrganization(String action, UUID organizationId, String actorId, String subject) {
+        try { authUserDirectory.recordAudit(action + ":" + organizationId, actorId + ":" + subject); }
+        catch (IOException error) { throw new IllegalStateException("Organization audit recording failed.", error); }
+    }
+
+    private boolean hasExplicitProjectMembership(HttpExchange exchange, String projectId) {
+        String actorId = authActorId(exchange);
+        return teamMemberManager.list().stream().anyMatch(member -> actorId.equals(member.registeredUserId())
+                && TeamMemberManager.ACTIVE.equals(member.status()) && member.projectIds().contains(projectId));
+    }
+
+    private static UUID parseUuid(String value, String field) {
+        try { return UUID.fromString(OrganizationValidation.requiredText(value, field, 80)); }
+        catch (IllegalArgumentException error) { throw new IllegalArgumentException(field + " is invalid."); }
+    }
+
+    private static <E extends Enum<E>> E parseEnum(Object value, Class<E> type, String field) {
+        try { return Enum.valueOf(type, String.valueOf(value).trim().toUpperCase(Locale.ROOT)); }
+        catch (Exception error) { throw new IllegalArgumentException(field + " is invalid."); }
+    }
+
+    private byte[] randomBytes(int size) { byte[] bytes = new byte[size]; invitationRandom.nextBytes(bytes); return bytes; }
+
+    private static Map<String, Object> organizationToApiMap(Organization value, boolean includeOwner) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("organizationId", value.organizationId().toString()); map.put("organizationName", value.organizationName());
+        map.put("organizationSlug", value.organizationSlug()); map.put("status", value.status().name());
+        if (includeOwner) map.put("ownerUserId", value.ownerUserId());
+        map.put("createdAt", value.createdAt().toString()); map.put("updatedAt", value.updatedAt().toString());
+        return map;
+    }
+
+    private static Map<String, Object> membershipToApiMap(OrganizationMembership value) {
+        return new LinkedHashMap<>(Map.of("membershipId", value.membershipId().toString(), "organizationId", value.organizationId().toString(), "userId", value.userId(), "organizationRole", value.organizationRole().name(), "membershipStatus", value.membershipStatus().name(), "createdAt", value.createdAt().toString(), "updatedAt", value.updatedAt().toString()));
+    }
+
+    private static Map<String, Object> invitationToApiMap(OrganizationInvitation value) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("invitationId", value.invitationId().toString()); map.put("organizationId", value.organizationId().toString());
+        map.put("invitedEmail", value.invitedEmail()); map.put("intendedRole", value.intendedRole().name());
+        map.put("status", value.status().name()); map.put("expiresAt", value.expiresAt().toString()); map.put("createdAt", value.createdAt().toString());
+        map.put("acceptedAt", value.acceptedAt() == null ? null : value.acceptedAt().toString());
+        return map;
+    }
+
     private static Map<String, Object> authUserToMap(AuthUserDirectory.User user) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("id", user.id()); result.put("username", user.username()); result.put("email", user.email());
-        result.put("emailVerified", user.emailVerified()); result.put("status", user.status());
+        result.put("id", user.id()); result.put("fullName", user.fullName()); result.put("username", user.username()); result.put("email", user.email()); result.put("mobile", user.mobile());
+        result.put("emailVerified", user.emailVerified()); result.put("mobileVerified", user.mobileVerified()); result.put("status", user.status());
         result.put("createdAt", user.createdAt()); result.put("updatedAt", user.updatedAt()); result.put("lastLoginAt", user.lastLoginAt());
         return result;
+    }
+
+    private static Map<String,Object> verificationToMap(AuthVerificationManager.Result result) {
+        Map<String,Object> map=new LinkedHashMap<>(); map.put("verificationToken",result.token()); map.put("channel",result.channel()); map.put("destination",result.maskedDestination()); map.put("expiresAt",result.expiresAt().toString()); map.put("resendAt",result.resendAt().toString()); return map;
     }
 
     private String authActorName(HttpExchange exchange) {
         AuthSessionManager.Session current = session(exchange);
         AuthUserDirectory.User user = current == null ? null : authUserDirectory.findById(current.userId());
         return user == null ? "" : user.username();
+    }
+
+    private String authActorId(HttpExchange exchange) {
+        AuthSessionManager.Session current = session(exchange);
+        AuthUserDirectory.User user = current == null ? null : authUserDirectory.findById(current.userId());
+        return user == null ? "" : user.id();
     }
 
     private Map<String, Object> wikiSpaceToMap(WikiManager.Space space) {
@@ -1978,36 +2762,376 @@ final class RunnerServer implements AutoCloseable {
         return map;
     }
 
-    private void requireTeamView() {
-        if (!teamAuthorization.canViewTeam(teamMemberManager.list())) {
+    private Map<String, Object> ownershipToMap(ProjectOwnershipManager.Ownership ownership) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", ownership.id());
+        map.put("resourceType", ownership.resourceType());
+        map.put("resourceId", ownership.resourceId());
+        map.put("projectId", ownership.projectId());
+        map.put("status", ownership.status());
+        map.put("source", ownership.source());
+        map.put("createdAt", ownership.createdAt());
+        map.put("updatedAt", ownership.updatedAt());
+        return map;
+    }
+
+    private boolean projectAccess(HttpExchange exchange, String projectId, boolean write) {
+        if (projectId == null || projectId.isBlank()) return false;
+        TeamAuthorization authorization = teamAuthorization(exchange);
+        if (!authorization.authenticated()) return false;
+        List<TeamMemberManager.Member> members = teamMemberManager.list();
+        return write
+                ? authorization.canWriteProjectDomain(TeamAuthorization.USER_STORIES, projectId, members)
+                : authorization.canReadProjectDomain(TeamAuthorization.USER_STORIES, projectId, members);
+    }
+
+    private boolean isGlobalAdmin(HttpExchange exchange) {
+        TeamAuthorization authorization = teamAuthorization(exchange);
+        TeamMemberManager.Member member = authorization.currentMember(teamMemberManager.list());
+        return authorization.authenticated() && member != null && "Admin".equals(member.role());
+    }
+
+    private void requireAdminForUnownedResource(HttpExchange exchange, String path) {
+        boolean unowned = path.equals("/api/database/overview")
+                || path.equals("/api/testcases/stats")
+                || path.equals("/api/testcases/sync")
+                || path.equals("/api/testcases/bulk-delete")
+                || path.equals("/api/automation-assets/scenarios");
+        if (unowned && !isGlobalAdmin(exchange)) {
+            throw new AuthorizationException(403, "This resource has no resolved project ownership.");
+        }
+    }
+
+    private boolean tenantVisibleProject(HttpExchange exchange, String projectId) {
+        try {
+            ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(projectId);
+            if (assignment != null) {
+                return tenantContextForProject(exchange, projectId, TeamAuthorization.USER_STORIES, "read", false) != null;
+            }
+            return projectAccess(exchange, projectId, false);
+        } catch (IOException error) {
+            throw new IllegalStateException("Tenant ownership data could not be loaded.", error);
+        }
+    }
+
+    private boolean tenantProjectBelongsToOrganization(String projectId, UUID organizationId) {
+        try {
+            ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(projectId);
+            return assignment != null && organizationId.equals(assignment.organizationId());
+        } catch (IOException error) {
+            throw new IllegalStateException("Tenant ownership data could not be loaded.", error);
+        }
+    }
+
+    private boolean tenantVisibleOwnedResource(HttpExchange exchange, String resourceType, String resourceId,
+                                               String domain, boolean write) {
+        try {
+            String projectId = projectOwnershipManager.projectId(resourceType, resourceId);
+            if (projectId.isBlank()) return isGlobalAdmin(exchange);
+            ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(projectId);
+            if (assignment != null) {
+                return tenantContextForProject(exchange, projectId, domain, write ? "write" : "read", false) != null;
+            }
+            return ownedProjectAccess(exchange, resourceType, resourceId, domain, write);
+        } catch (IOException error) {
+            throw new IllegalStateException("Tenant ownership data could not be loaded.", error);
+        }
+    }
+
+    /**
+     * Tenant enforcement is activated only for resources with an authoritative
+     * project-to-organization assignment. Missing organization context then
+     * fails closed for a specific route and is filtered out for list routes.
+     * Unassigned legacy data remains on its existing Level 3 compatibility path.
+     */
+    private TenantContext tenantContextForProject(HttpExchange exchange, String projectId, String domain,
+                                                  String action, boolean required) {
+        if (projectId == null || projectId.isBlank()) {
+            if (required) throw new AuthorizationException(403, "A project and organization scope are required.");
+            return null;
+        }
+        try {
+            ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(projectId);
+            if (assignment == null) {
+                if (required && queryValue(exchange, "organizationId") != null) {
+                    throw new AuthorizationException(403, "The project has no authorized organization ownership.");
+                }
+                return null;
+            }
+            String rawOrganizationId = queryValue(exchange, "organizationId");
+            if (rawOrganizationId == null || rawOrganizationId.isBlank()) {
+                if (required) throw new AuthorizationException(403, "An organization scope is required.");
+                return null;
+            }
+            UUID organizationId;
+            try {
+                organizationId = UUID.fromString(rawOrganizationId.trim());
+            } catch (IllegalArgumentException error) {
+                throw new AuthorizationException(400, "The organization scope is invalid.");
+            }
+            AuthSessionManager.Session current = session(exchange);
+            if (current == null) throw new AuthorizationException(401, "Authentication is required.");
+            try {
+                return tenantContextResolver.resolveProject(current.id(), organizationId, projectId, domain, action);
+            } catch (TenantAuthorizationException error) {
+                if (!required && error.statusCode() != 401 && error.statusCode() != 400) return null;
+                throw new AuthorizationException(error.statusCode(), "The requested tenant resource is not authorized.");
+            }
+        } catch (IOException error) {
+            throw new IllegalStateException("Tenant authorization data could not be loaded.", error);
+        }
+    }
+
+    private boolean ownedProjectAccess(HttpExchange exchange, String resourceType, String resourceId,
+                                       String domain, boolean write) {
+        if (isGlobalAdmin(exchange)) return true;
+        String projectId = projectOwnershipManager.projectId(resourceType, resourceId);
+        return !projectId.isBlank() && projectAccessForDomain(exchange, projectId, domain, write);
+    }
+
+    private boolean automationExecutionVisible(HttpExchange exchange, Map<String, Object> execution) {
+        if (isGlobalAdmin(exchange)) return true;
+        String organizationText = stringField(execution, "organizationId");
+        String projectId = stringField(execution, "projectId");
+        if (organizationText.isBlank() || projectId.isBlank()) return false;
+        try {
+            UUID organizationId = UUID.fromString(organizationText);
+            ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(projectId);
+            if (assignment == null || !organizationId.equals(assignment.organizationId())) return false;
+            AuthSessionManager.Session current = session(exchange);
+            if (current == null) return false;
+            tenantContextResolver.resolveProject(current.id(), organizationId, projectId,
+                    TeamAuthorization.TEST_EXECUTION, "read");
+            return true;
+        } catch (IllegalArgumentException | TenantAuthorizationException error) {
+            return false;
+        } catch (IOException error) {
+            throw new IllegalStateException("Tenant authorization data could not be loaded.", error);
+        }
+    }
+
+    private void requireOwnedProjectAccess(HttpExchange exchange, String resourceType, String resourceId,
+                                           String domain, boolean write) {
+        if (!ownedProjectAccess(exchange, resourceType, resourceId, domain, write)) {
+            throw new AuthorizationException(403, "This resource has no accessible project ownership.");
+        }
+    }
+
+    private boolean artifactVisible(HttpExchange exchange, String resourceType, String fileName, String domain) {
+        if (isGlobalAdmin(exchange)) return true;
+        String projectId = projectOwnershipManager.projectId(resourceType, fileName);
+        return resolvedTenantProjectAccess(exchange, projectId, domain, false);
+    }
+
+    private void requireArtifactAccess(HttpExchange exchange, String resourceType, String fileName,
+                                       String domain, boolean write) {
+        if (isGlobalAdmin(exchange)) return;
+        String projectId = projectOwnershipManager.projectId(resourceType, fileName);
+        if (!resolvedTenantProjectAccess(exchange, projectId, domain, write)) {
+            throw new AuthorizationException(403, "This artifact has no accessible project ownership.");
+        }
+    }
+
+    private boolean resolvedTenantProjectAccess(HttpExchange exchange, String projectId, String domain, boolean write) {
+        if (projectId == null || projectId.isBlank()) return false;
+        try {
+            ProjectOrganizationOwnership assignment = organizationStore.findProjectOwnership(projectId);
+            if (assignment == null) return false;
+            String requestedOrganizationId = queryValue(exchange, "organizationId");
+            if (requestedOrganizationId != null && !requestedOrganizationId.isBlank()
+                    && !assignment.organizationId().toString().equals(requestedOrganizationId.trim())) return false;
+            AuthSessionManager.Session current = session(exchange);
+            if (current == null) return false;
+            tenantContextResolver.resolveProject(current.id(), assignment.organizationId(), projectId, domain,
+                    write ? "write" : "read");
+            return true;
+        } catch (TenantAuthorizationException error) {
+            return false;
+        } catch (IOException error) {
+            throw new IllegalStateException("Tenant authorization data could not be loaded.", error);
+        }
+    }
+
+    private UserStoryStore.RelatedLink requireRelatedLinkAccess(HttpExchange exchange, String linkId, boolean write) {
+        UserStoryStore.RelatedLink link;
+        try {
+            link = userStoryStore.findRelatedLink(linkId);
+        } catch (IllegalArgumentException error) {
+            throw new AuthorizationException(404, "Related link not found.");
+        } catch (IOException error) {
+            throw new IllegalStateException("Related-link authorization data could not be loaded.", error);
+        }
+        String projectId = projectIdForStory(link.storyId());
+        if (!resolvedTenantProjectAccess(exchange, projectId, TeamAuthorization.USER_STORIES, write)) {
+            throw new AuthorizationException(403, "You are not authorized for this related link.");
+        }
+        return link;
+    }
+
+    /** Records only artifacts modified during this run. Existing files remain unresolved/admin-only. */
+    private void recordRunArtifacts(RunEntry entry) {
+        String projectId = projectOwnershipManager.projectId("TEST_RUN", entry.id);
+        if (projectId.isBlank()) return;
+        long started = 0L;
+        try { started = Instant.parse(entry.startedAt).toEpochMilli(); } catch (Exception ignored) { }
+        for (String[] spec : new String[][]{{"SCREENSHOT", "target/screenshots", ".png"}, {"VIDEO", "target/videos", ""}}) {
+            Path directory = projectRoot.resolve(spec[1]).normalize();
+            if (!Files.isDirectory(directory)) continue;
+            try (var stream = Files.list(directory)) {
+                for (Path file : stream.filter(Files::isRegularFile).toList()) {
+                    String name = file.getFileName().toString();
+                    if (!spec[2].isEmpty() && !name.toLowerCase(Locale.ROOT).endsWith(spec[2])) continue;
+                    if (started > 0 && Files.getLastModifiedTime(file).toMillis() < started) continue;
+                    try {
+                        projectOwnershipManager.assign(spec[0], name, projectId, "RUN_ARTIFACT", validProjectIds());
+                    } catch (Exception error) {
+                        System.err.println("Could not record artifact ownership: " + error.getMessage());
+                    }
+                }
+            } catch (IOException error) {
+                System.err.println("Could not inspect run artifacts: " + error.getMessage());
+            }
+        }
+    }
+
+    private boolean projectAccessForMap(HttpExchange exchange, Map<String, Object> value, String domain, boolean write) {
+        Object projectId = value.get("projectId");
+        return projectId != null && !String.valueOf(projectId).isBlank()
+                && projectAccessForDomain(exchange, String.valueOf(projectId), domain, write);
+    }
+
+    private boolean projectAccessForDomain(HttpExchange exchange, String projectId, String domain, boolean write) {
+        return resolvedTenantProjectAccess(exchange, projectId, domain, write);
+    }
+
+    private void requireProjectAccess(HttpExchange exchange, String projectId, String domain, boolean write) {
+        if (projectId == null || projectId.isBlank()) {
+            throw new AuthorizationException(403, "A project scope is required for this operation.");
+        }
+        if (!resolvedTenantProjectAccess(exchange, projectId, domain, write)) {
+            throw new AuthorizationException(403, "You are not authorized for this project.");
+        }
+    }
+
+    private void requireDefectProjectAccess(HttpExchange exchange, String defectId, boolean write) {
+        Map<String, Object> defect = defectManager.list(null).stream()
+                .filter(item -> defectId.equals(String.valueOf(item.get("id")))).findFirst()
+                .orElseThrow(() -> new AuthorizationException(404, "Defect not found."));
+        requireProjectAccess(exchange, optionalString(defect, "projectId"), TeamAuthorization.DEFECTS, write);
+    }
+
+    private void requireEpicProjectAccess(HttpExchange exchange, String epicId, boolean write) {
+        try {
+            UserStoryStore.Epic epic = userStoryStore.listEpics(null, true).stream()
+                    .filter(item -> epicId.equals(item.id())).findFirst()
+                    .orElseThrow(() -> new AuthorizationException(404, "Epic not found."));
+            requireProjectAccess(exchange, epic.projectId(), TeamAuthorization.USER_STORIES, write);
+        } catch (IOException error) {
+            throw new IllegalStateException("Epic authorization data could not be loaded.", error);
+        }
+    }
+
+    private void requireSprintProjectAccess(HttpExchange exchange, String sprintId, boolean write) {
+        try {
+            UserStoryStore.Sprint sprint = userStoryStore.listSprints(null, true).stream()
+                    .filter(item -> sprintId.equals(item.id())).findFirst()
+                    .orElseThrow(() -> new AuthorizationException(404, "Sprint not found."));
+            requireProjectAccess(exchange, sprint.projectId(), TeamAuthorization.SPRINT_BOARD, write);
+        } catch (IOException error) {
+            throw new IllegalStateException("Sprint authorization data could not be loaded.", error);
+        }
+    }
+
+    private void requireStoryProjectAccess(HttpExchange exchange, String storyId, boolean write) {
+        UserStoryStore.Story story;
+        try {
+            story = userStoryStore.listStories(null, null, null, 0, 10000, true).stream()
+                    .filter(item -> item.id().equals(storyId)).findFirst()
+                    .orElseThrow(() -> new AuthorizationException(404, "User story not found."));
+        } catch (java.io.IOException error) {
+            throw new IllegalStateException("User story authorization data could not be loaded.", error);
+        }
+        requireProjectAccess(exchange, story.projectId(), TeamAuthorization.USER_STORIES, write);
+    }
+
+    private String projectIdForStory(String storyId) {
+        if (storyId == null || storyId.isBlank()) return "";
+        try {
+            return userStoryStore.listStories(null, null, null, 0, 100000, true).stream()
+                    .filter(item -> storyId.equals(item.id())).map(UserStoryStore.Story::projectId).findFirst().orElse("");
+        } catch (IOException error) {
+            throw new IllegalStateException("User story ownership data could not be loaded.", error);
+        }
+    }
+
+    private TeamAuthorization teamAuthorization(HttpExchange exchange) {
+        AuthSessionManager.Session current = session(exchange);
+        if (current == null) return new TeamAuthorization(CURRENT_USER_ID, CURRENT_USER_NAME, false, teamRoleManager.list());
+        AuthUserDirectory.User user = authUserDirectory.findById(current.userId());
+        if (user == null || !AuthUserDirectory.ACTIVE.equals(user.status())) {
+            return new TeamAuthorization("", "", true, teamRoleManager.list());
+        }
+        return new TeamAuthorization(user.id(), user.username(), true, teamRoleManager.list());
+    }
+
+    private void requireTeamView(HttpExchange exchange) {
+        requireAuthenticatedUser(exchange);
+        if (!teamAuthorization(exchange).canViewTeam(teamMemberManager.list())) {
             throw new AuthorizationException(403, "An authenticated team membership is required to view team data.");
         }
     }
 
-    private void requireTeamManage(Map<String, Object> values, String existingId) {
+    private void requireTeamManage(HttpExchange exchange, Map<String, Object> values, String existingId) {
         List<TeamMemberManager.Member> members = teamMemberManager.list();
         TeamMemberManager.Member target = existingId == null ? null : members.stream()
                 .filter(member -> existingId.equals(member.id())).findFirst().orElse(null);
         if (existingId != null && target == null) {
             throw new AuthorizationException(404, "Team member not found.");
         }
-        if (!teamAuthorization.canManageMemberMutation(values, target, members)) {
+        TeamAuthorization authorization = teamAuthorization(exchange);
+        if (!authorization.canManageMemberMutation(values, target, members)) {
             throw new AuthorizationException(403, "You are not authorized to manage team members.");
         }
         Object requestedRole = values.get("role");
-        if (requestedRole != null && !teamAuthorization.canManageRole(String.valueOf(requestedRole), members)) {
+        if (requestedRole != null && !authorization.canManageRole(String.valueOf(requestedRole), members)) {
             throw new AuthorizationException(403, "Only an authenticated Admin can grant or change team roles.");
         }
     }
 
-    private void requireAuthenticatedAdmin() {
-        if (!teamAuthorization.authenticated()) {
+    private void requireAuthenticatedAdmin(HttpExchange exchange) {
+        TeamAuthorization authorization = teamAuthorization(exchange);
+        if (!authorization.authenticated()) {
             throw new AuthorizationException(401, "An authenticated Admin identity is required for role management.");
         }
-        TeamMemberManager.Member member = teamAuthorization.currentMember(teamMemberManager.list());
+        TeamMemberManager.Member member = authorization.currentMember(teamMemberManager.list());
         if (member == null || !"Admin".equals(member.role())) {
             throw new AuthorizationException(403, "Only an authorized Admin can manage roles and permissions.");
         }
+    }
+
+    private void requireCiCdManage(HttpExchange exchange) {
+        AuthUserDirectory.User user = requireAuthenticatedUser(exchange);
+        TeamMemberManager.Member member = teamMemberManager.list().stream()
+                .filter(item -> user.id().equals(item.registeredUserId())
+                        && TeamMemberManager.ACTIVE.equals(item.status())).findFirst().orElse(null);
+        if (member == null || !Set.of("Admin", "Project Manager", "QA Lead").contains(member.role())) {
+            throw new AuthorizationException(403, "Your role cannot manage CI/CD configuration or execution.");
+        }
+        requireCiCdProjectAccess(exchange, true);
+    }
+
+    private String requireCiCdProjectAccess(HttpExchange exchange, boolean write) {
+        String projectId = queryValue(exchange, "projectId");
+        String organizationId = queryValue(exchange, "organizationId");
+        if (projectId == null || projectId.isBlank() || organizationId == null || organizationId.isBlank()) {
+            throw new AuthorizationException(403, "CI/CD project and organization scope are required.");
+        }
+        TenantContext context = tenantContextForProject(exchange, projectId, TeamAuthorization.CICD,
+                write ? "write" : "read", true);
+        if (context == null || !organizationId.equals(context.organizationId().toString())) {
+            throw new AuthorizationException(403, "You are not authorized for this CI/CD project.");
+        }
+        return projectId;
     }
 
     private static final class AuthorizationException extends RuntimeException {
@@ -2113,6 +3237,7 @@ final class RunnerServer implements AutoCloseable {
         private final String kindName;  // plugin name (e.g., "cucumber", "newman")
         private final String selection;
         private final String targetUrl;
+        private final TenantJobContext jobContext;
         private final String startedAt = Instant.now().toString();
         private final List<String> output = new CopyOnWriteArrayList<>();
         private volatile String status = "QUEUED";
@@ -2134,11 +3259,12 @@ final class RunnerServer implements AutoCloseable {
         private List<String> browsers;
 
         private RunEntry(String id, String kindName, String selection,
-                         String targetUrl) {
+                         String targetUrl, TenantJobContext jobContext) {
             this.id = id;
             this.kindName = kindName;
             this.selection = selection;
             this.targetUrl = targetUrl;
+            this.jobContext = jobContext;
         }
 
         private void addLog(String line) {
@@ -2153,7 +3279,7 @@ final class RunnerServer implements AutoCloseable {
         }
     }
 
-    private List<Map<String, Object>> listScreenshots() {
+    private List<Map<String, Object>> listScreenshots(HttpExchange exchange) {
         Path screenshotsDir = projectRoot.resolve("target").resolve("screenshots");
         List<Map<String, Object>> result = new ArrayList<>();
         if (!Files.isDirectory(screenshotsDir)) {
@@ -2169,6 +3295,7 @@ final class RunnerServer implements AutoCloseable {
                     .toList();
             for (Path p : files) {
                 String fileName = p.getFileName().toString();
+                if (!artifactVisible(exchange, "SCREENSHOT", fileName, TeamAuthorization.TEST_EXECUTION)) continue;
                 String testCaseName = fileName.replaceAll("\\.png$", "");
                 int dashIndex = testCaseName.lastIndexOf("-");
                 if (dashIndex > 0 && dashIndex < testCaseName.length() - 10) {
@@ -2187,7 +3314,7 @@ final class RunnerServer implements AutoCloseable {
         return result;
     }
 
-    private List<Map<String, Object>> listVideos() {
+    private List<Map<String, Object>> listVideos(HttpExchange exchange) {
         Path videosDir = projectRoot.resolve("target").resolve("videos");
         List<Map<String, Object>> result = new ArrayList<>();
         if (!Files.isDirectory(videosDir)) {
@@ -2203,6 +3330,7 @@ final class RunnerServer implements AutoCloseable {
                     .toList();
             for (Path p : files) {
                 String fileName = p.getFileName().toString();
+                if (!artifactVisible(exchange, "VIDEO", fileName, TeamAuthorization.TEST_EXECUTION)) continue;
                 String testCaseName = fileName.replaceAll("\\.(webm|mp4)$", "");
                 int dashIndex = testCaseName.lastIndexOf("-");
                 if (dashIndex > 0 && dashIndex < testCaseName.length() - 10) {
@@ -2234,6 +3362,7 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 404, "Screenshot not found: " + fileName);
             return;
         }
+        requireArtifactAccess(exchange, "SCREENSHOT", fileName, TeamAuthorization.TEST_EXECUTION, true);
         Files.delete(screenshot);
         sendJson(exchange, 200, Map.of("message", "Screenshot deleted: " + fileName));
     }
@@ -2247,6 +3376,7 @@ final class RunnerServer implements AutoCloseable {
         int count = 0;
         try (var stream = Files.list(screenshotsDir)) {
             for (Path p : stream.filter(Files::isRegularFile).toList()) {
+                if (!artifactVisible(exchange, "SCREENSHOT", p.getFileName().toString(), TeamAuthorization.TEST_EXECUTION)) continue;
                 try {
                     Files.delete(p);
                     count++;
@@ -2271,6 +3401,7 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 404, "Video not found: " + fileName);
             return;
         }
+        requireArtifactAccess(exchange, "VIDEO", fileName, TeamAuthorization.TEST_EXECUTION, true);
         Files.delete(video);
         sendJson(exchange, 200, Map.of("message", "Video deleted: " + fileName));
     }
@@ -2284,6 +3415,7 @@ final class RunnerServer implements AutoCloseable {
         int count = 0;
         try (var stream = Files.list(videosDir)) {
             for (Path p : stream.filter(Files::isRegularFile).toList()) {
+                if (!artifactVisible(exchange, "VIDEO", p.getFileName().toString(), TeamAuthorization.TEST_EXECUTION)) continue;
                 try {
                     Files.delete(p);
                     count++;
@@ -2311,6 +3443,7 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 404, "Video not found.");
             return;
         }
+        requireArtifactAccess(exchange, "VIDEO", fileName, TeamAuthorization.TEST_EXECUTION, false);
         String contentType = fileName.endsWith(".webm") ? "video/webm" : "video/mp4";
         byte[] content = Files.readAllBytes(video);
         exchange.getResponseHeaders().set("Content-Type", contentType);
@@ -2946,15 +4079,15 @@ final class RunnerServer implements AutoCloseable {
 
     // ==================== CI/CD Integration ====================
 
-    private final CiCdConfig ciCdConfig = new CiCdConfig();
+    private final CiCdConfig ciCdConfig;
     private final WorkflowGenerator workflowGenerator = new WorkflowGenerator();
     private final PipelineStatusService pipelineStatusService = new PipelineStatusService();
 
     /**
      * GET /api/cicd/config — return current CI/CD configuration (without token).
      */
-    private Map<String, Object> getCiCdConfig() {
-        CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+    private Map<String, Object> getCiCdConfig(String projectId) {
+        CiCdConfig.CiCdSettings settings = ciCdConfig.load(projectId);
         if (settings == null) {
             return Map.of("configured", false);
         }
@@ -2985,6 +4118,14 @@ final class RunnerServer implements AutoCloseable {
                 throw new IllegalArgumentException("Request must be a JSON object.");
             }
             String platform = stringField(values, "platform");
+            String projectId = stringField(values, "projectId").trim();
+            if (!projectId.equals(queryValue(exchange, "projectId"))) {
+                throw new AuthorizationException(403, "The CI/CD project scope does not match the authorized request.");
+            }
+            String organizationId = stringField(values, "organizationId").trim();
+            if (!organizationId.equals(queryValue(exchange, "organizationId"))) {
+                throw new AuthorizationException(403, "The CI/CD organization scope does not match the authorized request.");
+            }
             String repoUrl = CiCdConfig.normalizeRepoUrl(stringField(values, "repoUrl"));
             String token = stringField(values, "token");
             String branch = stringField(values, "branch");
@@ -3008,7 +4149,7 @@ final class RunnerServer implements AutoCloseable {
 
             CiCdConfig.CiCdSettings settings = new CiCdConfig.CiCdSettings(
                     platform, repoUrl, token, branch, frameworks, triggerType, scheduleCron, jenkinsUrl);
-            ciCdConfig.save(settings);
+            ciCdConfig.save(settings, projectId);
             sendJson(exchange, 200, Map.of("message", "CI/CD configuration saved."));
         } catch (Exception e) {
             sendJson(exchange, 400, Map.of("error", e.getMessage()));
@@ -3048,9 +4189,9 @@ final class RunnerServer implements AutoCloseable {
     /**
      * GET /api/cicd/generate — generate workflow file based on current config.
      */
-    private void generateWorkflow(HttpExchange exchange) throws IOException {
+    private void generateWorkflow(HttpExchange exchange, String projectId) throws IOException {
         try {
-            CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+            CiCdConfig.CiCdSettings settings = ciCdConfig.load(projectId);
             if (settings == null) {
                 sendError(exchange, 400, "CI/CD not configured. Save configuration first.");
                 return;
@@ -3086,24 +4227,24 @@ final class RunnerServer implements AutoCloseable {
     /**
      * GET /api/cicd/status — return recent pipeline runs.
      */
-    private Map<String, Object> getCiCdStatus() {
-        CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+    private Map<String, Object> getCiCdStatus(String projectId) {
+        CiCdConfig.CiCdSettings settings = ciCdConfig.load(projectId);
         return pipelineStatusService.getLatestStatus(settings);
     }
 
     /**
      * POST /api/cicd/commit — commit generated workflow file to the repo.
      */
-    private void commitWorkflow(HttpExchange exchange) throws IOException {
+    private void commitWorkflow(HttpExchange exchange, String projectId) throws IOException {
         try {
             System.out.println("[COMMIT] Starting commit workflow...");
-            CiCdConfig.CiCdSettings settings = ciCdConfig.load();
+            CiCdConfig.CiCdSettings settings = ciCdConfig.load(projectId);
             if (settings == null || settings.token().isEmpty()) {
                 System.out.println("[COMMIT] No config or token found.");
                 sendJson(exchange, 400, Map.of("success", false, "message", "CI/CD not configured or token missing."));
                 return;
             }
-            System.out.println("[COMMIT] Token length: " + settings.token().length() + ", starts with: " + settings.token().substring(0, Math.min(10, settings.token().length())));
+            System.out.println("[COMMIT] Credential loaded for the authorized CI/CD project.");
             String platform = settings.platform();
             String content;
             String path;
@@ -3444,6 +4585,7 @@ final class RunnerServer implements AutoCloseable {
             throw new IllegalArgumentException("Request body must be a JSON object.");
         }
         String name = stringField(values, "name");
+        String requestedProjectId = optionalString(values, "projectId");
         String description = optionalString(values, "description");
         String priority = optionalString(values, "priority");
         String framework = optionalString(values, "framework");
@@ -3458,6 +4600,12 @@ final class RunnerServer implements AutoCloseable {
 
         String suiteId = optionalString(values, "suiteId");
         String storyId = optionalString(values, "storyId");
+        String storyProject = projectIdForStory(storyId);
+        String projectId = requestedProjectId.isBlank() ? storyProject : requestedProjectId;
+        requireProjectAccess(exchange, projectId, TeamAuthorization.TEST_CASES, true);
+        if (!storyProject.isBlank() && !projectId.equals(storyProject)) {
+            throw new AuthorizationException(403, "The linked User Story belongs to another project.");
+        }
         // Parse steps if present
         List<Map<String, Object>> steps = new ArrayList<>();
         Object stepsObj = values.get("steps");
@@ -3477,6 +4625,7 @@ final class RunnerServer implements AutoCloseable {
         String assignedTo = optionalString(values, "assignedTo");
         String automationStatus = optionalString(values, "automationStatus");
         TestCaseManager.TestCase created = testCaseManager.create(name, description, priority, tags, framework, suiteId, storyId, steps, module, testType, testMethod, assignedTo, automationStatus);
+        projectOwnershipManager.assign("TEST_CASE", created.id(), projectId, "TEST_CASE_CREATE", validProjectIds());
         sendJson(exchange, 201, testCaseToMap(created));
     }
 
@@ -3492,6 +4641,13 @@ final class RunnerServer implements AutoCloseable {
         Object parsed = JsonParser.parse(new String(body, StandardCharsets.UTF_8));
         if (!(parsed instanceof Map<?, ?> values)) {
             throw new IllegalArgumentException("Request body must be a JSON object.");
+        }
+        String ownedProject = projectOwnershipManager.projectId("TEST_CASE", id);
+        if (ownedProject.isBlank()) throw new AuthorizationException(403, "This test case has no resolved project ownership.");
+        String requestedStory = optionalString(values, "storyId");
+        String storyProject = projectIdForStory(requestedStory);
+        if (!storyProject.isBlank() && !ownedProject.equals(storyProject)) {
+            throw new AuthorizationException(403, "The linked User Story belongs to another project.");
         }
         String name = optionalString(values, "name");
         String description = optionalString(values, "description");
@@ -3657,7 +4813,7 @@ final class RunnerServer implements AutoCloseable {
         return map;
     }
 
-    private Map<String, Object> listTeamMembers(HttpExchange exchange) {
+    private Map<String, Object> listTeamMembers(HttpExchange exchange, TenantContext tenant) {
         String search = queryValueOrEmpty(exchange, "search").trim().toLowerCase(Locale.ROOT);
         String status = queryValueOrEmpty(exchange, "status").trim().toUpperCase(Locale.ROOT);
         String role = queryValueOrEmpty(exchange, "role").trim();
@@ -3667,7 +4823,21 @@ final class RunnerServer implements AutoCloseable {
         List<TeamMemberManager.Member> allMembers = teamMemberManager.list().stream()
                 .collect(java.util.stream.Collectors.toMap(TeamMemberManager.Member::id, member -> member,
                         (first, ignored) -> first, LinkedHashMap::new)).values().stream().toList();
-        List<TeamMemberManager.Member> filtered = allMembers.stream()
+        TeamAuthorization authorization = teamAuthorization(exchange);
+        TeamMemberManager.Member actor = authorization.currentMember(allMembers);
+        boolean admin = tenant == null && isGlobalAdmin(exchange);
+        final Set<String> actorProjects = tenant == null
+                ? (actor == null ? Set.of() : Set.copyOf(actor.projectIds()))
+                : Set.of(tenant.projectId());
+        if (!admin && !projectId.isBlank() && !authorization.canAccessProject(projectId, allMembers)) {
+            throw new AuthorizationException(403, "You are not authorized to view this project's members.");
+        }
+        List<TeamMemberManager.Member> visibleMembers = tenant != null ? allMembers.stream()
+                .filter(member -> member.projectIds().contains(tenant.projectId()))
+                .toList() : admin ? allMembers : allMembers.stream()
+                .filter(member -> member.projectIds().stream().anyMatch(actorProjects::contains))
+                .toList();
+        List<TeamMemberManager.Member> filtered = visibleMembers.stream()
                 .filter(member -> search.isBlank() || (member.name() + " " + member.email() + " " + member.username()).toLowerCase(Locale.ROOT).contains(search))
                 .filter(member -> status.isBlank() || member.status().equals(status))
                 .filter(member -> role.isBlank() || member.role().equals(role))
@@ -3683,7 +4853,10 @@ final class RunnerServer implements AutoCloseable {
         List<Map<String, Object>> projectCounts = new ArrayList<>();
         try {
             for (UserStoryStore.Project project : userStoryStore.listProjects(true)) {
-                long count = allMembers.stream().filter(member -> member.projectIds().contains(project.id())).count();
+                if (tenant != null && !tenant.projectId().equals(project.id())) continue;
+                if (tenant == null && !admin && !actorProjects.contains(project.id())) continue;
+                if (tenant != null && !tenantProjectBelongsToOrganization(project.id(), tenant.organizationId())) continue;
+                long count = visibleMembers.stream().filter(member -> member.projectIds().contains(project.id())).count();
                 Map<String, Object> projectData = new LinkedHashMap<>();
                 projectData.put("id", project.id()); projectData.put("key", project.key());
                 projectData.put("name", project.name()); projectData.put("count", count);
@@ -3693,10 +4866,10 @@ final class RunnerServer implements AutoCloseable {
             throw new IllegalStateException("Project membership counts could not be loaded.", error);
         }
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("total", allMembers.size());
-        stats.put("active", allMembers.stream().filter(member -> TeamMemberManager.ACTIVE.equals(member.status())).count());
-        stats.put("roles", allMembers.stream().map(TeamMemberManager.Member::role).distinct().count());
-        stats.put("assigned", allMembers.stream().filter(member -> !member.projectIds().isEmpty()).count());
+        stats.put("total", visibleMembers.size());
+        stats.put("active", visibleMembers.stream().filter(member -> TeamMemberManager.ACTIVE.equals(member.status())).count());
+        stats.put("roles", visibleMembers.stream().map(TeamMemberManager.Member::role).distinct().count());
+        stats.put("assigned", visibleMembers.stream().filter(member -> !member.projectIds().isEmpty()).count());
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("items", items); response.put("total", total); response.put("offset", offset); response.put("limit", limit);
         response.put("stats", stats); response.put("projectCounts", projectCounts);
@@ -3718,10 +4891,16 @@ final class RunnerServer implements AutoCloseable {
         return userStoryStore.listProjects(true).stream().map(UserStoryStore.Project::id).collect(java.util.stream.Collectors.toSet());
     }
 
-    private void validateRegisteredUser(Map<String, Object> values) {
+    private void validateRegisteredUser(HttpExchange exchange, Map<String, Object> values) {
         Object value = values.get("registeredUserId");
-        if (value != null && !String.valueOf(value).isBlank() && !CURRENT_USER_ID.equals(String.valueOf(value))) {
-            throw new IllegalArgumentException("No registered-user directory is configured; only the current local identity can be linked.");
+        if (value == null || String.valueOf(value).isBlank()) return;
+        AuthUserDirectory.User registered = authUserDirectory.findById(String.valueOf(value));
+        if (registered == null || !AuthUserDirectory.ACTIVE.equals(registered.status())
+                || (!registered.emailVerified() && !registered.mobileVerified())) {
+            throw new IllegalArgumentException("The selected registered user is not active and verified.");
+        }
+        if (!teamAuthorization(exchange).authenticated()) {
+            throw new AuthorizationException(401, "An authenticated identity is required to link a registered user.");
         }
     }
 
@@ -3836,6 +5015,13 @@ final class RunnerServer implements AutoCloseable {
             Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
             try {
                 UserStoryStore.Attachment saved = userStoryStore.addAttachment(storyId, safeName, storageName, size, validatedType, CURRENT_USER_ID, CURRENT_USER_NAME);
+                String storyProject = projectIdForStory(storyId);
+                if (storyProject.isBlank()) {
+                    projectOwnershipManager.quarantine("ATTACHMENT", saved.id(), "STORY_OWNERSHIP_UNRESOLVED");
+                } else {
+                    projectOwnershipManager.assign("ATTACHMENT", saved.id(), storyProject,
+                            "USER_STORY_RELATIONSHIP", validProjectIds());
+                }
                 userStoryStore.recordActivity(storyId, "Attachment added", safeName, CURRENT_USER_ID, CURRENT_USER_NAME);
                 keep = true;
                 return attachmentToMap(saved);
@@ -3971,7 +5157,9 @@ final class RunnerServer implements AutoCloseable {
 
     private UserStoryStore.Epic createUserStoryEpic(HttpExchange exchange) throws IOException {
         Map<String, Object> v = requestObject(exchange);
-        return userStoryStore.createEpic(stringField(v, "projectId"), stringField(v, "key"), stringField(v, "name"), optionalString(v, "description"), optionalString(v, "status"), optionalString(v, "priority"));
+        String projectId = stringField(v, "projectId");
+        requireProjectAccess(exchange, projectId, TeamAuthorization.USER_STORIES, true);
+        return userStoryStore.createEpic(projectId, stringField(v, "key"), stringField(v, "name"), optionalString(v, "description"), optionalString(v, "status"), optionalString(v, "priority"));
     }
 
     private UserStoryStore.Epic updateUserStoryEpic(HttpExchange exchange, String id) throws IOException {
@@ -3981,17 +5169,21 @@ final class RunnerServer implements AutoCloseable {
 
     private UserStoryStore.Story createUserStory(HttpExchange exchange) throws IOException {
         Map<String, Object> v = requestObject(exchange);
-        return userStoryStore.createStory(stringField(v, "projectId"), optionalString(v, "epicId"), stringField(v, "title"), sanitizeRichText(optionalString(v, "description")), optionalString(v, "asA"), optionalString(v, "iWant"), optionalString(v, "soThat"), sanitizeRichText(optionalString(v, "acceptanceCriteria")), optionalString(v, "priority"), optionalString(v, "status"), numberField(v, "storyPoints", 0), optionalString(v, "assignee"), optionalString(v, "reporter"), CURRENT_USER_ID, CURRENT_USER_NAME);
+        String projectId = stringField(v, "projectId");
+        requireProjectAccess(exchange, projectId, TeamAuthorization.USER_STORIES, true);
+        return userStoryStore.createStory(projectId, optionalString(v, "epicId"), stringField(v, "title"), sanitizeRichText(optionalString(v, "description")), optionalString(v, "asA"), optionalString(v, "iWant"), optionalString(v, "soThat"), sanitizeRichText(optionalString(v, "acceptanceCriteria")), optionalString(v, "priority"), optionalString(v, "status"), numberField(v, "storyPoints", 0), optionalString(v, "assignee"), optionalString(v, "reporter"), authActorId(exchange), authActorName(exchange));
     }
 
     private UserStoryStore.Story updateUserStory(HttpExchange exchange, String id) throws IOException {
         Map<String, Object> v = requestObject(exchange);
-        return userStoryStore.updateStory(id, optionalString(v, "epicId"), optionalString(v, "title"), sanitizeRichText(optionalString(v, "description")), optionalString(v, "asA"), optionalString(v, "iWant"), optionalString(v, "soThat"), sanitizeRichText(optionalString(v, "acceptanceCriteria")), optionalString(v, "priority"), optionalString(v, "status"), numberField(v, "storyPoints", 0), optionalString(v, "assignee"), optionalString(v, "reporter"), numberField(v, "businessValue", 0), optionalString(v, "risk"), CURRENT_USER_ID, CURRENT_USER_NAME, optionalString(v, "sprintId"));
+        return userStoryStore.updateStory(id, optionalString(v, "epicId"), optionalString(v, "title"), sanitizeRichText(optionalString(v, "description")), optionalString(v, "asA"), optionalString(v, "iWant"), optionalString(v, "soThat"), sanitizeRichText(optionalString(v, "acceptanceCriteria")), optionalString(v, "priority"), optionalString(v, "status"), numberField(v, "storyPoints", 0), optionalString(v, "assignee"), optionalString(v, "reporter"), numberField(v, "businessValue", 0), optionalString(v, "risk"), authActorId(exchange), authActorName(exchange), optionalString(v, "sprintId"));
     }
 
     private UserStoryStore.Sprint createSprint(HttpExchange exchange) throws IOException {
         Map<String, Object> v = requestObject(exchange);
-        return userStoryStore.createSprint(stringField(v, "projectId"), stringField(v, "name"), optionalString(v, "goal"), stringField(v, "startDate"), stringField(v, "endDate"));
+        String projectId = stringField(v, "projectId");
+        requireProjectAccess(exchange, projectId, TeamAuthorization.SPRINT_BOARD, true);
+        return userStoryStore.createSprint(projectId, stringField(v, "name"), optionalString(v, "goal"), stringField(v, "startDate"), stringField(v, "endDate"));
     }
 
     private UserStoryStore.Sprint updateSprint(HttpExchange exchange, String id) throws IOException {

@@ -21,6 +21,18 @@ public final class Main {
         if (projectRoot == null) {
             return;
         }
+        String requestedPort = System.getProperty("qa.runner.port");
+        if (requestedPort == null) {
+            for (String arg : args) {
+                if (arg.startsWith("--port=")) {
+                    requestedPort = arg.substring("--port=".length());
+                    break;
+                }
+            }
+        }
+        if (requestedPort != null && !requestedPort.isBlank()) {
+            System.setProperty("qa.runner.port", requestedPort);
+        }
         try (RunnerServer server = new RunnerServer(projectRoot)) {
             URI address = server.start();
             System.out.println("Unified QA Runner is available at " + address);
