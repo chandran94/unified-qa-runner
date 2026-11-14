@@ -1,13 +1,15 @@
 package com.example.unifiedqarunner;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -22,8 +24,47 @@ public class RemoteImportConfig {
     private static final String CONFIG_FILE = "qa-runner.json";
     private static final String IMPORTS_DIR = "imports";
 
+    /** Bounded ZIP import policy. Nested archives are retained as files and never recursively extracted. */
+    record ZipImportLimits(long maxArchiveBytes, int maxEntries, long maxEntryBytes,
+                           long maxTotalBytes, int maxPathDepth) {
+        static ZipImportLimits defaults() {
+            return new ZipImportLimits(
+                    configuredLong("qa.runner.zip.maxArchiveBytes", 50L * 1024 * 1024),
+                    configuredInt("qa.runner.zip.maxEntries", 1024),
+                    configuredLong("qa.runner.zip.maxEntryBytes", 8L * 1024 * 1024),
+                    configuredLong("qa.runner.zip.maxTotalBytes", 64L * 1024 * 1024),
+                    configuredInt("qa.runner.zip.maxPathDepth", 32));
+        }
+
+        ZipImportLimits {
+            if (maxArchiveBytes <= 0 || maxEntries <= 0 || maxEntryBytes <= 0
+                    || maxTotalBytes <= 0 || maxPathDepth <= 0) {
+                throw new IllegalArgumentException("ZIP import limits must be positive.");
+            }
+        }
+
+        private static long configuredLong(String name, long fallback) {
+            String value = System.getProperty(name);
+            if (value == null || value.isBlank()) return fallback;
+            try { return Long.parseLong(value); }
+            catch (NumberFormatException ignored) { return fallback; }
+        }
+
+        private static int configuredInt(String name, int fallback) {
+            String value = System.getProperty(name);
+            if (value == null || value.isBlank()) return fallback;
+            try { return Integer.parseInt(value); }
+            catch (NumberFormatException ignored) { return fallback; }
+        }
+    }
+
+    static ZipImportLimits defaultZipImportLimits() {
+        return ZipImportLimits.defaults();
+    }
+
     private final Path projectRoot;
     private final Path importsDir;
+    private final ZipImportLimits zipLimits;
     private List<ImportEntry> imports;
 
     /**
@@ -72,8 +113,15 @@ public class RemoteImportConfig {
     }
 
     public RemoteImportConfig(Path projectRoot) throws IOException {
+        this(projectRoot, ZipImportLimits.defaults());
+    }
+
+    RemoteImportConfig(Path projectRoot, ZipImportLimits zipLimits) throws IOException {
+        if (projectRoot == null) throw new NullPointerException("projectRoot");
+        if (zipLimits == null) throw new NullPointerException("zipLimits");
         this.projectRoot = projectRoot;
         this.importsDir = projectRoot.resolve(IMPORTS_DIR);
+        this.zipLimits = zipLimits;
         Files.createDirectories(importsDir);
         load();
     }
@@ -213,12 +261,23 @@ public class RemoteImportConfig {
     public List<Path> getExistingPaths() {
         List<Path> result = new java.util.ArrayList<>();
         for (ImportEntry entry : imports) {
-            Path p = entry.toPath();
-            if (Files.isDirectory(p)) {
-                result.add(p);
-            }
+            try { result.add(resolveImportDirectory(entry)); }
+            catch (IOException ignored) { /* untrusted or quarantined legacy path */ }
         }
         return result;
+    }
+
+    /** Resolve an import only when it is a real directory below the trusted root. */
+    Path resolveImportDirectory(ImportEntry entry) throws IOException {
+        if (entry == null || entry.getPath() == null || entry.getPath().isBlank()) {
+            throw new IOException("Import path is missing.");
+        }
+        Path trustedRoot = importsDir.toRealPath();
+        Path candidate = Path.of(entry.getPath()).toRealPath();
+        if (!candidate.startsWith(trustedRoot) || !Files.isDirectory(candidate)) {
+            throw new IOException("Import path is outside the trusted imports root.");
+        }
+        return candidate;
     }
 
     /**
@@ -274,46 +333,107 @@ public class RemoteImportConfig {
      * Extract a ZIP file to the imports directory.
      */
     public ImportEntry extractZipFile(Path zipFile, String fileName) throws IOException {
+        if (zipFile == null || fileName == null || fileName.isBlank()) {
+            throw new IOException("ZIP input is missing.");
+        }
+        if (!Files.isRegularFile(zipFile)) {
+            throw new IOException("ZIP input is not a regular file.");
+        }
+        if (Files.size(zipFile) > zipLimits.maxArchiveBytes()) {
+            throw new IOException("ZIP file exceeds the configured upload limit.");
+        }
         String id = UUID.randomUUID().toString().substring(0, 8);
         String baseName = fileName.endsWith(".zip") ? fileName.substring(0, fileName.length() - 4) : fileName;
+        baseName = safeName(baseName);
         Path targetDir = importsDir.resolve(id + "-" + baseName);
+        Set<Path> extractedPaths = new HashSet<>();
+        long[] totalBytes = {0L};
+        int[] entryCount = {0};
+        boolean[] sawEntry = {false};
+        boolean completed = false;
 
-        // Extract ZIP
-        try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                Path filePath = targetDir.resolve(entry.getName()).normalize();
-                // Security check: prevent zip slip
-                if (!filePath.startsWith(targetDir)) {
-                    throw new IOException("Invalid ZIP entry: " + entry.getName());
+        try {
+            // Extract ZIP with actual streamed byte accounting. Nested ZIPs are retained as files;
+            // this method never recursively extracts archive contents.
+            try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile))) {
+                ZipEntry entry;
+                while ((entry = zis.getNextEntry()) != null) {
+                    sawEntry[0] = true;
+                    if (++entryCount[0] > zipLimits.maxEntries()) {
+                        throw new IOException("ZIP contains too many entries.");
+                    }
+                    String entryName = entry.getName();
+                    if (entryName == null || entryName.isBlank()) {
+                        throw new IOException("ZIP entry name is missing.");
+                    }
+                    if (pathDepth(entryName) > zipLimits.maxPathDepth()) {
+                        throw new IOException("ZIP entry path is too deep.");
+                    }
+                    Path filePath = targetDir.resolve(entryName).normalize();
+                    // Preserve ZIP Slip protection.
+                    if (!filePath.startsWith(targetDir) || !extractedPaths.add(filePath)) {
+                        throw new IOException("Invalid or duplicate ZIP entry.");
+                    }
+                    if (entry.isDirectory()) {
+                        Files.createDirectories(filePath);
+                    } else {
+                        Path parent = filePath.getParent();
+                        if (parent == null || !parent.startsWith(targetDir)) {
+                            throw new IOException("Invalid ZIP entry path.");
+                        }
+                        Files.createDirectories(parent);
+                        long[] entryBytes = {0L};
+                        try (OutputStream output = Files.newOutputStream(filePath)) {
+                            byte[] buffer = new byte[8192];
+                            int read;
+                            while ((read = zis.read(buffer)) != -1) {
+                                entryBytes[0] = checkedAdd(entryBytes[0], read, zipLimits.maxEntryBytes(),
+                                        "ZIP entry exceeds the configured size limit.");
+                                totalBytes[0] = checkedAdd(totalBytes[0], read, zipLimits.maxTotalBytes(),
+                                        "ZIP extraction exceeds the configured total size limit.");
+                                output.write(buffer, 0, read);
+                            }
+                        }
+                    }
+                    zis.closeEntry();
                 }
-                if (entry.isDirectory()) {
-                    Files.createDirectories(filePath);
-                } else {
-                    Files.createDirectories(filePath.getParent());
-                    Files.copy(zis, filePath, StandardCopyOption.REPLACE_EXISTING);
-                }
-                zis.closeEntry();
+            }
+            if (!sawEntry[0]) {
+                throw new IOException("ZIP archive contains no entries.");
+            }
+
+            // Create import entry only after all bounded extraction checks pass.
+            ImportEntry importEntry = new ImportEntry(
+                    id, baseName, "zip", fileName, targetDir.toString(), System.currentTimeMillis());
+
+            List<ImportEntry> updated = new java.util.ArrayList<>(imports);
+            updated.add(importEntry);
+            this.imports = List.copyOf(updated);
+            save();
+            completed = true;
+            return importEntry;
+        } finally {
+            if (!completed) {
+                try { deleteDirectory(targetDir); }
+                catch (IOException ignored) { /* never delete outside the task-owned target */ }
             }
         }
+    }
 
-        // Create import entry
-        ImportEntry importEntry = new ImportEntry(
-                id,
-                baseName,
-                "zip",
-                fileName,
-                targetDir.toString(),
-                System.currentTimeMillis()
-        );
+    private static long checkedAdd(long current, long increment, long limit, String message) throws IOException {
+        if (increment < 0 || current > limit - increment) throw new IOException(message);
+        long result = current + increment;
+        if (result > limit) throw new IOException(message);
+        return result;
+    }
 
-        // Add to imports list
-        List<ImportEntry> updated = new java.util.ArrayList<>(imports);
-        updated.add(importEntry);
-        this.imports = List.copyOf(updated);
-        save();
-
-        return importEntry;
+    private static int pathDepth(String entryName) {
+        String normalized = entryName.replace('\\', '/');
+        int depth = 0;
+        for (String component : normalized.split("/")) {
+            if (!component.isBlank() && !component.equals(".")) depth++;
+        }
+        return depth;
     }
 
     /**
@@ -323,10 +443,8 @@ public class RemoteImportConfig {
         ImportEntry entry = findImport(id);
         if (entry != null) {
             // Delete the directory
-            Path dir = entry.toPath();
-            if (Files.isDirectory(dir)) {
-                deleteDirectory(dir);
-            }
+            try { deleteDirectory(resolveImportDirectory(entry)); }
+            catch (IOException ignored) { /* never delete outside the trusted root */ }
         }
 
         List<ImportEntry> updated = new java.util.ArrayList<>(imports);
@@ -369,6 +487,12 @@ public class RemoteImportConfig {
         }
         // Fallback: use last segment
         return cleanUrl.replaceAll("[^a-zA-Z0-9_-]", "-");
+    }
+
+    private static String safeName(String value) {
+        String safe = value == null ? "" : value.replaceAll("[^a-zA-Z0-9._-]", "-");
+        safe = safe.replaceAll("^[.]+|[.]+$", "");
+        return safe.isBlank() ? "import" : safe.substring(0, Math.min(safe.length(), 80));
     }
 
     /**

@@ -9466,7 +9466,10 @@ paths:
 
   async function syncTestCasesFromPipeline() {
     try {
-      const result = await api("/api/testcases/sync", { method: "POST", body: "{}" });
+      if (!tenantState.organizationId || !tenantState.projectId) {
+        throw new Error("Select an organization and project before syncing pipeline results.");
+      }
+      const result = await api(`/api/testcases/sync?organizationId=${encodeURIComponent(tenantState.organizationId)}&projectId=${encodeURIComponent(tenantState.projectId)}`, { method: "POST", body: "{}" });
       notify("✅ " + result.message);
       loadTestCases();
     } catch (e) {

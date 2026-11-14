@@ -62,9 +62,9 @@ final class RunnerServer implements AutoCloseable {
     private String activeRunId;
     private final AtomicBoolean runnerEnabled = new AtomicBoolean(true);
 
-    private final TestCaseManager testCaseManager = new TestCaseManager();
+    private final TestCaseManager testCaseManager;
     private final DefectManager defectManager = new DefectManager();
-    private final AutomationMappingManager automationMappingManager = new AutomationMappingManager();
+    private final AutomationMappingManager automationMappingManager;
     private final AutomationExecutionManager automationExecutionManager;
     private final TeamMemberManager teamMemberManager;
     private final TeamRoleManager teamRoleManager;
@@ -93,6 +93,9 @@ final class RunnerServer implements AutoCloseable {
                  VerificationDelivery testSmsDelivery) throws IOException {
         this.projectRoot = projectRoot;
         this.executionService = new ExecutionService(projectRoot);
+        Path compatibilityStore = projectRoot.resolve("qa-runner.json").toAbsolutePath().normalize();
+        this.testCaseManager = new TestCaseManager(compatibilityStore);
+        this.automationMappingManager = new AutomationMappingManager(compatibilityStore);
         this.sharedPathConfig = new SharedPathConfig(projectRoot);
         this.remoteImportConfig = new RemoteImportConfig(projectRoot);
         this.userStoryStore = new UserStoryStore(projectRoot);
@@ -232,7 +235,7 @@ final class RunnerServer implements AutoCloseable {
     }
 
     private static boolean queryParametersAllowed(String path) {
-        return isPublicAuthPage(path) || path.startsWith("/api/organizations") || path.startsWith("/api/organization-invitations") || path.startsWith("/api/user-stories/projects") || path.startsWith("/api/user-stories/epics") || path.startsWith("/api/user-stories/stories") || path.startsWith("/api/user-stories/sprints") || path.startsWith("/api/user-stories/board") || path.equals("/api/user-stories/work-items") || path.equals("/api/user-stories/test-case-links") || path.equals("/api/stories/testcases") || path.equals("/api/testcases") || path.equals("/api/defects") || path.equals("/api/testcase-automation-mappings") || path.equals("/api/automation-executions") || path.equals("/api/automation-assets/scenarios") || path.equals("/api/team-members") || path.equals("/api/team-permissions") || path.equals("/api/team-roles") || path.startsWith("/api/wiki/spaces") || path.equals("/api/database/connections") || path.startsWith("/api/database/connections/") || path.startsWith("/api/database/connection-tests/") || path.startsWith("/api/cicd/");
+        return isPublicAuthPage(path) || path.startsWith("/api/organizations") || path.startsWith("/api/organization-invitations") || path.startsWith("/api/user-stories/projects") || path.startsWith("/api/user-stories/epics") || path.startsWith("/api/user-stories/stories") || path.startsWith("/api/user-stories/sprints") || path.startsWith("/api/user-stories/board") || path.equals("/api/user-stories/work-items") || path.equals("/api/user-stories/test-case-links") || path.equals("/api/stories/testcases") || path.equals("/api/testcases") || path.equals("/api/testcases/sync") || path.equals("/api/defects") || path.equals("/api/testcase-automation-mappings") || path.equals("/api/automation-executions") || path.equals("/api/automation-assets/scenarios") || path.equals("/api/team-members") || path.equals("/api/team-permissions") || path.equals("/api/team-roles") || path.startsWith("/api/wiki/spaces") || path.equals("/api/database/connections") || path.startsWith("/api/database/connections/") || path.startsWith("/api/database/connection-tests/") || path.startsWith("/api/cicd/");
     }
 
     private void handleApi(HttpExchange exchange, String path) throws Exception {
@@ -521,7 +524,7 @@ final class RunnerServer implements AutoCloseable {
             String testCaseId = queryParameter(exchange, "testCaseId");
             String assetId = queryParameter(exchange, "assetId");
             List<Map<String, Object>> mappings = automationMappingManager.list().stream()
-                    .filter(item -> ownedProjectAccess(exchange, "AUTOMATION_EXECUTION", stringField(item, "executionId"),
+                    .filter(item -> ownedProjectAccess(exchange, "TEST_CASE", stringField(item, "testCaseId"),
                             TeamAuthorization.TEST_CASES, false)).toList();
             if (testCaseId != null && !testCaseId.isBlank()) {
                 mappings = mappings.stream().filter(item -> testCaseId.equals(String.valueOf(item.get("testCaseId")))).toList();
@@ -645,7 +648,7 @@ final class RunnerServer implements AutoCloseable {
             sendJson(exchange, 200, remoteImportConfig.getImports().stream()
                     .filter(e -> isGlobalAdmin(exchange) || ownedProjectAccess(exchange, "REMOTE_IMPORT", e.getId(), TeamAuthorization.TEST_EXECUTION, false))
                     .map(e -> Map.of("id", e.getId(), "name", e.getName(), "type", e.getType(),
-                            "source", e.getSource(), "path", e.getPath(), "importedAt", e.getImportedAt()))
+                            "source", e.getSource(), "importedAt", e.getImportedAt()))
                     .toList());
             return;
         }
@@ -872,7 +875,8 @@ final class RunnerServer implements AutoCloseable {
         }
         if (path.equals("/api/testcases/sync") && method.equals("POST")) {
             requireSameOrigin(exchange);
-            syncTestCases(exchange);
+            String projectId = requireCiCdManage(exchange);
+            syncTestCases(exchange, projectId);
             return;
         }
         if (path.startsWith("/api/testcases/") && method.equals("PUT")) {
@@ -1411,9 +1415,9 @@ final class RunnerServer implements AutoCloseable {
             }
         }
         for (RemoteImportConfig.ImportEntry configured : remoteImportConfig.getImports()) {
-            if (ownedProjectAccess(exchange, "REMOTE_IMPORT", configured.getId(), TeamAuthorization.TEST_EXECUTION, false)
-                    && Files.isDirectory(Path.of(configured.getPath()))) {
-                allPaths.add(Path.of(configured.getPath()).toRealPath());
+            if (ownedProjectAccess(exchange, "REMOTE_IMPORT", configured.getId(), TeamAuthorization.TEST_EXECUTION, false)) {
+                try { allPaths.add(remoteImportConfig.resolveImportDirectory(configured)); }
+                catch (IOException ignored) { /* unresolved or unsafe legacy import */ }
             }
         }
         List<Map<String, Object>> assets = executionService.pluginRegistry()
@@ -1441,6 +1445,10 @@ final class RunnerServer implements AutoCloseable {
         }
         List<Map<String, String>> sharedPathsList = new ArrayList<>();
         for (SharedPathConfig.SharedPathEntry entry : sharedPathConfig.getSharedPaths()) {
+            if (!isGlobalAdmin(exchange)
+                    && !ownedProjectAccess(exchange, "SHARED_PATH", entry.getName(), TeamAuthorization.TEST_EXECUTION, false)) {
+                continue;
+            }
             Map<String, String> entryMap = new LinkedHashMap<>();
             entryMap.put("name", entry.getName());
             entryMap.put("path", entry.getPath());
@@ -1449,12 +1457,15 @@ final class RunnerServer implements AutoCloseable {
         // Add imports list
         List<Map<String, Object>> importsList = new ArrayList<>();
         for (RemoteImportConfig.ImportEntry entry : remoteImportConfig.getImports()) {
+            if (!isGlobalAdmin(exchange)
+                    && !ownedProjectAccess(exchange, "REMOTE_IMPORT", entry.getId(), TeamAuthorization.TEST_EXECUTION, false)) {
+                continue;
+            }
             Map<String, Object> entryMap = new LinkedHashMap<>();
             entryMap.put("id", entry.getId());
             entryMap.put("name", entry.getName());
             entryMap.put("type", entry.getType());
             entryMap.put("source", entry.getSource());
-            entryMap.put("path", entry.getPath());
             entryMap.put("importedAt", entry.getImportedAt());
             importsList.add(entryMap);
         }
@@ -1614,8 +1625,7 @@ final class RunnerServer implements AutoCloseable {
             sendJson(exchange, 200, Map.of(
                     "message", "Repository cloned successfully.",
                     "id", entry.getId(),
-                    "name", entry.getName(),
-                    "path", entry.getPath()
+                    "name", entry.getName()
             ));
         } catch (IOException | InterruptedException e) {
             sendError(exchange, 500, "Failed to clone repository: " + e.getMessage());
@@ -1631,6 +1641,17 @@ final class RunnerServer implements AutoCloseable {
 
         String projectId = queryParameter(exchange, "projectId");
         requireProjectAccess(exchange, projectId, TeamAuthorization.TEST_EXECUTION, true);
+
+        long contentLength = -1L;
+        String contentLengthHeader = exchange.getRequestHeaders().getFirst("Content-Length");
+        if (contentLengthHeader != null) {
+            try { contentLength = Long.parseLong(contentLengthHeader); }
+            catch (NumberFormatException ignored) { /* bounded read below remains authoritative */ }
+        }
+        long maxArchiveBytes = RemoteImportConfig.defaultZipImportLimits().maxArchiveBytes();
+        if (contentLength > maxArchiveBytes) {
+            throw new IllegalArgumentException("ZIP file is too large (max 50MB).");
+        }
 
         // Read the request body
         byte[] body = exchange.getRequestBody().readNBytes(50 * 1024 * 1024 + 1); // 50MB max
@@ -1658,7 +1679,8 @@ final class RunnerServer implements AutoCloseable {
         }
 
         // Write ZIP to temp file
-        Path tempZip = Path.of("target", "uploads", fileName + "-" + UUID.randomUUID().toString().substring(0, 8) + ".zip");
+        Path tempZip = projectRoot.resolve("target").resolve("uploads")
+                .resolve(UUID.randomUUID().toString().substring(0, 8) + ".zip").normalize();
         Files.createDirectories(tempZip.getParent());
         Files.write(tempZip, zipData);
 
@@ -1668,8 +1690,7 @@ final class RunnerServer implements AutoCloseable {
             sendJson(exchange, 200, Map.of(
                     "message", "ZIP file extracted successfully.",
                     "id", entry.getId(),
-                    "name", entry.getName(),
-                    "path", entry.getPath()
+                    "name", entry.getName()
             ));
         } finally {
             Files.deleteIfExists(tempZip);
@@ -1682,9 +1703,10 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 404, "Import '" + id + "' not found.");
             return;
         }
-        Path importPath = Path.of(entry.getPath()).toRealPath();
-        if (!Files.isDirectory(importPath)) {
-            sendError(exchange, 404, "Import directory not found: " + entry.getPath());
+        Path importPath;
+        try { importPath = remoteImportConfig.resolveImportDirectory(entry); }
+        catch (IOException error) {
+            sendError(exchange, 404, "Import directory not found.");
             return;
         }
         // Scan the directory
@@ -1738,7 +1760,6 @@ final class RunnerServer implements AutoCloseable {
                 "name", entry.getName(),
                 "type", entry.getType(),
                 "source", entry.getSource(),
-                "path", entry.getPath(),
                 "totalAssets", pathAssets.size(),
                 "frameworks", frameworks,
                 "assets", pathAssets
@@ -1874,9 +1895,9 @@ final class RunnerServer implements AutoCloseable {
             }
         }
         for (RemoteImportConfig.ImportEntry configured : remoteImportConfig.getImports()) {
-            if (ownedProjectAccess(exchange, "REMOTE_IMPORT", configured.getId(), TeamAuthorization.TEST_EXECUTION, false)
-                    && Files.isDirectory(Path.of(configured.getPath()))) {
-                allPaths.add(Path.of(configured.getPath()).toRealPath());
+            if (ownedProjectAccess(exchange, "REMOTE_IMPORT", configured.getId(), TeamAuthorization.TEST_EXECUTION, false)) {
+                try { allPaths.add(remoteImportConfig.resolveImportDirectory(configured)); }
+                catch (IOException ignored) { /* unresolved or unsafe legacy import */ }
             }
         }
         List<Map<String, Object>> allAssets = executionService.pluginRegistry()
@@ -2342,11 +2363,7 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         requireArtifactAccess(exchange, "SCREENSHOT", fileName, TeamAuthorization.TEST_EXECUTION, false);
-        byte[] content = Files.readAllBytes(screenshot);
-        exchange.getResponseHeaders().set("Content-Type", "image/png");
-        exchange.getResponseHeaders().set("Cache-Control", "no-store");
-        exchange.sendResponseHeaders(200, content.length);
-        exchange.getResponseBody().write(content);
+        streamFileResponse(exchange, screenshot, "image/png");
     }
 
     private void serveReport(HttpExchange exchange, RunEntry entry) throws IOException {
@@ -2358,19 +2375,25 @@ final class RunnerServer implements AutoCloseable {
             sendError(exchange, 409, "The report is not ready yet.");
             return;
         }
-        Path report = entry.result.reportDirectory().resolve("index.html").normalize();
-        if (!report.startsWith(projectRoot.resolve("target/runner-reports").normalize())
-                || !Files.isRegularFile(report)) {
+        Path reportRoot = projectRoot.resolve("target/runner-reports");
+        Path report;
+        try {
+            report = ReportStorageSecurity.resolveRegularReportFile(
+                    reportRoot, entry.result.reportDirectory().resolve("index.html"));
+        } catch (IOException error) {
             sendError(exchange, 404, "The report is not available.");
             return;
         }
-        byte[] content = Files.readAllBytes(report);
         exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
         exchange.getResponseHeaders().set("Content-Security-Policy",
                 "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
                         + "frame-ancestors 'none'");
-        exchange.sendResponseHeaders(200, content.length);
-        exchange.getResponseBody().write(content);
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(200, Files.size(report));
+        try (InputStream input = Files.newInputStream(report);
+             OutputStream output = exchange.getResponseBody()) {
+            input.transferTo(output);
+        }
     }
 
     private void requireSameOrigin(HttpExchange exchange) {
@@ -2794,7 +2817,6 @@ final class RunnerServer implements AutoCloseable {
     private void requireAdminForUnownedResource(HttpExchange exchange, String path) {
         boolean unowned = path.equals("/api/database/overview")
                 || path.equals("/api/testcases/stats")
-                || path.equals("/api/testcases/sync")
                 || path.equals("/api/testcases/bulk-delete")
                 || path.equals("/api/automation-assets/scenarios");
         if (unowned && !isGlobalAdmin(exchange)) {
@@ -3109,7 +3131,7 @@ final class RunnerServer implements AutoCloseable {
         }
     }
 
-    private void requireCiCdManage(HttpExchange exchange) {
+    private String requireCiCdManage(HttpExchange exchange) {
         AuthUserDirectory.User user = requireAuthenticatedUser(exchange);
         TeamMemberManager.Member member = teamMemberManager.list().stream()
                 .filter(item -> user.id().equals(item.registeredUserId())
@@ -3117,7 +3139,7 @@ final class RunnerServer implements AutoCloseable {
         if (member == null || !Set.of("Admin", "Project Manager", "QA Lead").contains(member.role())) {
             throw new AuthorizationException(403, "Your role cannot manage CI/CD configuration or execution.");
         }
-        requireCiCdProjectAccess(exchange, true);
+        return requireCiCdProjectAccess(exchange, true);
     }
 
     private String requireCiCdProjectAccess(HttpExchange exchange, boolean write) {
@@ -3445,11 +3467,23 @@ final class RunnerServer implements AutoCloseable {
         }
         requireArtifactAccess(exchange, "VIDEO", fileName, TeamAuthorization.TEST_EXECUTION, false);
         String contentType = fileName.endsWith(".webm") ? "video/webm" : "video/mp4";
-        byte[] content = Files.readAllBytes(video);
-        exchange.getResponseHeaders().set("Content-Type", contentType);
-        exchange.getResponseHeaders().set("Cache-Control", "no-store");
-        exchange.sendResponseHeaders(200, content.length);
-        exchange.getResponseBody().write(content);
+        streamFileResponse(exchange, video, contentType);
+    }
+
+    private void streamFileResponse(HttpExchange exchange, Path file, String contentType) throws IOException {
+        long contentLength = Files.size(file);
+        try (InputStream input = Files.newInputStream(file)) {
+            exchange.getResponseHeaders().set("Content-Type", contentType);
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
+            exchange.sendResponseHeaders(200, contentLength);
+            try (OutputStream output = exchange.getResponseBody()) {
+                byte[] buffer = new byte[16 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, count);
+                }
+            }
+        }
     }
 
     // === Dependency Check ===
@@ -4229,7 +4263,7 @@ final class RunnerServer implements AutoCloseable {
      */
     private Map<String, Object> getCiCdStatus(String projectId) {
         CiCdConfig.CiCdSettings settings = ciCdConfig.load(projectId);
-        return pipelineStatusService.getLatestStatus(settings);
+        return pipelineStatusService.getLatestStatus(settings, projectId);
     }
 
     /**
@@ -4697,7 +4731,7 @@ final class RunnerServer implements AutoCloseable {
      * Accepts: {runId} for local runs, or {runId, source:"github"} for GitHub pipeline runs.
      */
     @SuppressWarnings("unchecked")
-    private void syncTestCases(HttpExchange exchange) throws IOException {
+    private void syncTestCases(HttpExchange exchange, String projectId) throws IOException {
         byte[] body = exchange.getRequestBody().readNBytes(MAX_REQUEST_BYTES + 1);
         if (body.length > MAX_REQUEST_BYTES) {
             throw new IllegalArgumentException("Request body is too large.");
@@ -4711,7 +4745,7 @@ final class RunnerServer implements AutoCloseable {
 
         if ("github".equals(source) && runId != null) {
             // Sync from GitHub pipeline run
-            CiCdConfig.CiCdSettings settings = new CiCdConfig().load();
+            CiCdConfig.CiCdSettings settings = ciCdConfig.load(projectId);
             if (settings == null || settings.token().isEmpty()) {
                 sendError(exchange, 400, "CI/CD config not found. Save your CI/CD configuration first.");
                 return;
@@ -4727,7 +4761,9 @@ final class RunnerServer implements AutoCloseable {
         } else if (runId != null) {
             // Sync from local run
             RunEntry entry = runs.get(runId);
-            if (entry != null && entry.result != null && entry.result.summary() != null) {
+            if (entry != null && entry.jobContext != null
+                    && projectId.equals(entry.jobContext.projectId())
+                    && entry.result != null && entry.result.summary() != null) {
                 testCaseManager.syncFromRun(runId, entry.result.summary().details());
                 sendJson(exchange, 200, Map.of("message", "Test cases synced from run " + runId));
             } else {
@@ -4735,12 +4771,12 @@ final class RunnerServer implements AutoCloseable {
             }
         } else {
             // Auto-sync: sync from latest GitHub pipeline run
-            CiCdConfig.CiCdSettings settings = new CiCdConfig().load();
+            CiCdConfig.CiCdSettings settings = ciCdConfig.load(projectId);
             if (settings == null || settings.token().isEmpty()) {
                 sendError(exchange, 400, "CI/CD config not found. Save your CI/CD configuration first.");
                 return;
             }
-            List<CiCdConfig.PipelineRun> pipelineRuns = pipelineStatusService.getRuns(settings);
+            List<CiCdConfig.PipelineRun> pipelineRuns = pipelineStatusService.getRuns(settings, projectId);
             if (pipelineRuns.isEmpty()) {
                 sendError(exchange, 404, "No pipeline runs found");
                 return;

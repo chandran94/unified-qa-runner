@@ -12,6 +12,18 @@ import java.util.*;
 public class TestCaseManager {
 
     private static final String CONFIG_FILE = "qa-runner.json";
+    private final Path configPath;
+
+    /** Preserves the existing working-directory compatibility default. */
+    public TestCaseManager() {
+        this(Path.of(CONFIG_FILE));
+    }
+
+    /** Uses an explicit compatibility-store path, primarily for isolated runtimes and tests. */
+    public TestCaseManager(Path configPath) {
+        this.configPath = java.util.Objects.requireNonNull(configPath, "configPath")
+                .toAbsolutePath().normalize();
+    }
 
     public record TestCase(
             String id,
@@ -61,7 +73,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public List<Story> listStories() {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             if (!Files.exists(path)) {
                 return new ArrayList<>();
             }
@@ -92,7 +104,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public void saveAllStories(List<Story> stories) {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             Map<String, Object> root;
             if (Files.exists(path)) {
                 Object parsed = JsonParser.parse(Files.readString(path));
@@ -273,7 +285,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public List<TestSuite> listSuites() {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             if (!Files.exists(path)) {
                 return new ArrayList<>();
             }
@@ -304,7 +316,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public void saveAllSuites(List<TestSuite> suites) {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             Map<String, Object> root;
             if (Files.exists(path)) {
                 Object parsed = JsonParser.parse(Files.readString(path));
@@ -410,7 +422,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     private void deleteTestCasesForSuites(List<String> suiteIds) {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             if (!Files.exists(path)) return;
             String content = Files.readString(path);
             Object parsed = JsonParser.parse(content);
@@ -502,7 +514,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public List<TestCase> list() {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             if (!Files.exists(path)) {
                 return new ArrayList<>();
             }
@@ -533,7 +545,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public void saveAll(List<TestCase> testCases) {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             Map<String, Object> root;
             if (Files.exists(path)) {
                 Object parsed = JsonParser.parse(Files.readString(path));
@@ -629,7 +641,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public void recordHistory(String testCaseId, Map<String, Object> oldValues, Map<String, Object> newValues, String changedBy) {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             Map<String, Object> root = readRoot(path);
             List<Map<String, Object>> history = new ArrayList<>();
             Object historyObject = root.get("testCaseHistory");
@@ -663,7 +675,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> history(String testCaseId) {
         try {
-            Map<String, Object> root = readRoot(Path.of(CONFIG_FILE));
+            Map<String, Object> root = readRoot(configPath);
             Object historyObject = root.get("testCaseHistory");
             if (!(historyObject instanceof List<?> entries)) return new ArrayList<>();
             List<Map<String, Object>> result = new ArrayList<>();
@@ -727,7 +739,7 @@ public class TestCaseManager {
     public boolean archive(String id, boolean archived) {
         try {
             if (getById(id) == null) return false;
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             Map<String, Object> root = readRoot(path);
             Set<String> ids = new LinkedHashSet<>();
             Object archivedObject = root.get("archivedTestCaseIds");
@@ -746,7 +758,7 @@ public class TestCaseManager {
     @SuppressWarnings("unchecked")
     public boolean isArchived(String id) {
         try {
-            Map<String, Object> root = readRoot(Path.of(CONFIG_FILE));
+            Map<String, Object> root = readRoot(configPath);
             Object archivedObject = root.get("archivedTestCaseIds");
             if (archivedObject instanceof List<?> values) {
                 return values.stream().anyMatch(value -> id.equals(String.valueOf(value)));

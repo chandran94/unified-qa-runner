@@ -175,6 +175,30 @@ class TenantRouteIntegrationTest {
     }
 
     @Test
+    void pipelineResultImportRequiresScopedCiCdOwnershipAndIgnoresLegacyConfig() throws Exception {
+        CiCdConfig legacyConfig = new CiCdConfig(root);
+        legacyConfig.save(new CiCdConfig.CiCdSettings("github", "owner/legacy-repo", "legacy-token",
+                "main", List.of(), "push", "", ""));
+
+        String projectScope = "?organizationId=" + orgA.organizationId() + "&projectId=" + projectAId;
+        HttpResponse<String> authorized = clientA.post("/api/testcases/sync" + projectScope, Map.of());
+        assertEquals(400, authorized.statusCode(), authorized.body());
+        assertFalse(authorized.body().contains("legacy-repo"));
+
+        HttpResponse<String> crossOrganization = clientB.post("/api/testcases/sync" + projectScope, Map.of());
+        assertEquals(403, crossOrganization.statusCode(), crossOrganization.body());
+
+        HttpResponse<String> missingScope = clientA.post("/api/testcases/sync", Map.of());
+        assertEquals(403, missingScope.statusCode(), missingScope.body());
+
+        HttpResponse<String> missingCsrf = clientA.postWithoutCsrf("/api/testcases/sync" + projectScope, Map.of());
+        assertEquals(403, missingCsrf.statusCode(), missingCsrf.body());
+
+        HttpResponse<String> unauthenticated = post("/api/testcases/sync" + projectScope, Map.of(), null, null);
+        assertEquals(401, unauthenticated.statusCode(), unauthenticated.body());
+    }
+
+    @Test
     void automationExecutionResultsCarryExplicitOwnershipAndFilterBeforeSerialization() throws Exception {
         AutomationExecutionManager executions = new AutomationExecutionManager(root);
         executions.save(Map.of("executionId", "RUN-A", "testCaseId", "tc-a", "assetId", "asset-a",

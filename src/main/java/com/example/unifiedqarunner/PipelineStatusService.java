@@ -28,11 +28,21 @@ public class PipelineStatusService {
      */
     @SuppressWarnings("unchecked")
     public List<CiCdConfig.PipelineRun> getRuns(CiCdConfig.CiCdSettings settings) {
+        return getRuns(settings, "");
+    }
+
+    /**
+     * Get recent runs within an authoritative project scope. The project ID is
+     * resolved by the server before this method is called and is part of the
+     * cache key so one project's history cannot satisfy another project's read.
+     */
+    @SuppressWarnings("unchecked")
+    public List<CiCdConfig.PipelineRun> getRuns(CiCdConfig.CiCdSettings settings, String projectId) {
         if (settings == null) {
             return List.of();
         }
-        String cacheKey = settings.platform() + ":" + (settings.repoUrl() + settings.jenkinsUrl());
-        CachedResult cached = cache.get(cacheKey);
+        String cacheKey = cacheKey(settings, projectId);
+        CachedResult cached = projectId == null || projectId.isBlank() ? null : cache.get(cacheKey);
         if (cached != null && System.currentTimeMillis() - cached.timestamp() < CACHE_TTL_MS) {
             return cached.runs();
         }
@@ -46,8 +56,15 @@ public class PipelineStatusService {
         } else {
             runs = List.of();
         }
-        cache.put(cacheKey, new CachedResult(runs, System.currentTimeMillis()));
+        if (projectId != null && !projectId.isBlank()) {
+            cache.put(cacheKey, new CachedResult(runs, System.currentTimeMillis()));
+        }
         return runs;
+    }
+
+    String cacheKey(CiCdConfig.CiCdSettings settings, String projectId) {
+        String scope = projectId == null || projectId.isBlank() ? "unscoped" : projectId;
+        return scope + ":" + settings.platform() + ":" + (settings.repoUrl() + settings.jenkinsUrl());
     }
 
     public void clearCache() {
@@ -273,8 +290,12 @@ public class PipelineStatusService {
      * Get the latest pipeline status for the sidebar badge.
      */
     public Map<String, Object> getLatestStatus(CiCdConfig.CiCdSettings settings) {
+        return getLatestStatus(settings, "");
+    }
+
+    public Map<String, Object> getLatestStatus(CiCdConfig.CiCdSettings settings, String projectId) {
         Map<String, Object> result = new LinkedHashMap<>();
-        List<CiCdConfig.PipelineRun> runs = getRuns(settings);
+        List<CiCdConfig.PipelineRun> runs = getRuns(settings, projectId);
         if (runs.isEmpty()) {
             result.put("badge", "⏳");
             result.put("status", "no_runs");

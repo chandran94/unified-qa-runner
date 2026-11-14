@@ -15,6 +15,18 @@ import java.util.UUID;
  */
 final class AutomationMappingManager {
     private static final String CONFIG_FILE = "qa-runner.json";
+    private final Path configPath;
+
+    /** Preserves the existing working-directory compatibility default. */
+    AutomationMappingManager() {
+        this(Path.of(CONFIG_FILE));
+    }
+
+    /** Uses an explicit compatibility-store path for isolated runtimes and tests. */
+    AutomationMappingManager(Path configPath) {
+        this.configPath = java.util.Objects.requireNonNull(configPath, "configPath")
+                .toAbsolutePath().normalize();
+    }
     private static final String KEY = "automationMappings";
 
     synchronized List<Map<String, Object>> list() {
@@ -73,7 +85,7 @@ final class AutomationMappingManager {
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> readEntries() {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             if (!Files.exists(path)) return new ArrayList<>();
             Object parsed = JsonParser.parse(Files.readString(path));
             if (!(parsed instanceof Map<?, ?> values)) return new ArrayList<>();
@@ -90,7 +102,7 @@ final class AutomationMappingManager {
     @SuppressWarnings("unchecked")
     private void writeEntries(List<Map<String, Object>> entries) {
         try {
-            Path path = Path.of(CONFIG_FILE);
+            Path path = configPath;
             Map<String, Object> root = new LinkedHashMap<>();
             if (Files.exists(path)) {
                 Object parsed = JsonParser.parse(Files.readString(path));
