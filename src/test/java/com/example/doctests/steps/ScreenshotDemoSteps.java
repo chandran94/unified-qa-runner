@@ -7,8 +7,13 @@ import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.NoSuchElementException;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScreenshotDemoSteps {
+    private boolean missingElementObserved;
 
     @Given("I navigate to DemoQA home page")
     public void iNavigateToDemoQAHomePage() {
@@ -18,12 +23,18 @@ public class ScreenshotDemoSteps {
     @When("I look for a missing element on the page")
     public void iLookForAMissingElementOnThePage() {
         WebDriver driver = DriverFactory.getDriver();
-        // This will throw NoSuchElementException, triggering the screenshot
-        driver.findElement(By.cssSelector("#this-element-does-not-exist-12345"));
+        missingElementObserved = false;
+        assertDoesNotThrow(() -> {
+            try {
+                driver.findElement(By.cssSelector("#this-element-does-not-exist-12345"));
+            } catch (NoSuchElementException expected) {
+                missingElementObserved = true;
+            }
+        });
     }
 
-    @Then("the element should exist")
-    public void theElementShouldExist() {
-        // This step will never be reached because the When step fails
+    @Then("the element should be absent")
+    public void theElementShouldBeAbsent() {
+        assertTrue(missingElementObserved, "The deliberately missing element unexpectedly existed");
     }
 }

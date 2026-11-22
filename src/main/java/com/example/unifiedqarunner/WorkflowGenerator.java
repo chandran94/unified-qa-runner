@@ -40,10 +40,10 @@ public class WorkflowGenerator {
         yaml.append("        uses: actions/checkout@v4\n\n");
 
         // Setup Java
-        yaml.append("      - name: Set up JDK 17\n");
+        yaml.append("      - name: Set up JDK 25\n");
         yaml.append("        uses: actions/setup-java@v4\n");
         yaml.append("        with:\n");
-        yaml.append("          java-version: '17'\n");
+        yaml.append("          java-version: '25'\n");
         yaml.append("          distribution: 'temurin'\n");
         yaml.append("          cache: maven\n\n");
 

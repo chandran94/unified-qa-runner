@@ -112,7 +112,12 @@
     .dep-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:center;backdrop-filter:blur(4px)}
     .dep-modal-overlay.show{display:flex}
     .dep-modal{background:#fff;border-radius:20px;width:90%;max-width:700px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,0.25)}
-    .dep-modal.defect-modal{max-width:950px;width:95%}
+    .dep-modal.defect-modal{max-width:1280px;width:95%}
+    .defect-modal .dep-modal-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}
+    .defect-modal .defect-section{min-width:0;margin:0}
+    .defect-modal .defect-actions{grid-column:1/-1}
+    @media(max-width:850px){.defect-modal .dep-modal-body{grid-template-columns:minmax(0,1fr)}}
+    @media(max-width:480px){.defect-modal .defect-grid{grid-template-columns:minmax(0,1fr)}}
     .dep-modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;flex-shrink:0;border-radius:20px 20px 0 0}
     .dep-modal-body{padding:24px;overflow-y:auto;flex:1;min-height:0}
     /* Shared User Story modal */
@@ -403,6 +408,12 @@
     .tc-content{flex:1;overflow-x:hidden;overflow-y:auto;padding:0;min-height:300px}
     /* Execution Modal */
     .exec-modal{max-width:900px;width:95%}
+    #execModalOverlay .exec-modal{max-width:1200px}
+    #execModalBody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}
+    #execModalBody .exec-section{min-width:0;margin:0}
+    #execModalBody .exec-section:last-child{grid-column:1/-1}
+    @media(max-width:800px){#execModalBody{grid-template-columns:minmax(0,1fr)}}
+    @media(max-width:480px){#execModalBody .exec-grid{grid-template-columns:minmax(0,1fr)}}
     .exec-section{margin-bottom:20px}
     .exec-section-title{font-size:13px;font-weight:700;color:#667eea;border-bottom:2px solid #667eea;padding-bottom:6px;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.04em}
     .exec-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -441,7 +452,7 @@
     .exec-detail-label{font-size:12px;font-weight:700;color:#64748b;min-width:120px;text-transform:uppercase;letter-spacing:0.03em}
     .exec-detail-value{font-size:13px;color:#10182b;flex:1}
     /* Execute tab action buttons */
-    .tc-execute-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+    .tc-execute-actions{display:flex;gap:4px;align-items:center;flex-wrap:nowrap}
     .tc-execute-btn{width:32px;height:32px;border:none;border-radius:8px;cursor:pointer;font-size:14px;transition:all .2s;display:flex;align-items:center;justify-content:center}
     .tc-execute-btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.15)}
     .tc-execute-btn.pass-btn{background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#166534}
@@ -474,8 +485,8 @@
     .tc-filter-actions{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
     .tc-clear-filters{padding:2px 5px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;color:#475569;font:inherit;font-size:9px;font-weight:700;text-transform:none;letter-spacing:normal;cursor:pointer;white-space:nowrap}
     .tc-clear-filters:hover{border-color:#667eea;color:#4338ca;background:#eef2ff}
-    .tc-execute-header{grid-template-columns:32px 70px 1fr 90px 90px 90px 100px 100px 100px 80px}
-    #tcExecuteBody .tc-list-item{grid-template-columns:32px 70px 1fr 90px 90px 90px 100px 100px 100px 80px}
+    .tc-execute-header{grid-template-columns:32px 70px 1fr 90px 90px 90px 100px 100px 100px 150px}
+    #tcExecuteBody .tc-list-item{grid-template-columns:32px 70px 1fr 90px 90px 90px 100px 100px 100px 150px}
     .tc-case-id{font-family:'SF Mono',Monaco,monospace;font-size:11px;font-weight:800;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:3px 8px;border-radius:6px;display:inline-block;text-align:center;white-space:nowrap;letter-spacing:0.02em}
     .tc-suite-code{font-family:'SF Mono',Monaco,monospace;font-size:10px;font-weight:700;color:#0891b2;background:linear-gradient(135deg,#cffafe,#a5f3fc);padding:2px 6px;border-radius:4px;margin-left:4px;flex-shrink:0}
     .tc-list-item:hover{background:linear-gradient(90deg,rgba(102,126,234,0.06),rgba(118,75,162,0.04));box-shadow:inset 0 0 0 1px rgba(102,126,234,0.15);transform:scale(1.002)}
@@ -1026,20 +1037,153 @@
     #authPageRoot[hidden]{display:none}
     .auth-card{width:min(440px,100%);padding:36px;background:#fff;border:1px solid #e1e6ef;border-radius:22px;box-shadow:0 18px 60px rgba(15,23,42,.14)}
     .auth-card .auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}.auth-card .auth-mark{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#315eea,#6366f1);color:#fff;font-size:22px}.auth-card h1{font-size:26px;margin:0}.auth-card h2{font-size:20px;margin:0 0 6px}.auth-card .auth-subtitle{margin:0 0 22px;color:var(--muted);font-size:13px}.auth-card .auth-field{margin-bottom:14px}.auth-card .auth-field label{margin:0 0 6px}.auth-card .auth-field input{width:100%;padding:12px 13px;border:1px solid #d5dce8;border-radius:10px;font:inherit}.auth-card .auth-field input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(49,94,234,.14)}.auth-card .auth-password{display:flex;gap:8px}.auth-card .auth-password input{flex:1}.auth-card .auth-password button{white-space:nowrap}.auth-card .auth-error{min-height:22px;color:#b32b3b;font-size:13px;margin:8px 0}.auth-card .auth-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}.auth-card .auth-actions .btn{flex:1}.auth-card .auth-link{display:block;margin-top:16px;text-align:center;color:#315eea;background:none;border:0;cursor:pointer;font:inherit;font-size:13px;text-decoration:underline}.auth-card .auth-back{margin-bottom:20px;border:0;background:none;color:#315eea;cursor:pointer;font:inherit;padding:0}
-    .top{position:relative;z-index:3001}
+    .top{position:relative;z-index:1}
     .tenant-context-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding:10px 12px;border:1px solid #dfe5f0;border-radius:12px;background:linear-gradient(135deg,#f8faff,#fff);box-shadow:0 4px 16px rgba(31,41,55,.05)}
     .tenant-context-bar label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748b}.tenant-context-bar select{min-width:190px;max-width:280px;padding:9px 32px 9px 11px;border:1px solid #cfd7e6;border-radius:9px;background:#fff;color:#172033;font:inherit;font-weight:700}.tenant-context-bar select:focus{outline:none;border-color:#5b55d9;box-shadow:0 0 0 3px rgba(91,85,217,.14)}.tenant-context-project{font-size:12px;color:#64748b;padding-left:8px;border-left:1px solid #dfe5f0}.tenant-context-actions{margin-left:auto;display:flex;gap:8px;align-items:center}.tenant-context-status{font-size:12px;color:#64748b}.tenant-context-status.error{color:#b42318}.organization-panel{max-width:900px}.organization-panel-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.organization-panel-card{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.organization-panel-card h3{margin:0 0 12px;color:#172033;font-size:15px}.organization-member-row,.organization-project-row,.organization-invite-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eef1f6}.organization-member-row:last-child,.organization-project-row:last-child,.organization-invite-row:last-child{border-bottom:0}.organization-row-main{flex:1;min-width:0}.organization-row-main strong,.organization-row-main small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.organization-row-main small{color:#64748b;margin-top:3px}.organization-panel input,.organization-panel select{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #cfd7e6;border-radius:8px;font:inherit}.organization-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.organization-form-field{display:flex;flex-direction:column;gap:5px}.organization-form-field.full{grid-column:1/-1}.organization-form-field label{font-size:12px;font-weight:700;color:#344054}.organization-note{padding:10px 12px;border-radius:8px;background:#f6f8fc;color:#64748b;font-size:12px;line-height:1.5}.organization-danger{color:#b42318}
     .settings-subnav{padding-left:34px!important;font-size:12px!important;background:#f8f9ff}.tenant-context-summary{font-size:12px;color:#475467;font-weight:700}.tenant-context-summary strong{color:#172033}.organization-settings-page{max-width:1100px}.organization-settings-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.organization-settings-header h2{margin:0;color:#172033}.organization-settings-header p{margin:6px 0 0;color:#64748b}.organization-settings-context{margin-bottom:16px}
     @media(max-width:700px){.tenant-context-actions{margin-left:0;width:100%}.tenant-context-actions .btn{flex:1}.organization-panel-grid,.organization-form-grid{grid-template-columns:1fr}.organization-form-field.full{grid-column:auto}.tenant-context-project{border-left:0;padding-left:0;width:100%}}
     @media (max-width:520px){#authPageRoot{padding:14px}.auth-card{padding:25px 20px;border-radius:16px}.auth-card .auth-actions{flex-direction:column}}
+    .sprint-board-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 18px;padding:16px 18px;margin-bottom:18px;border:1px solid #dce4f0;border-radius:14px;background:#fff}
+    .sprint-board-filter{display:grid;gap:6px;margin:0;color:#334155;font-size:12px;font-weight:700}
+    .sprint-board-filter select{width:100%;min-width:0;min-height:40px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;color:#172033;font:inherit;font-weight:500}
+    .sprint-board-filter select:focus-visible{outline:2px solid #5363e9;outline-offset:2px}
+    .sprint-board-columns .user-story-kanban-column{--board-color:#64748b;border-top:3px solid var(--board-color);background:#f8fafc}
+    .sprint-board-columns [data-board-status="In Progress"]{--board-color:#4f62d6}
+    .sprint-board-columns [data-board-status="Testing"]{--board-color:#a05b15}
+    .sprint-board-columns [data-board-status="Done"]{--board-color:#15805c}
+    .sprint-board-columns .panel-head{padding:8px 4px;margin-bottom:8px}
+    .sprint-board-columns .panel-head h3{margin:0;font-size:15px}
+    .sprint-board-columns .panel-head .tag{color:var(--board-color);background:#fff}
+    .sprint-board-columns .user-story-card{background:#fff;border-radius:10px}
+    .sprint-board-key{font-size:11px;color:#4f46a0}
+    .sprint-board-title{margin-top:4px;color:#172033;font-size:14px;font-weight:700;overflow-wrap:anywhere}
+    .sprint-board-meta{display:flex;align-items:center;gap:6px 9px;flex-wrap:wrap;margin:9px 0;color:#526078;font-size:12px}
+    .sprint-board-priority{padding:2px 7px;border-radius:100px;background:#eaf0fb;color:#304a73;font-weight:700}
+    .sprint-board-priority[data-priority="Medium"]{background:#fff1cb;color:#854d0e}
+    .sprint-board-priority[data-priority="High"],.sprint-board-priority[data-priority="Critical"]{background:#fee4e2;color:#9d2720}
+    .sprint-board-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:start}
+    .sprint-board-actions select,.sprint-board-actions .btn{min-height:38px;padding:6px 8px;font-size:12px}
+    @media(max-width:960px){.sprint-board-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:560px){.sprint-board-filters{grid-template-columns:minmax(0,1fr)}}
+    .story-overview-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0}
+    .story-overview-metric{min-width:0;padding:15px 16px 13px;border:1px solid #dce4f0;border-top:3px solid var(--metric-accent);border-radius:12px;background:#fff;box-shadow:0 3px 10px rgba(15,23,42,.05)}
+    .story-overview-metric dt{color:#475569;font-size:13px;font-weight:700}
+    .story-overview-metric dd{margin:6px 0 0;color:#172033;font-size:28px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+    .story-overview-metric.projects{--metric-accent:#3b82f6}
+    .story-overview-metric.epics{--metric-accent:#8b5cf6}
+    .story-overview-metric.stories{--metric-accent:#6366f1}
+    .story-overview-metric.done{--metric-accent:#15805c}
+    @media(max-width:800px){.story-overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    .story-list-filters{display:grid;grid-template-columns:minmax(150px,1fr) minmax(140px,.85fr) minmax(180px,1.5fr) auto;align-items:end;gap:12px 16px;padding:14px 16px;margin-bottom:16px;border:1px solid #dce4f0;border-radius:14px;background:#fff}
+    .story-list-filter{display:grid;gap:6px;min-width:0;margin:0;color:#334155;font-size:12px;font-weight:700}
+    .story-list-filter select,.story-list-filter input{box-sizing:border-box;width:100%;min-width:0;min-height:42px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;color:#172033;font:inherit;font-weight:500}
+    .story-list-filter select:focus-visible,.story-list-filter input:focus-visible{outline:2px solid #5363e9;outline-offset:2px}
+    .story-list-filter-actions{display:flex;flex-wrap:wrap;gap:8px}
+    .story-list-filter-actions .btn{min-height:42px;padding:8px 12px;white-space:nowrap}
+    @media(max-width:1040px){.story-list-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:560px){.story-list-filters{grid-template-columns:minmax(0,1fr)}}
+    .story-list-panel .panel-head{gap:12px;flex-wrap:wrap;margin-bottom:14px}
+    .story-list-scroll{overflow:auto;border:1px solid #dce4f0;border-radius:12px}
+    .story-list-scroll:focus-visible{outline:2px solid #5363e9;outline-offset:2px}
+    .story-list-table{margin:0;min-width:820px}
+    .story-list-panel .story-list-table th{background:#f1f4fb;color:#41516a;font-size:11px;letter-spacing:.05em}
+    .story-list-table td:first-child{min-width:180px;width:30%;overflow-wrap:anywhere}
+    .story-list-table tbody tr:hover td{background:#f8faff}
+    .story-list-title{color:#172033;font-size:14px;font-weight:750}
+    .story-list-key{margin-top:4px;color:#4f46a0;font-size:11px;font-weight:700}
+    .story-list-pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#edf1f7;color:#36465d;font-size:11px;font-weight:700;white-space:nowrap}
+    .story-list-status[data-value="In Progress"]{background:#e0e7ff;color:#353891}
+    .story-list-status[data-value="Testing"],.story-list-priority[data-value="Medium"]{background:#fff1cb;color:#79480c}
+    .story-list-status[data-value="Done"]{background:#dcfce7;color:#176340}
+    .story-list-priority[data-value="High"],.story-list-priority[data-value="Critical"]{background:#fee4e2;color:#9d2720}
+    .story-list-row-actions{display:flex;align-items:center;gap:6px;white-space:nowrap}
+    .story-list-row-actions .btn,.story-list-pagination .btn{min-height:36px;padding:6px 10px;font-size:12px;box-shadow:none}
+    .story-list-row-actions .story-list-coverage{color:#3730a3;background:#eef2ff;border-color:#dbe1ff}
+    .story-list-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px;color:#526078;font-size:13px}
+    .sidebar-settings summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+    .sidebar-settings summary::-webkit-details-marker{display:none}
+    .sidebar-settings summary::after{content:'›';font-size:18px;line-height:1}
+    .sidebar-settings[open] summary::after{transform:rotate(90deg)}
+    .sidebar-settings .settings-subnav{background:rgba(255,255,255,.07);margin-left:10px}
+    .sidebar-signout{width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit}
+    .sidebar-signout[hidden]{display:none}
+    .profile-trigger{display:inline-flex;align-items:center;gap:9px;max-width:220px;padding:4px 10px 4px 4px;border:1px solid #dce4f0;border-radius:999px;background:#fff;color:#172033;cursor:pointer;font:inherit;font-size:13px;font-weight:700}
+    .profile-trigger:focus-visible,.sidebar-settings summary:focus-visible,.sidebar-signout:focus-visible{outline:2px solid #7c8cff;outline-offset:2px}
+    .profile-avatar{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;background:#414fc5;color:#fff;font-size:12px}
+    .profile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .account-profile-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}
+    .account-profile-details div{padding:12px;border-radius:10px;background:#f5f7fc}
+    .account-profile-details dt{color:#475569;font-size:12px}
+    .account-profile-details dd{margin:5px 0 0;overflow-wrap:anywhere;font-weight:700}
+    @media(max-width:520px){.account-profile-details{grid-template-columns:1fr}.profile-trigger{max-width:150px}}
+    .qa-coverage-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+    .qa-coverage-toolbar input{flex:1;min-width:0;min-height:44px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;color:#172033;font:inherit}
+    .qa-coverage-toolbar input:focus-visible{outline:2px solid #5363e9;outline-offset:2px}
+    .qa-coverage-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:0}
+    .qa-coverage-metric{min-width:0;padding:12px;border:1px solid #dce4f0;border-top:3px solid #5964d8;border-radius:10px;background:#f8faff}
+    .qa-coverage-metric dt{color:#475569;font-size:12px;font-weight:700}
+    .qa-coverage-metric dd{margin:6px 0 0;color:#172033;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+    @media(max-width:900px){.qa-coverage-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media(max-width:520px){.qa-coverage-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    #organizationSettings{max-width:1280px;margin:0 auto;padding-bottom:24px}
+    #organizationSettings .organization-settings-header{align-items:center;gap:14px;flex-wrap:wrap}
+    #organizationSettings .tenant-context-bar{display:grid;grid-template-columns:auto minmax(170px,1fr) minmax(0,1fr) auto;gap:10px 14px;padding:14px 16px;background:#fff}
+    #organizationSettings .tenant-context-bar select{width:100%;min-width:0}
+    #organizationSettings .tenant-context-project{overflow-wrap:anywhere}
+    #organizationSettings .tenant-context-actions{margin:0;flex-wrap:wrap}
+    #organizationSettings .organization-panel{max-width:none}
+    .organization-overview{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid #dce4f0;border-radius:12px;background:#f8faff;margin-bottom:14px}
+    .organization-overview strong,.organization-overview small{display:block}
+    .organization-overview small{margin-top:3px;color:#526078}
+    .organization-overview-status{border-radius:999px;background:#e8edf6;color:#334155;padding:4px 9px;font-size:11px;font-weight:700}
+    .organization-overview-status[data-status="ACTIVE"]{background:#dcfce7;color:#176340}
+    #organizationSettings .organization-panel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    #organizationSettings .organization-panel-card{min-width:0;padding:18px;box-shadow:0 3px 10px rgba(15,23,42,.04)}
+    #organizationSettings .organization-panel-card h3{padding-bottom:10px;border-bottom:1px solid #e7edf5}
+    #organizationSettings .organization-member-row{display:grid;grid-template-columns:minmax(110px,1fr) minmax(92px,120px) auto}
+    #organizationSettings .organization-empty{margin:10px 0;color:#526078}
+    #organizationSettings .organization-member-row strong{white-space:normal;overflow-wrap:anywhere}
+    @media(max-width:1150px){#organizationSettings .tenant-context-bar{grid-template-columns:auto minmax(0,1fr)}#organizationSettings .tenant-context-project,#organizationSettings .tenant-context-actions{grid-column:1/-1}}
+    @media(max-width:850px){#organizationSettings .organization-panel-grid{grid-template-columns:minmax(0,1fr)}}
+    @media(max-width:450px){#organizationSettings .organization-member-row{grid-template-columns:1fr 1fr}#organizationSettings .organization-member-row .organization-row-main{grid-column:1/-1}}
+    .database-toolbar-actions input[type="search"]{min-height:42px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#172033;font:inherit}
+    .database-toolbar-actions input[type="search"]:focus-visible{outline:2px solid #5363e9;outline-offset:2px}
+    .database-row-actions + [id^="db-test-"]{margin-top:6px;overflow-wrap:anywhere}
+    @media(max-width:800px){.database-toolbar-actions input[type="search"]{min-width:0}}
+    .db-workspace{display:grid;grid-template-columns:minmax(210px,270px) minmax(0,1fr);gap:14px}
+    .db-workspace .db-navigator,.db-preview{min-width:0;padding:16px;border:1px solid #dce4f0;border-radius:12px;background:#fff;color:#172033}
+    .db-workspace h3{margin:0 0 12px}.db-navigator select{width:100%;min-width:0}
+    .db-objects{display:grid;gap:4px;margin-top:12px;max-height:55vh;overflow:auto}
+    .db-objects button{text-align:left;overflow-wrap:anywhere;padding:8px;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;color:#172033;cursor:pointer}
+    .db-objects button:hover{background:#eef2ff}.db-preview pre{padding:12px;border-radius:8px;background:#edf1fb;overflow:auto}
+    .db-results{overflow:auto;max-height:54vh}.db-results table{border-collapse:collapse;width:100%}
+    .db-results th,.db-results td{padding:8px 10px;border:1px solid #e2e8f0;text-align:left;white-space:nowrap}
+    .db-results th{position:sticky;top:0;background:#f1f4fb}
+    @media(max-width:700px){.db-workspace{grid-template-columns:minmax(0,1fr)}}
+    .db-workspace .db-navigator,.db-workspace .db-preview{min-height:420px}
+    .db-pane-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid #dce4f0}
+    .db-workspace .db-pane-heading h3{margin:0;font-size:15px}
+    .db-pane-heading .btn{padding:5px 9px;font-size:12px;box-shadow:none}
+    .db-preview-mode{background:#e8edf9;color:#384b73;border-radius:20px;padding:4px 8px;font-size:11px}
+    .db-objects details{border:1px solid #e2e8f0;border-radius:8px;padding:6px}
+    .db-objects summary{cursor:pointer;padding:5px;font-weight:700;color:#334155}
+    .db-objects details button{display:block;width:calc(100% - 10px);margin:3px 0 3px 10px;border-color:transparent;background:#fff}
+    .db-objects details button[aria-current="true"]{background:#e8ecff;color:#3730a3;font-weight:700}
+    @media(max-width:700px){.db-workspace .db-navigator,.db-workspace .db-preview{min-height:0}}
+    .db-wizard [hidden]{display:none!important}
+    .db-wizard-steps,.db-wizard-driver{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 14px;border-radius:10px;background:#edf1fb;margin-bottom:14px;color:#34415b}
+    .db-wizard-steps [aria-current]{color:#413bb5;font-weight:800}
+    .db-wizard-engines{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+    .db-wizard-engines .btn{text-align:left}
+    .db-wizard-engines [aria-pressed="true"]{background:#e8ecff;color:#3730a3;border-color:#7778dc}
+    .db-wizard details{margin-top:14px}.db-wizard details .user-story-form-grid{margin-top:12px}
+    @media(max-width:480px){.db-wizard-engines{grid-template-columns:1fr}}
   </style>
 </head>
 <body class="auth-pending">
 <div id="authPageRoot" hidden></div>
 <div class="layout">
   <aside>
-    <a class="nav" href="#settings-organization">&#9881; Settings</a>
-    <a class="nav settings-subnav" href="#settings-organization">Organization</a>
     <div class="brand">🚀 Unified QA Runner</div>
     <a class="nav active" href="#dashboard">📊 Dashboard</a>
     <a class="nav" href="#runner">▶️ Test Execution</a>
@@ -1052,6 +1196,11 @@
     <a class="nav" href="#instructions">📖 Instructions</a>
     <a class="nav" href="#wiki">📚 Documentation / Wiki</a>
     <a class="nav" href="#database">🗄️ Database</a>
+    <details class="sidebar-settings">
+      <summary class="nav">&#9881; Settings</summary>
+      <a class="nav settings-subnav" href="#settings-organization">Organization</a>
+    </details>
+    <button type="button" class="nav sidebar-signout" id="sidebarSignOut" onclick="logoutUser()" hidden>Sign out</button>
   </aside>
   <main id="dashboard">
     <header class="top">
@@ -1842,11 +1991,11 @@ public void userExistsInDatabase() throws SQLException {
           <div class="dep-card">
             <div class="dep-card-icon">☕</div>
             <div class="dep-card-body">
-              <div class="dep-card-title">Java (JDK 17+)
+              <div class="dep-card-title">Java (JDK 25+)
                 <span class="dep-info">i
                   <span class="dep-info-tooltip">
                     <strong>Java Development Kit</strong> — The runtime environment for all Java-based test frameworks.<br><br>
-                    <strong>Minimum version:</strong> JDK 17 (LTS)<br>
+                    <strong>Minimum version:</strong> JDK 25 (LTS)<br>
                     <strong>Recommended:</strong> Temurin 17 or 21<br><br>
                     <strong>How to check:</strong> <code>java -version</code><br>
                     <strong>Download:</strong> <a href="https://adoptium.net" target="_blank" style="color:#4ade80">adoptium.net</a><br><br>
@@ -2473,7 +2622,7 @@ public void userExistsInDatabase() throws SQLException {
           </table>
 
           <div class="instructions-highlight success">
-            <strong>✅ Minimum Setup:</strong> To run the application and execute basic Java tests, you only need <strong>Java 17+</strong> and <strong>Maven</strong>. Everything else is optional and depends on which frameworks you plan to use.
+            <strong>✅ Minimum Setup:</strong> To run the application and execute basic Java tests, you only need <strong>Java 25+</strong> and <strong>Maven</strong>. Everything else is optional and depends on which frameworks you plan to use.
           </div>
         </div>
 
@@ -3433,7 +3582,7 @@ paths:
       </div>
 
       <!-- Action Buttons -->
-      <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:16px;border-top:2px solid #e2e8f0;margin-top:8px">
+      <div class="defect-actions" style="display:flex;gap:10px;justify-content:flex-end;padding-top:16px;border-top:2px solid #e2e8f0;margin-top:8px">
         <button class="btn secondary" onclick="closeDefectModal()">Cancel</button>
         <button class="btn primary" onclick="saveDefect()">💾 Save Defect</button>
       </div>
@@ -3496,7 +3645,7 @@ paths:
           </div>
           <div class="exec-field">
             <label for="execExecutedBy">Executed By *</label>
-            <input id="execExecutedBy" type="text" placeholder="e.g., Your name">
+            <input id="execExecutedBy" type="text" autocomplete="off" placeholder="e.g., Your name">
           </div>
         </div>
       </div>
@@ -3756,6 +3905,7 @@ paths:
     }
     if (authState.csrfToken && String(request.method || 'GET').toUpperCase() !== 'GET') request.headers['X-CSRF-Token'] = authState.csrfToken;
     const response = await fetch(scopedUrl, request);
+    if (response.status === 204) return;
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || `Runner returned HTTP ${response.status}`);
     return body;
@@ -3770,8 +3920,23 @@ paths:
   function updateAuthHeader() {
     const status = document.getElementById('authStatus');
     if (!status) return;
-    if (authState.user) status.innerHTML = `<span class="auth-user">${escapeHtml(authState.user.fullName || authState.user.username)}</span><button type="button" class="btn secondary" onclick="logoutUser()">Sign out</button>`;
+    document.getElementById('sidebarSignOut').hidden = !authState.user;
+    if (authState.user) {
+      const name = authState.user.fullName || authState.user.username;
+      const initials = name.trim().split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join('').toUpperCase();
+      status.innerHTML = `<button type="button" class="profile-trigger" onclick="openAccountProfile()" aria-haspopup="dialog"><span class="profile-avatar" aria-hidden="true">${escapeHtml(initials)}</span><span class="profile-name">${escapeHtml(name)}</span></button>`;
+    }
     else status.innerHTML = '<span class="auth-user">Not signed in</span><button type="button" class="btn secondary" onclick="openLoginModal()">Sign in</button><button type="button" class="btn secondary" onclick="openRegisterModal()">Register</button>';
+  }
+  function openAccountProfile() {
+    const user = authState.user;
+    if (!user) return;
+    const details = [
+      ['Full name', user.fullName], ['Username', user.username], ['Email', user.email],
+      ['Mobile', user.mobile], ['Organization', currentOrganization()?.organizationName]
+    ].filter(([, value]) => value);
+    modalShell('My profile', `<dl class="account-profile-details">${details.map(([label, value]) =>
+      `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>`);
   }
   function currentOrganization() { return tenantState.organizations.find(item => item.organizationId === tenantState.organizationId) || null; }
   document.addEventListener('change', event => {
@@ -3800,7 +3965,10 @@ paths:
     const canManage = ['OWNER','ADMIN'].includes(tenantState.membershipRole || organization?.organizationRole || '');
     if (compact) compact.textContent = organization ? `${organization.organizationName} · ${organization.organizationSlug}` : tenantState.ready ? 'No active organization' : 'Loading…';
     if (manageButton) manageButton.hidden = !canManage;
-    if (project) project.textContent = tenantState.projectId ? `Project context: ${tenantState.projectId}` : `Project context: ${organization ? 'select a project in a module' : 'none available'}`;
+    const selectedProject = userStoryProjects.find(item => item.id === tenantState.projectId);
+    if (project) project.textContent = selectedProject
+      ? `Project: ${selectedProject.key} — ${selectedProject.name}`
+      : tenantState.projectId ? 'Project selected' : 'No project selected';
     if (status) { status.textContent = message || (organization ? `${organization.status} · ${organization.organizationSlug}` : tenantState.ready ? 'No active organization membership' : 'Loading…'); status.className = `tenant-context-status${message ? ' error' : ''}`; }
   }
   async function loadOrganizations() {
@@ -3922,10 +4090,10 @@ paths:
     }
   }
   function renderOrganizationManagement(org, members, invitations, projects, canManage) {
-    const memberRows = (members || []).filter(item => item.membershipStatus === 'ACTIVE').map(item => `<div class="organization-member-row"><div class="organization-row-main"><strong>${escapeHtml(item.userId)}</strong><small>${escapeHtml(item.membershipStatus)}</small></div><select aria-label="Role for ${escapeHtml(item.userId)}" ${canManage ? '' : 'disabled'} onchange="updateOrganizationMembership('${escapeHtml(item.membershipId)}',this.value)"><option ${item.organizationRole==='OWNER'?'selected':''}>OWNER</option><option ${item.organizationRole==='ADMIN'?'selected':''}>ADMIN</option><option ${item.organizationRole==='MEMBER'?'selected':''}>MEMBER</option><option ${item.organizationRole==='VIEWER'?'selected':''}>VIEWER</option></select><button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="revokeOrganizationMembership('${escapeHtml(item.membershipId)}')">Revoke</button></div>`).join('') || '<div class="organization-empty">No active members found.</div>';
+    const memberRows = (members || []).filter(item => item.membershipStatus === 'ACTIVE').map(item => `<div class="organization-member-row"><div class="organization-row-main"><strong>${escapeHtml(item.userId === authState.user?.id ? (authState.user.fullName || authState.user.username) : (item.fullName || item.username || item.userId))}</strong><small>${item.userId === authState.user?.id ? 'You · ' : ''}${escapeHtml(item.membershipStatus)}</small></div><select aria-label="Role for ${escapeHtml(item.userId)}" ${canManage ? '' : 'disabled'} onchange="updateOrganizationMembership('${escapeHtml(item.membershipId)}',this.value)"><option ${item.organizationRole==='OWNER'?'selected':''}>OWNER</option><option ${item.organizationRole==='ADMIN'?'selected':''}>ADMIN</option><option ${item.organizationRole==='MEMBER'?'selected':''}>MEMBER</option><option ${item.organizationRole==='VIEWER'?'selected':''}>VIEWER</option></select><button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="revokeOrganizationMembership('${escapeHtml(item.membershipId)}')">Revoke</button></div>`).join('') || '<div class="organization-empty">No active members found.</div>';
     const inviteRows = (invitations || []).map(item => `<div class="organization-invite-row"><div class="organization-row-main"><strong>${escapeHtml(item.invitedEmail)}</strong><small>${escapeHtml(item.intendedRole)} · ${escapeHtml(item.status)} · expires ${escapeHtml(item.expiresAt)}</small></div></div>`).join('') || '<div class="organization-empty">No pending invitations.</div>';
-    const projectRows = (projects || []).map(item => `<div class="organization-project-row"><div class="organization-row-main"><strong>${escapeHtml(item.key)} · ${escapeHtml(item.name)}</strong><small>${escapeHtml(item.id)}</small></div></div>`).join('') || '<div class="organization-empty">No projects visible in this organization.</div>';
-    return `<div class="organization-panel"><div class="organization-note"><strong>${escapeHtml(org.organizationName)}</strong> · ${escapeHtml(org.organizationSlug)} · ${escapeHtml(org.status)}<br>Only server-authorized organization data is displayed.</div><div class="organization-panel-grid" style="margin-top:16px"><section class="organization-panel-card"><h3>Members</h3>${memberRows}</section><section class="organization-panel-card"><h3>Projects</h3>${projectRows}<button type="button" class="btn primary" style="margin-top:12px" ${canManage?'':'disabled'} onclick="openOrganizationProjectModal()">+ Project</button></section><section class="organization-panel-card"><h3>Invitations</h3>${inviteRows}<button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="openOrganizationInvitationModal()">Invite member</button><p class="organization-note" style="margin-top:10px">Invitation delivery is pending when email delivery is unavailable. No invitation token is displayed.</p></section><section class="organization-panel-card"><h3>Settings</h3><button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="openOrganizationSettingsModal()">Edit name or slug</button><p class="organization-note" style="margin-top:10px">Ownership and lifecycle status are protected by the server.</p></section></div></div>`;
+    const projectRows = (projects || []).map(item => `<div class="organization-project-row"><div class="organization-row-main"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.key)}</small></div></div>`).join('') || '<div class="organization-empty">No projects visible in this organization.</div>';
+    return `<div class="organization-panel"><div class="organization-overview"><div><strong>${escapeHtml(org.organizationName)}</strong><small>${escapeHtml(org.organizationSlug)}</small></div><span class="organization-overview-status" data-status="${escapeHtml(org.status)}">${escapeHtml(org.status)}</span></div><div class="organization-panel-grid"><section class="organization-panel-card"><h3>Members</h3>${memberRows}</section><section class="organization-panel-card"><h3>Projects</h3>${projectRows}<button type="button" class="btn primary" style="margin-top:12px" ${canManage?'':'disabled'} onclick="openOrganizationProjectModal()">+ Project</button></section><section class="organization-panel-card"><h3>Invitations</h3>${inviteRows}<button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="openOrganizationInvitationModal()">Invite member</button><p class="organization-note" style="margin-top:10px">Invitation delivery is pending when email delivery is unavailable. No invitation token is displayed.</p></section><section class="organization-panel-card"><h3>Settings</h3><button type="button" class="btn secondary" ${canManage?'':'disabled'} onclick="openOrganizationSettingsModal()">Edit name or slug</button><p class="organization-note" style="margin-top:10px">Ownership and lifecycle status are protected by the server.</p></section></div></div>`;
   }
   let organizationManagerRefresh = Promise.resolve();
   function refreshOrganizationManager() {
@@ -4043,7 +4211,7 @@ paths:
   }
   async function requestPasswordReset(form) { const button=document.getElementById('resetRequestButton'), error=document.getElementById('resetRequestError'); button.disabled=true; error.textContent=''; try { const result=await api('/api/auth/password-reset/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:form.email.value.trim()})}); error.textContent=result.message||'If recovery is available, reset instructions will be sent.'; } catch(e) { error.textContent=e.message||'Unable to request password reset.'; } finally { button.disabled=false; } }
   async function confirmPasswordReset(form) { const button=document.getElementById('resetConfirmButton'), error=document.getElementById('resetConfirmError'); button.disabled=true; error.textContent=''; if(form.password.value!==form.confirmPassword.value){error.textContent='Passwords do not match.';button.disabled=false;return;} try { const result=await api('/api/auth/password-reset/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:form.token.value.trim(),password:form.password.value,confirmPassword:form.confirmPassword.value})}); showAuthPage('login'); notify(result.message||'Password reset successfully.'); } catch(e) { error.textContent=e.message||'Unable to reset password.'; } finally { button.disabled=false; } }
-  async function logoutUser() { try { await api('/api/auth/logout', {method:'POST'}); } catch (error) { notify(error.message || 'Unable to sign out.'); return; } authState={user:null,csrfToken:''}; authReturnDestination='#dashboard'; history.replaceState({}, '', '/login'); renderAuthPage('login'); notify('Signed out.'); }
+  async function logoutUser() { try { await api('/api/auth/logout', {method:'POST'}); } catch (error) { notify(error.message || 'Unable to sign out.'); return; } authState={user:null,csrfToken:''}; updateAuthHeader(); authReturnDestination='#dashboard'; history.replaceState({}, '', '/login'); renderAuthPage('login'); notify('Signed out.'); }
   let authVerificationToken = '';
   function openRegisterModal(){modalShell('Create your Unified QA Runner account',`<form onsubmit="event.preventDefault();submitRegistration(this)"><div class="user-story-form-grid"><div class="user-story-field full"><label for="registerFullName">Full name</label><input id="registerFullName" name="fullName" autocomplete="name" required maxlength="160"></div><div class="user-story-field"><label for="registerUsername">Username</label><input id="registerUsername" name="username" autocomplete="username" required pattern="[A-Za-z0-9._-]{3,40}"></div><div class="user-story-field"><label for="registerContact">Email or mobile number</label><input id="registerContact" name="contact" autocomplete="email tel" required></div><div class="user-story-field"><label for="registerPassword">Password</label><input id="registerPassword" name="password" type="password" autocomplete="new-password" required minlength="12"></div><div class="user-story-field"><label for="registerConfirmPassword">Confirm password</label><input id="registerConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required minlength="12"></div><div class="user-story-field full"><div id="registerError" class="muted" role="alert"></div></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="openLoginModal();closeModalOverlay(this.closest('.modal-overlay'))">Sign In</button><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="registerSubmitButton">Register</button></div></form>`);}
   async function submitRegistration(form){const button=document.getElementById('registerSubmitButton'),error=document.getElementById('registerError');if(form.password.value!==form.confirmPassword.value){error.textContent='Passwords do not match.';return;}button.disabled=true;button.textContent='Registering…';error.textContent='';try{const result=await api('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fullName:form.fullName.value.trim(),username:form.username.value.trim(),contact:form.contact.value.trim(),password:form.password.value,confirmPassword:form.confirmPassword.value})});if(!result.verificationToken){error.textContent=result.message||'If eligible, verification instructions will be sent.';return;}authVerificationToken=result.verificationToken;if(form.closest('.modal-overlay')) closeModalOverlay(form.closest('.modal-overlay'));openVerificationModal(result);}catch(e){error.textContent=e.message||'Unable to register.';}finally{button.disabled=false;button.textContent='Register';}}
@@ -6070,6 +6238,10 @@ paths:
     try {
       await ensureActiveProjectContext();
       allTestCases = await api("/api/testcases");
+      const availableIds = new Set(allTestCases.map(testCase => testCase.id));
+      for (const id of selectedTestCaseIds) {
+        if (!availableIds.has(id)) selectedTestCaseIds.delete(id);
+      }
       try {
         allStories = await api("/api/stories");
       } catch (storyError) {
@@ -6117,6 +6289,7 @@ paths:
       });
       populateTcModuleOptions();
       populateTcTableFilters();
+      renderSuitesTree();
       renderTestCases();
       renderExecuteTab();
       renderChart();
@@ -6620,7 +6793,7 @@ paths:
     const manual = executions.filter(x => testAutomationType(x.testCase) === 'Manual').length;
     const total = linked.total;
     const pct = (value, denominator) => denominator ? `${Math.round(value / denominator * 100)}%` : 'N/A';
-    const body = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><input type="search" value="${escapeHtml(storyQaSearch)}" placeholder="🔍 Search test cases..." oninput="storyQaSearch=this.value;storyQaPage=0;refreshStoryQaCoverage()" style="flex:1;min-width:200px"><button class="btn secondary" onclick="refreshStoryQaCoverage()">Refresh</button></div><div class="tc-stat-row"><div class="tc-stat-chip"><span>Total linked</span><span class="tc-stat-num">${total}</span></div><div class="tc-stat-chip"><span>Automated</span><span class="tc-stat-num">${automated}</span></div><div class="tc-stat-chip"><span>Manual</span><span class="tc-stat-num">${manual}</span></div><div class="tc-stat-chip"><span>Automation coverage</span><span class="tc-stat-num">${pct(automated,total)}</span></div><div class="tc-stat-chip"><span>Execution coverage</span><span class="tc-stat-num">${pct(executed,total)}</span></div><div class="tc-stat-chip"><span>Pass rate</span><span class="tc-stat-num">${pct(passed,passed + failed)}</span></div></div><div class="panel" style="margin-top:14px"><div class="panel-head"><h3>Linked test cases</h3><span class="tag">Passed ${passed} · Failed ${failed} · Skipped ${skipped} · Not Run ${Math.max(0,total - executed)}</span></div>${executions.length ? `<div style="overflow:auto"><table class="instructions-table"><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Last execution</th><th>Source</th><th>Type</th><th></th></tr></thead><tbody>${executions.map(({testCase,execution}) => `<tr><td><strong>${escapeHtml(testCase.caseId || testCase.id)}</strong></td><td>${escapeHtml(testCase.name || 'Unnamed')}</td><td>${escapeHtml(execution?.status || 'Not Run')}</td><td>${execution?.executionDate ? escapeHtml(new Date(execution.executionDate).toLocaleString()) : '—'}</td><td>${escapeHtml(execution?.executionSource || execution?.source || 'Unavailable')}</td><td>${escapeHtml(testAutomationType(testCase))}</td><td><button class="btn secondary" onclick="unlinkStoryTestCase('${storyQaStory.id}','${testCase.id}')">Unlink</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No linked test cases.</div>'}<div style="display:flex;justify-content:space-between;margin-top:10px"><button class="btn secondary" ${storyQaPage === 0 ? 'disabled' : ''} onclick="storyQaPage--;refreshStoryQaCoverage()">Previous</button><span>Page ${storyQaPage + 1}</span><button class="btn secondary" ${(storyQaPage + 1) * STORY_QA_PAGE_SIZE >= linked.total ? 'disabled' : ''} onclick="storyQaPage++;refreshStoryQaCoverage()">Next</button></div></div><div class="panel" style="margin-top:14px"><div class="panel-head"><h3>Available test cases</h3><span class="tag">Search results are paginated</span></div>${available.length ? `<div style="overflow:auto"><table class="instructions-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Action</th></tr></thead><tbody>${available.map(testCase => `<tr><td>${escapeHtml(testCase.caseId || testCase.id)}</td><td>${escapeHtml(testCase.name || 'Unnamed')}</td><td>${escapeHtml(testAutomationType(testCase))}</td><td><button class="btn primary" onclick="linkStoryTestCase('${storyQaStory.id}','${testCase.id}')">Link</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No available test cases found.</div>'}</div>`;
+    const body = `<div class="qa-coverage-toolbar"><input type="search" aria-label="Search test cases" value="${escapeHtml(storyQaSearch)}" placeholder="🔍 Search test cases..." oninput="storyQaSearch=this.value;storyQaPage=0;refreshStoryQaCoverage()"><button class="btn secondary" onclick="refreshStoryQaCoverage()">Refresh</button></div><dl class="qa-coverage-metrics" aria-label="QA coverage summary"><div class="qa-coverage-metric"><dt>Total linked</dt><dd>${total}</dd></div><div class="qa-coverage-metric"><dt>Automated</dt><dd>${automated}</dd></div><div class="qa-coverage-metric"><dt>Manual</dt><dd>${manual}</dd></div><div class="qa-coverage-metric"><dt>Automation coverage</dt><dd>${pct(automated,total)}</dd></div><div class="qa-coverage-metric"><dt>Execution coverage</dt><dd>${pct(executed,total)}</dd></div><div class="qa-coverage-metric"><dt>Pass rate</dt><dd>${pct(passed,passed + failed)}</dd></div></dl><div class="panel" style="margin-top:14px"><div class="panel-head"><h3>Linked test cases</h3><span class="tag">Passed ${passed} · Failed ${failed} · Skipped ${skipped} · Not Run ${Math.max(0,total - executed)}</span></div>${executions.length ? `<div style="overflow:auto"><table class="instructions-table"><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Last execution</th><th>Source</th><th>Type</th><th></th></tr></thead><tbody>${executions.map(({testCase,execution}) => `<tr><td><strong>${escapeHtml(testCase.caseId || testCase.id)}</strong></td><td>${escapeHtml(testCase.name || 'Unnamed')}</td><td>${escapeHtml(execution?.status || 'Not Run')}</td><td>${execution?.executionDate ? escapeHtml(new Date(execution.executionDate).toLocaleString()) : '—'}</td><td>${escapeHtml(execution?.executionSource || execution?.source || 'Unavailable')}</td><td>${escapeHtml(testAutomationType(testCase))}</td><td><button class="btn secondary" onclick="unlinkStoryTestCase('${storyQaStory.id}','${testCase.id}')">Unlink</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No linked test cases.</div>'}<div style="display:flex;justify-content:space-between;margin-top:10px"><button class="btn secondary" ${storyQaPage === 0 ? 'disabled' : ''} onclick="storyQaPage--;refreshStoryQaCoverage()">Previous</button><span>Page ${storyQaPage + 1}</span><button class="btn secondary" ${(storyQaPage + 1) * STORY_QA_PAGE_SIZE >= linked.total ? 'disabled' : ''} onclick="storyQaPage++;refreshStoryQaCoverage()">Next</button></div></div><div class="panel" style="margin-top:14px"><div class="panel-head"><h3>Available test cases</h3><span class="tag">Search results are paginated</span></div>${available.length ? `<div style="overflow:auto"><table class="instructions-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Action</th></tr></thead><tbody>${available.map(testCase => `<tr><td>${escapeHtml(testCase.caseId || testCase.id)}</td><td>${escapeHtml(testCase.name || 'Unnamed')}</td><td>${escapeHtml(testAutomationType(testCase))}</td><td><button class="btn primary" onclick="linkStoryTestCase('${storyQaStory.id}','${testCase.id}')">Link</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No available test cases found.</div>'}</div>`;
     storyQaOverlay.querySelector('.modal > div:last-child').innerHTML = body;
   }
 
@@ -6713,10 +6886,12 @@ paths:
   function populateSuiteDropdowns() {
     // Test case modal suite dropdown
     const tcSuiteSelect = document.getElementById("tcSuiteId");
+    const previousSuiteId = tcSuiteSelect.value;
     tcSuiteSelect.innerHTML = '<option value="">No Suite</option>';
     allTestSuites.forEach(suite => {
       tcSuiteSelect.innerHTML += `<option value="${suite.id}">${escapeHtml(suite.suiteCode || 'SU---')} - ${escapeHtml(suite.name)}</option>`;
     });
+    tcSuiteSelect.value = allTestSuites.some(suite => suite.id === previousSuiteId) ? previousSuiteId : "";
     // Test case modal story dropdown
     const tcStorySelect = document.getElementById("tcStoryId");
     tcStorySelect.innerHTML = '<option value="">No Story</option>';
@@ -6795,7 +6970,7 @@ paths:
       return;
     }
     body.innerHTML = cases.map(tc => `<div class="tc-list-item">
-      <div><input type="checkbox" data-id="${escapeHtml(tc.id)}" ${selectedTestCaseIds.has(tc.id) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleTestCaseSelection('${escapeHtml(tc.id)}')"></div>
+      <div><input type="checkbox" data-id="${escapeHtml(tc.id)}" ${selectedTestCaseIds.has(tc.id) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleTestCaseSelection(this.dataset.id, this.checked)"></div>
       <div><button type="button" class="tc-case-id tc-id-button" onclick="event.stopPropagation();openTestCaseDetails('${escapeHtml(tc.id)}')">${escapeHtml(tc.caseId || 'TC---')}</button></div>
       <div><button type="button" class="tc-name-button" title="Open test case details" onclick="event.stopPropagation();openTestCaseDetails('${escapeHtml(tc.id)}')">${escapeHtml(tc.name || 'Unnamed')}</button></div>
       <div title="Module">${escapeHtml(tc.module || '-')}</div>
@@ -6830,7 +7005,7 @@ paths:
       const autoStatusBadge = `<span class="tc-badge ${tc.automationStatus ? tc.automationStatus.toLowerCase() : 'draft'}">${tc.automationStatus || 'Draft'}</span>`;
       const defectCount = allDefects.filter(defect => (defect.links || []).some(link => link.testCaseId === tc.id)).length;
       html += `<div class="tc-list-item">
-        <div><input type="checkbox" data-id="${tc.id}" onchange="toggleTestCaseSelection('${tc.id}')"></div>
+        <div><input type="checkbox" data-id="${tc.id}" onchange="toggleTestCaseSelection(this.dataset.id, this.checked)"></div>
         <div><span class="tc-case-id">${escapeHtml(tc.caseId || 'TC---')}</span></div>
         <div>
           <div class="tc-name"><span class="tc-name-icon">📄</span>${escapeHtml(tc.name)}</div>
@@ -6865,9 +7040,7 @@ paths:
     if (indicator) indicator.textContent = `Page ${tcPage + 1} of ${totalPages}`;
     if (previous) previous.disabled = tcPage <= 0;
     if (next) next.disabled = tcPage >= totalPages - 1;
-    const selectAll = document.getElementById('tcSelectAllDefine');
-    const current = getFilteredTestCases().slice(tcPage * tcPageSize, tcPage * tcPageSize + tcPageSize);
-    if (selectAll) selectAll.checked = current.length > 0 && current.every(tc => selectedTestCaseIds.has(tc.id));
+    updateSelectedCount();
   }
 
   function changeTestCasePageSize(value) {
@@ -6892,16 +7065,28 @@ paths:
         <p>No test cases to execute</p>
         <p class="muted">Add test cases first, then mark their status</p>
       </div>`;
+      updateSelectedCount();
       return;
     }
+    const latestRuns = new Map();
+    for (const run of getExecutionHistory()) {
+      if (run.executionDate > (latestRuns.get(run.testCaseId)?.executionDate || '')) {
+        latestRuns.set(run.testCaseId, run);
+      }
+    }
+    const statusMap = {Passed:'PASS', Failed:'FAIL', Blocked:'BLOCKED', Skipped:'SKIP', 'Not Run':'NOT_RUN'};
     let html = "";
     cases.forEach(tc => {
-      const statusBadge = `<span class="tc-badge ${tc.status.toLowerCase().replace('_','-')}">${statusIcon(tc.status)} ${tc.status.replace('_',' ')}</span>`;
+      const localRun = latestRuns.get(tc.id);
+      const useLocalRun = localRun && Date.parse(localRun.executionDate) >= (Date.parse(tc.lastRunTimestamp) || 0);
+      const status = (useLocalRun ? statusMap[localRun.status] : tc.status) || 'NOT_RUN';
+      const lastRunTimestamp = useLocalRun ? localRun.executionDate : tc.lastRunTimestamp;
+      const statusBadge = `<span class="tc-badge ${status.toLowerCase().replace('_','-')}">${statusIcon(status)} ${status.replace('_',' ')}</span>`;
       const priorityClass = tc.priority ? tc.priority.toLowerCase() : 'medium';
       const priorityBadge = `<span class="tc-priority ${priorityClass}">${tc.priority || 'Medium'}</span>`;
-      const lastRun = tc.lastRunTimestamp ? new Date(tc.lastRunTimestamp).toLocaleDateString() : "Never";
+      const lastRun = lastRunTimestamp ? new Date(lastRunTimestamp).toLocaleDateString() : "Never";
       html += `<div class="tc-list-item">
-        <div><input type="checkbox" data-id="${tc.id}" onchange="toggleTestCaseSelection('${tc.id}')"></div>
+        <div><input type="checkbox" data-id="${tc.id}" onchange="toggleTestCaseSelection(this.dataset.id, this.checked)"></div>
         <div><span class="tc-case-id">${escapeHtml(tc.caseId || 'TC---')}</span></div>
         <div>
           <div class="tc-name"><span class="tc-name-icon">📄</span>${escapeHtml(tc.name)}</div>
@@ -6919,6 +7104,7 @@ paths:
       </div>`;
     });
     body.innerHTML = html;
+    updateSelectedCount();
   }
 
   function renderChart() {
@@ -6962,6 +7148,7 @@ paths:
     if (tab === 'defects') renderDefects();
     if (tab === 'reports') renderReports();
     if (tab === 'exechistory') loadExecutionHistory();
+    updateSelectedCount();
   }
 
   // === Test Plans Tab ===
@@ -7018,6 +7205,7 @@ paths:
   // ==========================================
 
   let aiGeneratedCases = [];
+  let aiSaveBusy = false;
 
   function openAIGenerator() {
     toggleTcDropdown();
@@ -7784,49 +7972,8 @@ paths:
   // Approval Workflow
   // ==========================================
 
-  async function approveAIGenerated() {
-    // Mark all cases as approved and save to backend API
-    let savedCount = 0;
-    const suiteId = activeSuiteId || null;
-    
-    for (const caseData of aiGeneratedCases) {
-      const stepsArray = caseData.steps.split('\n').map(s => {
-        const trimmed = s.replace(/^\d+\.\s*/, '').trim();
-        return { action: trimmed, expected: '' };
-      });
-
-      const data = {
-        name: caseData.name,
-        description: caseData.description,
-        priority: caseData.priority,
-        suiteId: suiteId,
-        storyId: null,
-        framework: caseData.framework,
-        module: caseData.module,
-        testType: caseData.testType,
-        testMethod: caseData.testMethod,
-        assignedTo: '',
-        automationStatus: 'Active',
-        tags: [...(caseData.tags || []), 'ai-generated', 'approved'],
-        steps: stepsArray
-      };
-
-      try {
-        await api('/api/testcases', { method: 'POST', body: JSON.stringify(data) });
-        savedCount++;
-      } catch (e) {
-        console.error('Failed to save test case:', e);
-      }
-    }
-
-    // Refresh from backend
-    await loadTestCases();
-    await loadTestSuites();
-
-    // Hide approval section
-    document.getElementById('aiGenApproval').style.display = 'none';
-    notify(`✅ ${savedCount} test cases approved and saved as active test cases!`);
-    closeAIGenerator();
+  function approveAIGenerated() {
+    return saveAIGenerated(true);
   }
 
   function rejectAIGenerated() {
@@ -7858,59 +8005,60 @@ paths:
     notify('✏️ Edit mode: Uncheck cases to exclude, then click Save Selected or Approve & Save All');
   }
 
-  async function saveAIGenerated() {
-    const checks = document.querySelectorAll('.ai-gen-case-check:checked');
-    if (checks.length === 0) {
-      notify("⚠️ No test cases selected.");
+  async function saveAIGenerated(approveAll = false) {
+    if (aiSaveBusy) return;
+    const checks = Array.from(document.querySelectorAll(approveAll ? '.ai-gen-case-check' : '.ai-gen-case-check:checked'));
+    if (!checks.length) {
+      notify('No test cases selected.');
       return;
     }
 
-    // Determine suite ID: use active suite
-    const suiteId = activeSuiteId || null;
-
-    // Save selected cases to backend API
-    let savedCount = 0;
-    for (const check of checks) {
-      const idx = parseInt(check.dataset.index);
-      const caseData = aiGeneratedCases[idx];
-      if (caseData) {
-        // Convert steps to array format
-        const stepsArray = caseData.steps.split('\n').map(s => {
-          const trimmed = s.replace(/^\d+\.\s*/, '').trim();
-          return { action: trimmed, expected: '' };
-        });
-
-        const data = {
-          name: caseData.name,
-          description: caseData.description,
-          priority: caseData.priority,
-          suiteId: suiteId,
-          storyId: null,
-          framework: caseData.framework,
-          module: caseData.module,
-          testType: caseData.testType,
-          testMethod: caseData.testMethod,
-          assignedTo: '',
-          automationStatus: caseData.automationStatus || 'Active',
-          tags: [...(caseData.tags || []), 'ai-generated'],
-          steps: stepsArray
-        };
-
+    aiSaveBusy = true;
+    try {
+      const projectId = await requireActiveSaveProject();
+      const suiteId = activeSuiteId || null;
+      const saved = new Set();
+      let firstError = '';
+      for (const check of checks) {
+        const index = Number(check.dataset.index);
+        const item = aiGeneratedCases[index];
+        if (!item) continue;
+        const steps = item.steps.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim())
+          .filter(Boolean).map(action => ({ action, expected: '' }));
+        if (steps.length) steps[steps.length - 1].expected = item.expectedResult || '';
+        const tags = [...(item.tags || []), 'ai-generated'];
+        if (approveAll) tags.push('approved');
         try {
-          await api('/api/testcases', { method: 'POST', body: JSON.stringify(data) });
-          savedCount++;
-        } catch (e) {
-          console.error('Failed to save test case:', e);
+          await api('/api/testcases', {
+            method: 'POST',
+            body: JSON.stringify({
+              projectId, suiteId, tags, steps, name: item.name, description: item.description,
+              priority: item.priority, framework: item.framework, module: item.module,
+              testType: item.testType, testMethod: item.testMethod, automationStatus: item.automationStatus || 'Active'
+            })
+          });
+          saved.add(index);
+        } catch (error) {
+          if (!firstError) firstError = error.message;
         }
       }
+      if (saved.size) {
+        aiGeneratedCases = aiGeneratedCases.filter((_, index) => !saved.has(index));
+        renderAIGeneratedResults(aiGeneratedCases);
+        tcPage = 0;
+        await Promise.all([loadTestCases(), loadTestSuites()]);
+      }
+      if (firstError) {
+        notify(`${saved.size} saved. Unable to save the remaining selection: ${firstError}`);
+        return;
+      }
+      notify(`${saved.size} test cases saved.`);
+      if (!aiGeneratedCases.length) closeAIGenerator();
+    } catch (error) {
+      notify('Unable to save generated test cases: ' + error.message);
+    } finally {
+      aiSaveBusy = false;
     }
-
-    // Refresh from backend
-    await loadTestCases();
-    await loadTestSuites();
-
-    notify(`✅ ${savedCount} test cases saved successfully!`);
-    closeAIGenerator();
   }
 
   function saveDefect() {
@@ -8353,7 +8501,7 @@ paths:
     document.getElementById("tcName").value = "";
     document.getElementById("tcDescription").value = "";
     document.getElementById("tcPriority").value = "Medium";
-    document.getElementById("tcSuiteId").value = "";
+    document.getElementById("tcSuiteId").value = activeSuiteId || "";
     document.getElementById("tcStoryId").value = "";
     document.getElementById("tcFramework").value = "";
     document.getElementById("tcModule").value = "";
@@ -8447,20 +8595,8 @@ paths:
       return;
     }
     const editId = document.getElementById("tcEditId").value;
-    let projectId = '';
-    try {
-      projectId = await ensureActiveProjectContext();
-    } catch (e) {
-      setTcFormError("Unable to determine the active project. Please select an authorized project and try again.");
-      return;
-    }
-    if (!projectId) {
-      setTcFormError("Select an authorized project before saving a test case.");
-      return;
-    }
     const data = {
       name,
-      projectId,
       description: document.getElementById("tcDescription").value.trim(),
       priority: document.getElementById("tcPriority").value,
       suiteId: document.getElementById("tcSuiteId").value || null,
@@ -8478,6 +8614,7 @@ paths:
     const saveButton = document.getElementById('tcSaveBtn');
     saveButton.disabled = true;
     try {
+      if (!editId) data.projectId = await requireActiveSaveProject();
       if (editId) {
         await api(`/api/testcases/${editId}`, { method: "PUT", body: JSON.stringify(data) });
         notify("✅ Test case updated.");
@@ -8487,8 +8624,8 @@ paths:
       }
       tcModalSnapshot = null;
       closeTestCaseModal(true);
-      loadTestCases();
-      loadTestSuites();
+      if (!editId) tcPage = 0;
+      await Promise.all([loadTestCases(), loadTestSuites()]);
     } catch (e) {
       setTcFormError("Failed to save test case: " + e.message);
       notify("❌ Failed: " + e.message);
@@ -8659,24 +8796,41 @@ paths:
   }
 
   async function addExistingTestCases() {
-    if (tcAddExistingSelected.size === 0) {
-      notify("❌ Select at least one test case.");
+    const button = document.getElementById('tcAddExistingBtn');
+    if (button.disabled) return;
+    const suiteId = selectedSuiteId;
+    if (!suiteId) {
+      notify('Select a destination suite first.');
       return;
     }
-    // Update selected test cases to assign them to current suite
-    let count = 0;
-    for (const id of tcAddExistingSelected) {
-      try {
-        await api(`/api/testcases/${id}`, { method: "PUT", body: JSON.stringify({ suiteId: selectedSuiteId || null }) });
-        count++;
-      } catch (e) {
-        // Skip failed updates
-      }
+    const ids = [...tcAddExistingSelected];
+    if (!ids.length) {
+      notify('Select at least one test case.');
+      return;
     }
-    notify(`✅ Added ${count} test case(s) to suite.`);
-    closeAddExistingDialog();
-    loadTestCases();
-    loadTestSuites();
+
+    button.disabled = true;
+    let firstError = '';
+    try {
+      for (const id of ids) {
+        try {
+          await api('/api/testcases/' + encodeURIComponent(id), {
+            method: 'PUT', body: JSON.stringify({suiteId})
+          });
+          tcAddExistingSelected.delete(id);
+        } catch (error) {
+          if (!firstError) firstError = error.message;
+        }
+      }
+      const count = ids.length - tcAddExistingSelected.size;
+      if (count) await loadTestCases();
+      if (!firstError) closeAddExistingDialog();
+      else renderAddExistingTable();
+      notify(firstError ? count + ' added. Unable to move the remaining cases: ' + firstError
+        : count + ' test case(s) added to the suite.');
+    } finally {
+      button.disabled = false;
+    }
   }
 
   // === Breadcrumb ===
@@ -9081,7 +9235,7 @@ paths:
     document.getElementById('execActualResult').value = '';
     document.getElementById('execEvidence').value = '';
     document.getElementById('execDefectId').value = '';
-    document.getElementById('execExecutedBy').value = '';
+    document.getElementById('execExecutedBy').value = signedInExecutionName();
     document.getElementById('execComments').value = '';
     document.getElementById('execModalOverlay').classList.add('show');
   }
@@ -9089,6 +9243,10 @@ paths:
   // Close execution modal
   function closeExecModal() {
     document.getElementById('execModalOverlay').classList.remove('show');
+  }
+
+  function signedInExecutionName() {
+    return authState.user?.fullName?.trim() || authState.user?.username?.trim() || '';
   }
 
   // Save execution record
@@ -9100,7 +9258,7 @@ paths:
     const actualResult = document.getElementById('execActualResult').value.trim();
     const evidence = document.getElementById('execEvidence').value.trim();
     const defectId = document.getElementById('execDefectId').value.trim();
-    const executedBy = document.getElementById('execExecutedBy').value.trim();
+    const executedBy = document.getElementById('execExecutedBy').value.trim() || signedInExecutionName();
     const comments = document.getElementById('execComments').value.trim();
 
     // Validation
@@ -9132,39 +9290,17 @@ paths:
       comments: comments
     };
 
-    // Get existing history and append new record (never overwrite)
     const history = getExecutionHistory();
     history.push(record);
-    saveExecutionHistory(history);
-
-    // Update the test case's last run timestamp and status
-    const tc = allTestCases.find(t => t.id === testCaseId);
-    if (tc) {
-      tc.lastRunTimestamp = record.executionDate;
-      // Map execution status to test case status
-      const statusMap = {
-        'Passed': 'PASS',
-        'Failed': 'FAIL',
-        'Blocked': 'BLOCKED',
-        'Skipped': 'SKIP',
-        'Not Run': 'NOT_RUN'
-      };
-      tc.status = statusMap[status] || 'NOT_RUN';
-      // Save updated test case to localStorage
-      saveTestCasesToStorage();
-    }
-
-    // Also try to update via API if available
     try {
-      api(`/api/testcases/${testCaseId}`, { method: "PUT", body: JSON.stringify({ 
-        status: statusMap[status] || 'NOT_RUN',
-        lastRunTimestamp: record.executionDate 
-      }) }).catch(() => {});
-    } catch (e) {}
+      saveExecutionHistory(history);
+    } catch (error) {
+      notify('Unable to save execution history in this browser: ' + error.message);
+      return;
+    }
 
     closeExecModal();
     notify(`✅ Execution recorded: ${record.executionId}`);
-    loadTestCases();
     renderExecuteTab();
   }
 
@@ -9622,86 +9758,95 @@ paths:
 
   // === Bulk Selection & Delete ===
 
-  let selectedTestCaseIds = new Set();
+  const selectedTestCaseIds = new Set();
+  let testCaseDeleteBusy = false;
+
+  function testCaseCheckboxes(tab) {
+    const bodyId = tab === 'define' ? 'tcListBody' : 'tcExecuteBody';
+    return Array.from(document.querySelectorAll('#' + bodyId + ' input[data-id]'));
+  }
+
+  function visibleSelectedTestCaseIds() {
+    if (activeTcTab !== 'define' && activeTcTab !== 'execute') return [];
+    return testCaseCheckboxes(activeTcTab).map(box => box.dataset.id)
+      .filter(id => selectedTestCaseIds.has(id));
+  }
 
   function toggleSelectAll(tab, checked) {
-    const prefix = tab === 'define' ? 'tcListBody' : 'tcExecuteBody';
-    const container = document.getElementById(prefix);
-    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-    checkboxes.forEach(cb => {
-      cb.checked = checked;
-      const id = cb.dataset.id;
-      if (checked) {
-        selectedTestCaseIds.add(id);
-      } else {
-        selectedTestCaseIds.delete(id);
-      }
-    });
+    for (const box of testCaseCheckboxes(tab)) {
+      if (checked) selectedTestCaseIds.add(box.dataset.id);
+      else selectedTestCaseIds.delete(box.dataset.id);
+    }
     updateSelectedCount();
   }
 
-  function toggleTestCaseSelection(id) {
-    if (selectedTestCaseIds.has(id)) {
-      selectedTestCaseIds.delete(id);
-    } else {
-      selectedTestCaseIds.add(id);
-    }
+  function toggleTestCaseSelection(id, checked) {
+    if (checked) selectedTestCaseIds.add(id);
+    else selectedTestCaseIds.delete(id);
     updateSelectedCount();
-    updateSelectAllCheckbox();
   }
 
   function updateSelectedCount() {
-    const count = selectedTestCaseIds.size;
-    document.getElementById('tcSelectedCount').textContent = count;
-    const btn = document.getElementById('tcDeleteSelectedBtn');
-    btn.style.display = count > 0 ? 'inline-block' : 'none';
-  }
-
-  function updateSelectAllCheckbox() {
-    const defineCheckboxes = document.querySelectorAll('#tcListBody input[type="checkbox"]');
-    const executeCheckboxes = document.querySelectorAll('#tcExecuteBody input[type="checkbox"]');
-    const allCheckboxes = [...defineCheckboxes, ...executeCheckboxes];
-    const visibleCheckboxes = allCheckboxes.filter(cb => cb.closest('.tc-list-item') && !cb.closest('.tc-list-item').closest('div').style || cb.closest('.tc-list-item').offsetParent !== null);
-    const checkedVisible = visibleCheckboxes.filter(cb => cb.checked && selectedTestCaseIds.has(cb.dataset.id));
-    const selectAllDefine = document.getElementById('tcSelectAllDefine');
-    const selectAllExecute = document.getElementById('tcSelectAllExecute');
-    if (visibleCheckboxes.length > 0) {
-      const allChecked = checkedVisible.length === visibleCheckboxes.length && visibleCheckboxes.length > 0;
-      selectAllDefine.checked = allChecked;
-      selectAllExecute.checked = allChecked;
+    for (const [tab, headerId] of [['define', 'tcSelectAllDefine'], ['execute', 'tcSelectAllExecute']]) {
+      const boxes = testCaseCheckboxes(tab);
+      for (const box of boxes) box.checked = selectedTestCaseIds.has(box.dataset.id);
+      const header = document.getElementById(headerId);
+      const checked = boxes.filter(box => box.checked).length;
+      header.checked = boxes.length > 0 && checked === boxes.length;
+      header.indeterminate = checked > 0 && checked < boxes.length;
     }
+    const count = visibleSelectedTestCaseIds().length;
+    document.getElementById('tcSelectedCount').textContent = count;
+    const button = document.getElementById('tcDeleteSelectedBtn');
+    button.style.display = count ? 'inline-block' : 'none';
+    button.disabled = testCaseDeleteBusy;
   }
 
   function confirmBulkDelete() {
-    if (selectedTestCaseIds.size === 0) return;
-    document.getElementById('tcBulkDeleteCount').textContent = selectedTestCaseIds.size;
-    document.getElementById('tcBulkDeleteOverlay').classList.add('show');
+    const ids = visibleSelectedTestCaseIds();
+    if (!ids.length || testCaseDeleteBusy) return;
+    const dialog = document.getElementById('tcBulkDeleteOverlay');
+    dialog.deleteIds = ids;
+    document.getElementById('tcBulkDeleteCount').textContent = ids.length;
+    dialog.classList.add('show');
   }
 
   function closeBulkDeleteDialog() {
-    document.getElementById('tcBulkDeleteOverlay').classList.remove('show');
+    const dialog = document.getElementById('tcBulkDeleteOverlay');
+    dialog.classList.remove('show');
+    dialog.deleteIds = [];
   }
 
   async function executeBulkDelete() {
+    if (testCaseDeleteBusy) return;
+    const ids = document.getElementById('tcBulkDeleteOverlay').deleteIds || [];
     closeBulkDeleteDialog();
-    const ids = Array.from(selectedTestCaseIds);
+    if (!ids.length) return;
+    testCaseDeleteBusy = true;
+    updateSelectedCount();
+    const deleted = new Set();
+    let firstError = '';
     try {
-      const res = await fetch('/api/testcases/bulk-delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ids: ids})
-      });
-      const data = await res.json();
-      if (res.ok) {
-        notify('✅ ' + data.message);
-        selectedTestCaseIds.clear();
-        updateSelectedCount();
-        loadTestCases();
-      } else {
-        notify('❌ ' + (data.message || 'Delete failed'));
+      for (const id of ids) {
+        try {
+          await api('/api/testcases/' + encodeURIComponent(id), {method: 'DELETE'});
+          deleted.add(id);
+          selectedTestCaseIds.delete(id);
+        } catch (error) {
+          if (!firstError) firstError = error.message;
+        }
       }
-    } catch (e) {
-      notify('❌ Error: ' + e.message);
+      if (deleted.size) {
+        allTestCases = allTestCases.filter(testCase => !deleted.has(testCase.id));
+        renderTestCases();
+        renderExecuteTab();
+        await loadTestCases();
+      }
+      notify(firstError ? deleted.size + ' deleted. Unable to delete the remaining cases: ' + firstError
+        : deleted.size + ' test case(s) deleted.');
+    } finally {
+      testCaseDeleteBusy = false;
+      updateSelectedCount();
     }
   }
 
@@ -9768,7 +9913,9 @@ paths:
   }
 
   let wikiSpaces = [], wikiPages = [], wikiSelectedSpaceId = '', wikiSelectedPageId = '', wikiPageVersion = 0, wikiInfoCollapsed = false;
-  let databaseOverview = null, databaseConnections = [], databaseConnectionPage = 0, databaseConnectionPageSize = 10, databaseConnectionSearch = '', databaseConnectionTestTimers = {};
+  let databaseOverview = null, databaseConnections = [], databaseConnectionPage = 0, databaseConnectionPageSize = 10, databaseConnectionSearch = '';
+  let databaseConnectionSearchTimer, databaseConnectionsRequest = 0;
+  const databaseTestsInProgress = new Set();
   function renderWikiModule() { return `<div class="wiki-workspace"><nav class="wiki-nav" aria-label="Wiki navigation"><div class="wiki-toolbar"><strong>Spaces</strong><button type="button" class="btn secondary" onclick="openWikiSpaceModal()">+ Space</button></div><input id="wikiSpaceSearch" type="search" placeholder="Search spaces" aria-label="Search spaces" oninput="renderWikiSpaces()" style="width:100%;margin-top:12px"><div id="wikiSpacesList" class="wiki-list"><div class="wiki-empty">Loading spaces…</div></div></nav><main class="wiki-main"><div id="wikiPageArea" class="wiki-empty">Select a space to begin.</div></main><aside class="wiki-info" id="wikiInfoPanel"><div class="wiki-toolbar"><strong>Page information</strong><button id="wikiInfoToggle" type="button" class="btn secondary" onclick="toggleWikiInfo()">Hide</button></div><div id="wikiPageInfo" class="wiki-meta" style="margin-top:18px">Select a page to view metadata.</div></aside></div>`; }
   async function loadWikiSpaces() { const list=document.getElementById('wikiSpacesList'); if(!list)return; list.innerHTML='<div class="wiki-empty">Loading spaces…</div>'; try { wikiSpaces=await api('/api/wiki/spaces'); renderWikiSpaces(); const activeSpaces=wikiSpaces.filter(s=>s.status!=='ARCHIVED'); if(wikiSelectedSpaceId && activeSpaces.some(s=>s.id===wikiSelectedSpaceId)) await selectWikiSpace(wikiSelectedSpaceId); else if(activeSpaces[0]) await selectWikiSpace(activeSpaces[0].id); else { wikiSelectedSpaceId=''; wikiSelectedPageId=''; document.getElementById('wikiPageArea').innerHTML='<div class="wiki-empty">Create a space to begin documenting.</div>'; } } catch(e){ list.innerHTML=`<div class="wiki-empty">Unable to load spaces: ${escapeHtml(e.message)}</div>`; } }
   function renderWikiSpaces() { const list=document.getElementById('wikiSpacesList'); if(!list)return; const query=(document.getElementById('wikiSpaceSearch')?.value||'').toLowerCase(); const spaces=wikiSpaces.filter(s=>s.status!=='ARCHIVED').filter(s=>(s.name+' '+s.key).toLowerCase().includes(query)); list.innerHTML=spaces.length?spaces.map(s=>`<button type="button" class="${s.id===wikiSelectedSpaceId?'active':''}" onclick="selectWikiSpace('${escapeHtml(s.id)}')"><strong>${escapeHtml(s.key)}</strong><br><small>${escapeHtml(s.name)}</small></button>`).join(''):'<div class="wiki-empty">No spaces found.</div>'; }
@@ -9785,17 +9932,333 @@ paths:
   async function wikiArchiveSpace(){ const space=wikiSpaces.find(s=>s.id===wikiSelectedSpaceId); if(!space||!confirm('Archive this space?'))return; try{await api(`/api/wiki/spaces/${encodeURIComponent(space.id)}/archive`,{method:'POST'});notify('Space archived.');wikiSelectedSpaceId='';wikiSelectedPageId='';await loadWikiSpaces();}catch(e){notify('Unable to archive space: '+e.message);} }
   function toggleWikiInfo(){ wikiInfoCollapsed=!wikiInfoCollapsed; const panel=document.getElementById('wikiInfoPanel'); const button=document.getElementById('wikiInfoToggle'); if(panel) panel.hidden=wikiInfoCollapsed; if(button) button.textContent=wikiInfoCollapsed?'Show':'Hide'; }
 
-  function renderDatabaseModule() { return `<div class="database-module"><nav class="database-subnav" aria-label="Database navigation"><button data-section="overview" type="button" class="active" onclick="showDatabaseSection('overview')">Overview</button><button data-section="connections" type="button" onclick="showDatabaseSection('connections')">Connections</button><button data-section="sql" type="button" onclick="showDatabaseSection('sql')">SQL Editor</button><button data-section="schema" type="button" onclick="showDatabaseSection('schema')">Schema Explorer</button><button data-section="cases" type="button" onclick="showDatabaseSection('cases')">Database Test Cases</button><button data-section="data" type="button" onclick="showDatabaseSection('data')">Test Data</button><button data-section="history" type="button" onclick="showDatabaseSection('history')">Execution History</button><button data-section="reports" type="button" onclick="showDatabaseSection('reports')">Reports</button></nav><div id="databaseSectionBody"><div class="module-empty">Loading database overview…</div></div></div>`; }
+  function renderDatabaseModule() { return `<div class="database-module"><nav class="database-subnav" aria-label="Database navigation"><button data-section="overview" type="button" class="active" onclick="showDatabaseSection('overview')">Overview</button><button data-section="connections" type="button" onclick="showDatabaseSection('connections')">Connections</button><button data-section="workspace" type="button" onclick="showDatabaseSection('workspace')">Workspace</button><button data-section="cases" type="button" onclick="showDatabaseSection('cases')">Database Test Cases</button><button data-section="data" type="button" onclick="showDatabaseSection('data')">Test Data</button><button data-section="history" type="button" onclick="showDatabaseSection('history')">Execution History</button><button data-section="reports" type="button" onclick="showDatabaseSection('reports')">Reports</button></nav><div id="databaseSectionBody"><div class="module-empty">Loading database overview…</div></div></div>`; }
   async function loadDatabaseOverview() { const body=document.getElementById('databaseSectionBody'); if(!body)return; body.innerHTML='<div class="module-empty">Loading database overview…</div>'; try { databaseOverview=await api('/api/database/overview'); renderDatabaseOverview(); } catch(e){ body.innerHTML=`<div class="module-empty">Unable to load database overview: ${escapeHtml(e.message)}</div>`; } }
   function renderDatabaseOverview() { const body=document.getElementById('databaseSectionBody'); const data=databaseOverview||{}; if(!body)return; const results=data.results||{}; const latest=data.latestExecution; const failures=Array.isArray(data.recentConnectionFailures)?data.recentConnectionFailures:[]; body.innerHTML=`<div class="module-actions"><button type="button" class="btn secondary" onclick="loadDatabaseOverview()">🔄 Refresh</button></div><div class="module-stats"><div class="module-stat"><div class="module-stat-value">${data.configuredConnections??0}</div><div class="module-stat-label">Configured Connections</div></div><div class="module-stat"><div class="module-stat-value">${data.connectedConnections??0}</div><div class="module-stat-label">Connected</div></div><div class="module-stat"><div class="module-stat-value">${data.databaseTestCases??0}</div><div class="module-stat-label">Database Test Cases</div></div><div class="module-stat"><div class="module-stat-value">${data.databaseAssets??0}</div><div class="module-stat-label">Discovered SQL Assets</div></div></div><div class="database-overview-grid"><section class="panel"><div class="panel-head"><h2>Execution results</h2></div><div class="database-result-grid"><div><strong>${results.PASSED||0}</strong><span>Passed</span></div><div><strong>${results.FAILED||0}</strong><span>Failed</span></div><div><strong>${results.SKIPPED||0}</strong><span>Skipped</span></div><div><strong>${results.NOT_RUN||0}</strong><span>Not run</span></div></div></section><section class="panel"><div class="panel-head"><h2>Latest database execution</h2></div>${latest?`<p><strong>${escapeHtml(latest.selection||latest.id||'Database run')}</strong></p><p class="muted">${escapeHtml(latest.status||'Unknown')} · ${escapeHtml(latest.startedAt||'')}</p>`:'<div class="module-empty">No database execution recorded.</div>'}</section><section class="panel"><div class="panel-head"><h2>Connection failures</h2></div>${failures.length?failures.map(item=>`<div class="database-failure"><strong>${escapeHtml(item.selection||item.id||'Connection')}</strong><span>${escapeHtml(item.error||item.status||'Failed')}</span></div>`).join(''):'<div class="module-empty">No connection failures recorded.</div>'}</section><section class="panel"><div class="panel-head"><h2>Database engine distribution</h2></div>${data.engineDistribution?.length?data.engineDistribution.map(item=>`<div class="database-failure"><strong>${escapeHtml(item.engine)}</strong><span>${item.count}</span></div>`).join(''):'<div class="module-empty">No database connections configured yet.</div>'}</section></div>`; }
-  function showDatabaseSection(section) { document.querySelectorAll('.database-subnav button').forEach(button=>button.classList.toggle('active',button.dataset.section===section)); if(section==='overview'){loadDatabaseOverview();return;} if(section==='connections'){loadDatabaseConnections();return;} const labels={sql:'The read-only SQL Editor is planned for Phase 3.',schema:'Schema Explorer is planned for Phase 3.',cases:'Database Test Cases will reuse the existing TCM in Phase 4.',data:'Test Data management is planned for Phase 6.',history:'Database execution history will reuse the existing run store in Phase 4.',reports:'Database reporting will be added with execution integration in Phase 5.'}; const body=document.getElementById('databaseSectionBody'); if(body)body.innerHTML=`<div class="panel"><div class="panel-head"><h2>${escapeHtml(section[0].toUpperCase()+section.slice(1))}</h2></div><div class="module-empty">${escapeHtml(labels[section]||'This Database section is not available yet.')}</div></div>`; }
-  async function loadDatabaseConnections(){const body=document.getElementById('databaseSectionBody');if(!body)return;body.innerHTML='<div class="module-empty">Loading database connections…</div>';try{const result=await api(`/api/database/connections?organizationId=${encodeURIComponent(tenantState.organizationId)}&search=${encodeURIComponent(databaseConnectionSearch)}&page=${databaseConnectionPage}&pageSize=${databaseConnectionPageSize}`);databaseConnections=result.items||[];renderDatabaseConnections(result);}catch(e){body.innerHTML=`<div class="panel"><div class="module-empty">${e.message.includes('Authentication')?'Sign in is required to view database connections.':`Unable to load connections: ${escapeHtml(e.message)}`}</div></div>`;}}
-  function renderDatabaseConnections(result={total:databaseConnections.length,page:databaseConnectionPage,pageSize:databaseConnectionPageSize}){const body=document.getElementById('databaseSectionBody');if(!body)return;const signedIn=Boolean(authState.user);const rows=databaseConnections.map(c=>`<tr><td><strong>${escapeHtml(c.name)}</strong><div class="muted">${escapeHtml(c.host)}:${c.port}/${escapeHtml(c.databaseName)}</div></td><td>${escapeHtml(c.type)}</td><td>${escapeHtml(c.environment)}</td><td><span class="status-badge">${escapeHtml(c.status||'DISCONNECTED')}</span></td><td>${c.readOnly?'Read-only':'Restricted'}</td><td><div class="database-row-actions"><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="testDatabaseConnection('${escapeHtml(c.id)}')">Test</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="connectDatabaseConnection('${escapeHtml(c.id)}','${c.status==='CONNECTED'?'disconnect':'connect'}')">${c.status==='CONNECTED'?'Disconnect':'Connect'}</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionModal('${escapeHtml(c.id)}')">Edit</button><button class="btn danger" type="button" ${signedIn?'':'disabled'} onclick="deleteDatabaseConnection('${escapeHtml(c.id)}')">Delete</button></div><div id="db-test-${escapeHtml(c.id)}" class="muted"></div></td></tr>`).join('');const total=Number(result.total||0),from=total?result.page*result.pageSize+1:0,to=Math.min((result.page+1)*result.pageSize,total);body.innerHTML=`<div class="database-connections-toolbar"><div><h2>Connections</h2><p class="muted">Credentials are encrypted and never returned to the browser.</p></div><div class="database-toolbar-actions"><input type="search" placeholder="Search connections" aria-label="Search connections" value="${escapeHtml(databaseConnectionSearch)}" oninput="databaseConnectionSearch=this.value;databaseConnectionPage=0;loadDatabaseConnections()"><select aria-label="Rows per page" onchange="databaseConnectionPageSize=Number(this.value);databaseConnectionPage=0;loadDatabaseConnections()"><option value="10" ${databaseConnectionPageSize===10?'selected':''}>10</option><option value="20" ${databaseConnectionPageSize===20?'selected':''}>20</option><option value="50" ${databaseConnectionPageSize===50?'selected':''}>50</option></select><button type="button" class="btn primary" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionModal()">+ Add Connection</button></div></div><div class="tablewrap"><table class="instructions-table"><thead><tr><th>Name</th><th>Type</th><th>Environment</th><th>Status</th><th>Access</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="module-empty">No database connections configured.</div></td></tr>'}</tbody></table></div><div class="database-pagination"><span>Showing ${from}–${to} of ${total}</span><button type="button" class="btn secondary" ${databaseConnectionPage<1?'disabled':''} onclick="databaseConnectionPage--;loadDatabaseConnections()">Previous</button><button type="button" class="btn secondary" ${(to>=total||!total)?'disabled':''} onclick="databaseConnectionPage++;loadDatabaseConnections()">Next</button></div>${signedIn?'':'<div class="database-auth-note">Sign in with an authorized team role to create, edit, test or delete connections.</div>'}`;}
-  function openDatabaseConnectionModal(id=''){const item=databaseConnections.find(c=>c.id===id);const types=['MYSQL','POSTGRESQL','SQLSERVER','ORACLE'];const overlay=modalShell(item?'Edit Database Connection':'Add Database Connection',`<form id="databaseConnectionForm" onsubmit="event.preventDefault();saveDatabaseConnection(this)"><div class="user-story-form-grid"><div class="user-story-field"><label>Connection name</label><input name="name" required maxlength="160" value="${escapeHtml(item?.name||'')}"></div><div class="user-story-field"><label>Database type</label><select name="type">${types.map(t=>`<option value="${t}" ${t===item?.type?'selected':''}>${t}</option>`).join('')}</select></div><div class="user-story-field"><label>Host</label><input name="host" required value="${escapeHtml(item?.host||'localhost')}"></div><div class="user-story-field"><label>Port</label><input name="port" type="number" min="1" max="65535" required value="${item?.port||5432}"></div><div class="user-story-field"><label>Database / service name</label><input name="databaseName" required value="${escapeHtml(item?.databaseName||'')}"></div><div class="user-story-field"><label>Username</label><input name="username" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Password</label><input name="password" type="password" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Environment</label><select name="environment">${['LOCAL','QA','STAGING','PRODUCTION'].map(x=>`<option ${x===(item?.environment||'LOCAL')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>TLS / SSL</label><select name="tlsMode">${['VERIFY','REQUIRED','DISABLED'].map(x=>`<option ${x===(item?.tlsMode||'VERIFY')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>Connection timeout (seconds)</label><input name="connectionTimeoutSeconds" type="number" min="1" max="60" value="${item?.connectionTimeoutSeconds||5}"></div><div class="user-story-field"><label><input name="readOnly" type="checkbox" ${item?.readOnly!==false?'checked':''}> Read-only mode</label></div></div><div id="databaseConnectionError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="databaseConnectionSave">${item?'Save Changes':'Add Connection'}</button></div></form>`);overlay.dataset.connectionId=id;}
-  async function saveDatabaseConnection(form){const button=document.getElementById('databaseConnectionSave'),error=document.getElementById('databaseConnectionError');button.disabled=true;button.textContent='Saving…';if(error)error.textContent='';const values={organizationId:tenantState.organizationId,name:form.name.value.trim(),type:form.type.value,host:form.host.value.trim(),port:Number(form.port.value),databaseName:form.databaseName.value.trim(),username:form.username.value,password:form.password.value,environment:form.environment.value,tlsMode:form.tlsMode.value,connectionTimeoutSeconds:Number(form.connectionTimeoutSeconds.value),readOnly:form.readOnly.checked};const id=form.closest('.modal-overlay').dataset.connectionId;try{await api(id?`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`:'/api/database/connections',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});closeModalOverlay(form.closest('.modal-overlay'));notify('Database connection saved.');await loadDatabaseConnections();}catch(e){if(error)error.textContent=e.message||'Unable to save connection.';else notify(e.message);}finally{button.disabled=false;button.textContent=id?'Save Changes':'Add Connection';}}
+  function showDatabaseSection(section, preferredConnection) { document.querySelectorAll('.database-subnav button').forEach(button=>button.classList.toggle('active',button.dataset.section===section)); if(section==='overview'){loadDatabaseOverview();return;} if(section==='connections'){loadDatabaseConnections();return;} if(section==='workspace'){openDatabaseWorkspace(preferredConnection);return;} const labels={sql:'The read-only SQL Editor is planned for Phase 3.',schema:'Schema Explorer is planned for Phase 3.',cases:'Database Test Cases will reuse the existing TCM in Phase 4.',data:'Test Data management is planned for Phase 6.',history:'Database execution history will reuse the existing run store in Phase 4.',reports:'Database reporting will be added with execution integration in Phase 5.'}; const body=document.getElementById('databaseSectionBody'); if(body)body.innerHTML=`<div class="panel"><div class="panel-head"><h2>${escapeHtml(section[0].toUpperCase()+section.slice(1))}</h2></div><div class="module-empty">${escapeHtml(labels[section]||'This Database section is not available yet.')}</div></div>`; }
+  function queueDatabaseConnectionSearch(value) {
+    databaseConnectionSearch = value;
+    databaseConnectionPage = 0;
+    databaseConnectionsRequest++;
+    clearTimeout(databaseConnectionSearchTimer);
+    databaseConnectionSearchTimer = setTimeout(loadDatabaseConnections, 250);
+  }
+
+  async function openDatabaseWorkspace(preferredConnection) {
+    const body = document.getElementById('databaseSectionBody');
+    if (!body) return;
+    const organizationId = tenantState.organizationId;
+    body.innerHTML = `<div class="db-workspace"><nav class="db-navigator" aria-label="Database navigator"><div class="db-pane-heading"><h3>Database navigator</h3><button type="button" class="btn secondary db-tree-refresh">Refresh</button></div>
+      <select aria-label="Workspace connection"><option value="sample">QA Runner Sample Database (H2)</option></select>
+      <p class="muted db-workspace-hint" role="status">Sample data uses the built-in driver and needs no database login.</p>
+      <div class="db-objects" aria-live="polite"></div></nav>
+      <section class="db-preview"><div class="db-pane-heading"><h3>Data preview</h3><span class="db-preview-mode">Read only</span></div><div class="db-preview-body" aria-live="polite">Select a connection and a table.</div></section></div>`;
+    const workspace = body.firstElementChild;
+    const selector = workspace.querySelector('select');
+    const objects = workspace.querySelector('.db-objects');
+    const preview = workspace.querySelector('.db-preview-body');
+    const isCurrent = () => workspace.isConnected && organizationId === tenantState.organizationId;
+    selector.onchange = async () => {
+      const id = selector.value;
+      const request = Symbol();
+      workspace.navigationRequest = request;
+      workspace.selection = null;
+      objects.replaceChildren();
+      preview.textContent = 'Select a table or view.';
+      if (!id) return;
+      const url = '/api/database/connections/' + encodeURIComponent(id) + '/browse';
+      const browse = data => api(id === 'sample' ? url : url + '?' + new URLSearchParams({organizationId}),
+        {method:'POST', body:JSON.stringify(data)});
+      const sameConnection = () => isCurrent() && selector.value === id && workspace.navigationRequest === request;
+      objects.textContent = 'Loading tables…';
+      try {
+        const result = await browse({});
+        if (!sameConnection()) return;
+        objects.textContent = result.tables.length ? '' : 'No visible tables or views.';
+        if (result.limited) objects.textContent = 'Showing the first 250 objects.';
+        const groups = new Map();
+      for (const table of result.tables) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = table.name;
+        button.title = table.type;
+        const schemaName = table.schema || 'Tables and views';
+        if (!groups.has(schemaName)) {
+          const group = document.createElement('details');
+          group.open = groups.size === 0;
+          const summary = document.createElement('summary');
+          summary.textContent = schemaName;
+          group.appendChild(summary);
+          objects.appendChild(group);
+          groups.set(schemaName, group);
+        }
+          button.onclick = async () => {
+            const selection = Symbol();
+            workspace.selection = selection;
+            objects.querySelectorAll('[aria-current]').forEach(item => item.removeAttribute('aria-current'));
+          button.setAttribute('aria-current', 'true');
+          preview.textContent = 'Loading ' + table.name + '…';
+            try {
+              const result = await browse({schema:table.schema, table:table.name});
+              if (sameConnection() && workspace.selection === selection) renderDatabasePreview(preview, result);
+            } catch (error) {
+              if (sameConnection() && workspace.selection === selection) preview.textContent = error.message;
+            }
+          };
+          groups.get(schemaName).appendChild(button);
+        }
+      } catch (error) {
+        if (sameConnection()) objects.textContent = error.message;
+      }
+    };
+    workspace.querySelector('.db-tree-refresh').onclick = selector.onchange;
+    if (preferredConnection?.readOnly) {
+      selector.add(new Option(preferredConnection.name + ' · ' + preferredConnection.type, preferredConnection.id));
+      selector.value = preferredConnection.id;
+    }
+    await selector.onchange();
+    if (!organizationId || !isCurrent()) return;
+    try {
+      const query = new URLSearchParams({organizationId, pageSize:50});
+      const data = await api('/api/database/connections?' + query);
+      if (!isCurrent()) return;
+      for (const item of (data.items || []).filter(item => item.readOnly && item.id !== preferredConnection?.id)) {
+      selector.add(new Option(item.name + ' · ' + item.type, item.id));
+    }
+    } catch (error) {
+      if (isCurrent()) workspace.querySelector('.db-workspace-hint').textContent =
+      'Sample available. Saved connections could not be loaded: ' + error.message;
+    }
+  }
+
+  function renderDatabasePreview(panel, result) {
+    const columns = result.columns.map(label => '<th scope="col">' + escapeHtml(label) + '</th>').join('');
+    const rows = result.rows.map(row => '<tr>' + row.map(value => '<td>' +
+      (value === null ? '<em>NULL</em>' : escapeHtml(value)) + '</td>').join('') + '</tr>').join('');
+    panel.innerHTML = '<pre>' + escapeHtml(result.sql) + '</pre><p>' + result.rows.length +
+      (result.limited ? ' rows shown · Preview limited' : ' rows') +
+      '</p><div class="db-results" tabindex="0" role="region" aria-label="Preview results"><table><thead><tr>' +
+      columns + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  async function loadDatabaseConnections() {
+    const body = document.getElementById('databaseSectionBody');
+    if (!body) return;
+    const organizationId = tenantState.organizationId;
+    const request = ++databaseConnectionsRequest;
+    if (!organizationId) {
+      body.innerHTML = '<div class="module-empty">Select an organization before managing database connections.</div>';
+      return;
+    }
+    if (!body.querySelector('.database-connections-toolbar')) {
+      body.innerHTML = '<div class="module-empty">Loading database connections…</div>';
+    }
+    const isCurrent = () => request === databaseConnectionsRequest && organizationId === tenantState.organizationId
+      && document.querySelector('.database-subnav [data-section="connections"]')?.classList.contains('active');
+    const query = new URLSearchParams({organizationId, search: databaseConnectionSearch,
+      page: databaseConnectionPage, pageSize: databaseConnectionPageSize});
+    try {
+      const result = await api('/api/database/connections?' + query);
+      if (!isCurrent()) return;
+      const finalPage = Math.max(0, Math.ceil(result.total / databaseConnectionPageSize) - 1);
+      if (databaseConnectionPage > finalPage) {
+        databaseConnectionPage = finalPage;
+        return loadDatabaseConnections();
+      }
+      const search = body.querySelector('#databaseConnectionSearch');
+      const cursor = search === document.activeElement ? [search.selectionStart, search.selectionEnd] : null;
+      databaseConnections = result.items || [];
+      renderDatabaseConnections(result);
+      if (cursor) {
+        const currentSearch = body.querySelector('#databaseConnectionSearch');
+        currentSearch.focus({preventScroll:true});
+        currentSearch.setSelectionRange(...cursor);
+      }
+    } catch (error) {
+      if (isCurrent()) notify('Unable to load database connections: ' + error.message);
+      if (isCurrent() && !body.querySelector('.database-connections-toolbar')) {
+        body.innerHTML = '<div class="module-empty" role="alert">' + escapeHtml(error.message) + '</div>';
+      }
+    }
+  }
+
+  function renderDatabaseConnections(result={total:databaseConnections.length,page:databaseConnectionPage,pageSize:databaseConnectionPageSize}){const body=document.getElementById('databaseSectionBody');if(!body)return;const signedIn=Boolean(authState.user);const rows=databaseConnections.map(c=>`<tr><td><strong>${escapeHtml(c.name)}</strong><div class="muted">${escapeHtml(c.host)}:${c.port}/${escapeHtml(c.databaseName)}</div></td><td>${escapeHtml(c.type)}</td><td>${escapeHtml(c.environment)}</td><td><span class="status-badge">${escapeHtml(c.status||'DISCONNECTED')}</span></td><td>${c.readOnly?'Read-only':'Restricted'}</td><td><div class="database-row-actions"><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="testDatabaseConnection('${escapeHtml(c.id)}')">Test</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="connectDatabaseConnection('${escapeHtml(c.id)}','${c.status==='CONNECTED'?'disconnect':'connect'}')">${c.status==='CONNECTED'?'Disconnect':'Connect'}</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionModal('${escapeHtml(c.id)}')">Edit</button><button class="btn danger" type="button" ${signedIn?'':'disabled'} onclick="deleteDatabaseConnection('${escapeHtml(c.id)}')">Delete</button></div><div id="db-test-${escapeHtml(c.id)}" class="muted" role="status"></div></td></tr>`).join('');const total=Number(result.total||0),from=total?result.page*result.pageSize+1:0,to=Math.min((result.page+1)*result.pageSize,total);body.innerHTML=`<div class="database-connections-toolbar"><div><h2>Connections</h2><p class="muted">Credentials are encrypted and never returned to the browser.</p></div><div class="database-toolbar-actions"><input type="search" placeholder="Search connections" aria-label="Search connections" value="${escapeHtml(databaseConnectionSearch)}" id="databaseConnectionSearch" oninput="queueDatabaseConnectionSearch(this.value)"><select aria-label="Rows per page" onchange="databaseConnectionPageSize=Number(this.value);databaseConnectionPage=0;loadDatabaseConnections()"><option value="10" ${databaseConnectionPageSize===10?'selected':''}>10</option><option value="20" ${databaseConnectionPageSize===20?'selected':''}>20</option><option value="50" ${databaseConnectionPageSize===50?'selected':''}>50</option></select><button type="button" class="btn primary" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionWizard()">+ Add Connection</button></div></div><div class="tablewrap"><table class="instructions-table"><thead><tr><th>Name</th><th>Type</th><th>Environment</th><th>Status</th><th>Access</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="module-empty">No database connections configured.</div></td></tr>'}</tbody></table></div><div class="database-pagination"><span>Showing ${from}–${to} of ${total}</span><button type="button" class="btn secondary" ${databaseConnectionPage<1?'disabled':''} onclick="databaseConnectionPage--;loadDatabaseConnections()">Previous</button><button type="button" class="btn secondary" ${(to>=total||!total)?'disabled':''} onclick="databaseConnectionPage++;loadDatabaseConnections()">Next</button></div>${signedIn?'':'<div class="database-auth-note">Sign in with an authorized team role to create, edit, test or delete connections.</div>'}`;}
+  function openDatabaseConnectionWizard() {
+    const organizationId = tenantState.organizationId;
+    const engines = {POSTGRESQL:'PostgreSQL', MYSQL:'MySQL', SQLSERVER:'SQL Server', ORACLE:'Oracle', SAMPLE:'Sample database'};
+    let engine = 'POSTGRESQL';
+    let step = 0;
+    let tested = null;
+    const overlay = modalShell('New database connection', `<div class="db-wizard">
+      <div class="db-wizard-steps" aria-label="Setup steps"><span>1. Database</span><span>2. Driver</span><span>3. Settings</span></div>
+      <section data-db-step><label class="user-story-field">Find a database<input type="search" placeholder="Search database engines"></label>
+        <div class="db-wizard-engines">${Object.entries(engines).map(([key, name]) =>
+          `<button type="button" data-engine="${key}" class="btn secondary">${name}</button>`).join('')}</div></section>
+      <section data-db-step hidden><div class="db-wizard-driver"><strong data-driver></strong><span>Bundled · Ready to use</span></div></section>
+      <section data-db-step hidden><p data-sample hidden>Open Projects, Test Cases, and Test Runs in the built-in workspace.</p>
+        <form autocomplete="off">
+          <div class="user-story-form-grid">
+            <label class="user-story-field">Connection name<input name="name" maxlength="160" required></label>
+            <label class="user-story-field">Database / service name<input name="databaseName" required></label>
+            <label class="user-story-field">Host<input name="host" value="localhost" required></label>
+            <label class="user-story-field">Port<input name="port" type="number" min="1" max="65535" required></label>
+            <label class="user-story-field">Database username<input name="username" autocomplete="off" required></label>
+            <label class="user-story-field">Database password<input name="password" type="password" autocomplete="new-password" required></label>
+          </div>
+          <details><summary>Advanced and TLS</summary><div class="user-story-form-grid">
+            <label class="user-story-field">Environment<select name="environment"><option>LOCAL</option><option>QA</option><option>STAGING</option><option>PRODUCTION</option></select></label>
+            <label class="user-story-field">TLS mode<select name="tlsMode"><option value="VERIFY">Verify server certificate</option><option value="REQUIRED">Require encryption</option><option value="DISABLED">Disabled</option></select></label>
+            <label class="user-story-field">Connection timeout (seconds)<input type="number" name="connectionTimeoutSeconds" value="5" min="1" max="60" required></label>
+            <label><input type="checkbox" name="readOnly" checked> Read-only mode</label>
+          </div></details>
+        </form>
+      </section>
+      <p class="form-error" role="alert"></p><p data-test-result role="status"></p>
+      <div class="user-story-modal-footer"><button type="button" class="btn secondary" data-back>Back</button><button type="button" class="btn secondary" data-test>Test Connection</button><button type="button" class="btn primary" data-next>Next</button></div>
+    </div>`);
+    const find = selector => overlay.querySelector(selector);
+    const pages = [...overlay.querySelectorAll('[data-db-step]')];
+    const steps = [...overlay.querySelectorAll('.db-wizard-steps span')];
+    const choices = [...overlay.querySelectorAll('[data-engine]')];
+    const form = find('form');
+    const next = find('[data-next]');
+    const back = find('[data-back]');
+    const test = find('[data-test]');
+    const error = find('[role="alert"]');
+    const status = find('[data-test-result]');
+    let busy = false;
+    function render() {
+      const sample = engine === 'SAMPLE';
+      pages.forEach((page, index) => page.hidden = index !== step);
+      steps.forEach((label, index) => index === step ? label.setAttribute('aria-current','step') : label.removeAttribute('aria-current'));
+      choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.engine === engine)));
+      find('[data-driver]').textContent = sample ? 'H2 embedded driver' : engines[engine] + ' JDBC';
+      find('[data-sample]').hidden = !sample;
+      form.hidden = sample;
+      back.hidden = step === 0;
+      test.hidden = step !== 2 || sample;
+      back.disabled = test.disabled = next.disabled = busy;
+      next.textContent = step < 2 ? 'Next' : sample ? 'Open sample' : form.elements.namedItem('readOnly').checked ? 'Save & Open' : 'Save connection';
+    }
+    function selectEngine(key) {
+      if (engine !== key || !form.elements.namedItem('name').value) {
+        form.elements.namedItem('name').value = '';
+        form.elements.namedItem('port').value = databaseDefaultPorts[key] || '';
+        form.elements.namedItem('password').value = '';
+        tested = null;
+      }
+      engine = key;
+      render();
+    }
+    form.elements.namedItem('port').value = databaseDefaultPorts[engine];
+    choices.forEach(button => button.onclick = () => selectEngine(button.dataset.engine));
+    find('input[type="search"]').oninput = event => {
+      const query = event.target.value.trim().toLowerCase();
+      choices.forEach(button => button.hidden = !engines[button.dataset.engine].toLowerCase().includes(query));
+    };
+    form.oninput = () => { tested = null; error.textContent = ''; status.textContent = ''; render(); };
+    form.onsubmit = event => event.preventDefault();
+    back.onclick = () => { step--; error.textContent = ''; status.textContent = ''; render(); };
+    function payload() {
+      if (!organizationId || organizationId !== tenantState.organizationId) {
+        error.textContent = 'Select an organization and reopen the connection wizard.';
+        return null;
+      }
+      if (!form.checkValidity()) {
+        const invalid = form.querySelector(':invalid');
+        const advanced = invalid?.closest('details');
+        if (advanced) advanced.open = true;
+        form.reportValidity();
+        return null;
+      }
+      const values = Object.fromEntries(new FormData(form));
+      for (const field of ['name','host','databaseName','username']) values[field] = values[field].trim();
+      return JSON.stringify({...values, organizationId, type:engine, port:Number(values.port),
+        connectionTimeoutSeconds:Number(values.connectionTimeoutSeconds), readOnly:form.elements.namedItem('readOnly').checked});
+    }
+    async function submit(save) {
+      if (busy) return;
+      error.textContent = '';
+      status.textContent = '';
+      const body = payload();
+      if (!body) return;
+      if (save && tested !== body) {
+        error.textContent = 'Test the current settings before saving.';
+        return;
+      }
+      busy = true;
+      if (!save) tested = null;
+      render();
+      status.textContent = save ? 'Saving connection…' : 'Testing connection…';
+      try {
+        const result = await api(save ? '/api/database/connections' : '/api/database/connections/test-draft',
+          {method:'POST', headers:{'Content-Type':'application/json'}, body});
+        if (!save) {
+          tested = body;
+          status.textContent = result.message;
+          return;
+        }
+        closeModalOverlay(overlay);
+        notify('Database connection saved.');
+        if (tenantState.organizationId === organizationId) {
+          if (result.readOnly) showDatabaseSection('workspace', result);
+          else await loadDatabaseConnections();
+        }
+      } catch (failure) {
+        status.textContent = '';
+        error.textContent = failure.message;
+      } finally {
+        busy = false;
+        render();
+      }
+    }
+    test.onclick = () => submit(false);
+    next.onclick = () => {
+      if (step < 2) { step++; render(); }
+      else if (engine === 'SAMPLE') { closeModalOverlay(overlay); showDatabaseSection('workspace'); }
+      else submit(true);
+    };
+    render();
+  }
+
+  function openDatabaseConnectionModal(id=''){const item=databaseConnections.find(c=>c.id===id);const types=Object.keys(databaseDefaultPorts);const overlay=modalShell(item?'Edit Database Connection':'Add Database Connection',`<form id="databaseConnectionForm" onsubmit="event.preventDefault();saveDatabaseConnection(this)"><div class="user-story-form-grid"><div class="user-story-field"><label>Connection name</label><input name="name" required maxlength="160" value="${escapeHtml(item?.name||'')}"></div><div class="user-story-field"><label>Database type</label><select name="type" onchange="updateDatabaseDefaultPort(this.form)">${types.map(t=>`<option value="${t}" ${t===item?.type?'selected':''}>${t}</option>`).join('')}</select></div><div class="user-story-field"><label>Host</label><input name="host" required value="${escapeHtml(item?.host||'localhost')}"></div><div class="user-story-field"><label>Port</label><input name="port" type="number" min="1" max="65535" required value="${item?.port || databaseDefaultPorts.MYSQL}"></div><div class="user-story-field"><label>Database / service name</label><input name="databaseName" required value="${escapeHtml(item?.databaseName||'')}"></div><div class="user-story-field"><label>Username</label><input name="username" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Password</label><input name="password" type="password" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Environment</label><select name="environment">${['LOCAL','QA','STAGING','PRODUCTION'].map(x=>`<option ${x===(item?.environment||'LOCAL')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>TLS / SSL</label><select name="tlsMode">${['VERIFY','REQUIRED','DISABLED'].map(x=>`<option ${x===(item?.tlsMode||'VERIFY')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>Connection timeout (seconds)</label><input name="connectionTimeoutSeconds" type="number" min="1" max="60" value="${item?.connectionTimeoutSeconds||5}"></div><div class="user-story-field"><label><input name="readOnly" type="checkbox" ${item?.readOnly!==false?'checked':''}> Read-only mode</label></div></div><div id="databaseConnectionError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="databaseConnectionSave">${item?'Save Changes':'Add Connection'}</button></div></form>`);overlay.dataset.connectionId=id;}
+  const databaseDefaultPorts = {MYSQL:3306, POSTGRESQL:5432, SQLSERVER:1433, ORACLE:1521};
+
+  function updateDatabaseDefaultPort(form) {
+    form.elements.namedItem('port').value = databaseDefaultPorts[form.elements.namedItem('type').value];
+  }
+
+  async function saveDatabaseConnection(form){const button=document.getElementById('databaseConnectionSave'),error=document.getElementById('databaseConnectionError');button.disabled=true;button.textContent='Saving…';if(error)error.textContent='';const values={organizationId:tenantState.organizationId,name:form.elements.namedItem('name').value.trim(),type:form.type.value,host:form.host.value.trim(),port:Number(form.port.value),databaseName:form.databaseName.value.trim(),username:form.username.value,password:form.password.value,environment:form.environment.value,tlsMode:form.tlsMode.value,connectionTimeoutSeconds:Number(form.connectionTimeoutSeconds.value),readOnly:form.readOnly.checked};const id=form.closest('.modal-overlay').dataset.connectionId;try{await api(id?`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`:'/api/database/connections',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});closeModalOverlay(form.closest('.modal-overlay'));notify('Database connection saved.');await loadDatabaseConnections();}catch(e){if(error)error.textContent=e.message||'Unable to save connection.';else notify(e.message);}finally{button.disabled=false;button.textContent=id?'Save Changes':'Add Connection';}}
   async function deleteDatabaseConnection(id){if(!confirm('Delete this connection metadata?'))return;try{await api(`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'DELETE'});notify('Connection deleted.');await loadDatabaseConnections();}catch(e){notify(e.message);}}
   async function connectDatabaseConnection(id,action){try{await api(`/api/database/connections/${encodeURIComponent(id)}/${action}?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'POST'});notify(action==='connect'?'Connection opened.':'Connection closed.');await loadDatabaseConnections();}catch(e){notify(e.message);}}
-  async function testDatabaseConnection(id){const target=document.getElementById('db-test-'+id);if(target)target.textContent='Queued…';try{const started=await api(`/api/database/connections/${encodeURIComponent(id)}/test?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'POST'});let attempts=0;const poll=async()=>{const state=await api(`/api/database/connection-tests/${encodeURIComponent(started.id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`);if(target)target.textContent=state.status+(state.error?`: ${state.error}`:'');if(!['QUEUED','RUNNING'].includes(state.status)||++attempts>=20){delete databaseConnectionTestTimers[id];return;}databaseConnectionTestTimers[id]=setTimeout(poll,500);};poll();}catch(e){if(target)target.textContent=e.message;}}
+  async function testDatabaseConnection(id) {
+    if (databaseTestsInProgress.has(id)) return;
+    const organizationId = tenantState.organizationId;
+    const query = new URLSearchParams({organizationId});
+    const setStatus = message => {
+      if (tenantState.organizationId !== organizationId) return;
+      const target = document.getElementById('db-test-' + id);
+      if (target) target.textContent = message;
+    };
+    databaseTestsInProgress.add(id);
+    setStatus('Queued…');
+    try {
+      const started = await api('/api/database/connections/' + encodeURIComponent(id) + '/test?' + query, {method:'POST'});
+      const url = '/api/database/connection-tests/' + encodeURIComponent(started.id) + '?' + query;
+      for (let attempt = 0; attempt < 140 && tenantState.organizationId === organizationId; attempt++) {
+        const state = await api(url);
+        setStatus(state.status + (state.error ? ': ' + state.error : ''));
+        if (!['QUEUED','RUNNING'].includes(state.status)) return;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      setStatus('Test is still running. Check again shortly.');
+    } catch (error) {
+      setStatus('Connection test failed: ' + error.message);
+    } finally {
+      databaseTestsInProgress.delete(id);
+    }
+  }
+
 
   // QA Test Management Dashboard - Module Navigation
   function openModule(moduleId) {
@@ -10522,7 +10985,9 @@ paths:
     if (!title) { notify('⚠️ Bug title is required.'); return; }
     const editId = document.getElementById('defectEditId')?.value;
     const data = { title, description: document.getElementById('defectDescription')?.value.trim() || '', severity: document.getElementById('defectSeverity')?.value || 'Medium', priority: document.getElementById('defectPriority')?.value || 'Medium', status: document.getElementById('defectStatus')?.value || 'Open', module: document.getElementById('defectModule')?.value.trim() || '', assignedTo: document.getElementById('defectAssignedTo')?.value.trim() || '', environment: document.getElementById('defectEnvironment')?.value || '', browser: document.getElementById('defectBrowser')?.value.trim() || '', stepsToReproduce: document.getElementById('defectSteps')?.value.trim() || '', expectedResult: document.getElementById('defectExpected')?.value.trim() || '', actualResult: document.getElementById('defectActual')?.value.trim() || '' };
-    try { await api(editId ? `/api/defects/${encodeURIComponent(editId)}` : '/api/defects', { method: editId ? 'PUT' : 'POST', body: JSON.stringify(data) }); closeDefectModal(); notify(editId ? '✅ Defect updated.' : '✅ Defect created.'); await loadDefectStats(); }
+    try {
+      if (!editId) data.projectId = await requireActiveSaveProject();
+      await api(editId ? `/api/defects/${encodeURIComponent(editId)}` : '/api/defects', { method: editId ? 'PUT' : 'POST', body: JSON.stringify(data) }); closeDefectModal(); notify(editId ? '✅ Defect updated.' : '✅ Defect created.'); await loadDefectStats(); }
     catch (error) { notify('❌ Unable to save defect: ' + error.message); }
   }
   async function editDefect(defectId) {
@@ -11251,7 +11716,7 @@ paths:
     const activeEpics = userStoryEpics.filter(epic => !epic.archived);
     const activeStories = userStoryStories.items.filter(story => !story.archived);
     const actionButton = userStoryProjectManageAuthorized ? '<button type="button" class="btn primary" onclick="openUserStoryProjectModal()">+ New Project</button>' : '';
-    content.innerHTML = `<div class="tc-stat-row"><div class="tc-stat-chip"><span>📁 Active projects</span><span class="tc-stat-num">${activeProjects.length}</span></div><div class="tc-stat-chip"><span>🗂 Epics</span><span class="tc-stat-num">${activeEpics.length}</span></div><div class="tc-stat-chip"><span>📝 Stories</span><span class="tc-stat-num">${activeStories.length}</span></div><div class="tc-stat-chip"><span>✅ Done</span><span class="tc-stat-num">${activeStories.filter(story => story.status === 'Done').length}</span></div></div><div class="panel" style="margin-top:18px"><div class="panel-head"><h2>Projects</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label for="userStoryProjectStatusFilter" class="sr-only">Project status</label><select id="userStoryProjectStatusFilter" aria-label="Project status" onchange="userStoryProjectStatusFilter=this.value;renderUserStoryView()"><option value="active" ${userStoryProjectStatusFilter === 'active' ? 'selected' : ''}>Active</option><option value="archived" ${userStoryProjectStatusFilter === 'archived' ? 'selected' : ''}>Archived</option><option value="all" ${userStoryProjectStatusFilter === 'all' ? 'selected' : ''}>All</option></select>${actionButton}</div></div><div class="qa-dashboard-grid">${projects.length ? projects.map(renderProjectCard).join('') : `<div class="module-empty">No ${userStoryProjectStatusFilter === 'archived' ? 'archived ' : ''}projects found.</div>`}</div></div>`;
+    content.innerHTML = `<dl class="story-overview-metrics" aria-label="User story overview totals"><div class="story-overview-metric projects"><dt>Active projects</dt><dd>${activeProjects.length}</dd></div><div class="story-overview-metric epics"><dt>Epics</dt><dd>${activeEpics.length}</dd></div><div class="story-overview-metric stories"><dt>Stories</dt><dd>${activeStories.length}</dd></div><div class="story-overview-metric done"><dt>Done</dt><dd>${activeStories.filter(story => story.status === 'Done').length}</dd></div></dl><div class="panel" style="margin-top:18px"><div class="panel-head"><h2>Projects</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label for="userStoryProjectStatusFilter" class="sr-only">Project status</label><select id="userStoryProjectStatusFilter" aria-label="Project status" onchange="userStoryProjectStatusFilter=this.value;renderUserStoryView()"><option value="active" ${userStoryProjectStatusFilter === 'active' ? 'selected' : ''}>Active</option><option value="archived" ${userStoryProjectStatusFilter === 'archived' ? 'selected' : ''}>Archived</option><option value="all" ${userStoryProjectStatusFilter === 'all' ? 'selected' : ''}>All</option></select>${actionButton}</div></div><div class="qa-dashboard-grid">${projects.length ? projects.map(renderProjectCard).join('') : `<div class="module-empty">No ${userStoryProjectStatusFilter === 'archived' ? 'archived ' : ''}projects found.</div>`}</div></div>`;
   }
   function renderProjectCard(project) {
     const count = userStoryStories.items.filter(story => story.projectId === project.id && !story.archived).length;
@@ -11293,8 +11758,8 @@ paths:
   function saveUserStoryFilters() { const filters = { projectId: document.getElementById('userStoryProjectFilter')?.value || '', priority: document.getElementById('userStoryPriorityFilter')?.value || '', search: document.getElementById('userStorySearch')?.value || '' }; try { localStorage.setItem(USER_STORY_FILTER_KEY, JSON.stringify(filters)); } catch (e) { /* storage may be unavailable; filters remain session-local */ } return filters; }
   function clearUserStoryFilters() { try { localStorage.removeItem(USER_STORY_FILTER_KEY); } catch (e) {} const project = document.getElementById('userStoryProjectFilter'); const priority = document.getElementById('userStoryPriorityFilter'); const search = document.getElementById('userStorySearch'); if (project) project.value = ''; if (priority) priority.value = ''; if (search) search.value = ''; userStoryPage = 0; loadUserStoryList().then(renderUserStoryView); }
   function queueUserStorySearch() { saveUserStoryFilters(); userStoryPage = 0; window.clearTimeout(userStorySearchTimer); userStorySearchTimer = window.setTimeout(() => loadUserStoryList().then(renderUserStoryView), 250); }
-  function userStoryFilters() { const saved = readUserStoryFilters(); return `<div class="user-story-filter-bar" role="search" aria-label="Filter user stories"><select id="userStoryProjectFilter" aria-label="Filter by project" onchange="saveUserStoryFilters();userStoryPage=0;loadUserStoryList().then(renderUserStoryView)"><option value="">All projects</option>${projectOptions(saved.projectId || '')}</select><select id="userStoryPriorityFilter" aria-label="Filter by priority" onchange="saveUserStoryFilters();renderUserStoryView()"><option value="">All priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select><input id="userStorySearch" type="search" value="${escapeHtml(saved.search || '')}" placeholder="Search stories..." aria-label="Search stories" oninput="queueUserStorySearch()"><button type="button" class="btn secondary" onclick="clearUserStoryFilters()">Clear filters</button><button type="button" class="btn primary" onclick="openUserStoryStoryModal()">+ New Story</button></div>`; }
-  function renderUserStoryBacklog(content) { const saved = readUserStoryFilters(); const priority = saved.priority || ''; const rows = userStoryStories.items.filter(s => !priority || s.priority === priority); content.innerHTML = `<div class="user-story-backlog">${userStoryFilters()}<div class="panel"><div class="panel-head"><h2>${userStoryView === 'stories' ? 'All Stories' : 'Backlog'}</h2><span class="tag">${userStoryStories.total} total · ${rows.filter(s => !s.sprintId).length} unassigned on this page</span></div>${rows.length ? `<div style="overflow:auto"><table class="instructions-table"><thead><tr><th>ID</th><th>Title</th><th>Project</th><th>Sprint</th><th>Status</th><th>Priority</th><th>Points</th><th>Actions</th></tr></thead><tbody>${rows.map(s => `<tr><td><strong>${escapeHtml(s.id)}</strong></td><td>${escapeHtml(s.title)}</td><td>${escapeHtml(userStoryProjects.find(p=>p.id===s.projectId)?.key || '')}</td><td>${escapeHtml(userStorySprints.find(sp=>sp.id===s.sprintId)?.name || 'Backlog')}</td><td>${escapeHtml(s.status)}</td><td>${escapeHtml(s.priority)}</td><td>${s.storyPoints}</td><td><button type="button" class="btn secondary" onclick="openStoryQaCoverage(userStoryStories.items.find(s=>s.id==='${s.id}'))">QA Coverage</button> <button type="button" class="btn secondary" onclick="openUserStoryStoryModal(userStoryStories.items.find(s=>s.id==='${s.id}'))">Edit</button> <button type="button" class="btn secondary" onclick="archiveUserStoryStory('${s.id}')">Archive</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No stories match these filters. Try clearing one or more filters.</div>'}<div style="display:flex;justify-content:space-between;margin-top:12px"><button type="button" class="btn secondary" ${userStoryPage === 0 ? 'disabled' : ''} onclick="userStoryPage--;loadUserStoryList().then(renderUserStoryView)">Previous</button><span>Page ${userStoryPage + 1}</span><button type="button" class="btn secondary" ${(userStoryPage + 1) * USER_STORY_PAGE_SIZE >= userStoryStories.total ? 'disabled' : ''} onclick="userStoryPage++;loadUserStoryList().then(renderUserStoryView)">Next</button></div></div></div>`; const priorityFilter = document.getElementById('userStoryPriorityFilter'); if (priorityFilter) priorityFilter.value = priority; }
+  function userStoryFilters() { const saved = readUserStoryFilters(); return `<div class="story-list-filters" role="search" aria-label="Filter user stories"><label class="story-list-filter" for="userStoryProjectFilter"><span>Project</span><select id="userStoryProjectFilter" aria-label="Filter by project" onchange="saveUserStoryFilters();userStoryPage=0;loadUserStoryList().then(renderUserStoryView)"><option value="">All projects</option>${projectOptions(saved.projectId || '')}</select></label><label class="story-list-filter" for="userStoryPriorityFilter"><span>Priority</span><select id="userStoryPriorityFilter" aria-label="Filter by priority" onchange="saveUserStoryFilters();renderUserStoryView()"><option value="">All priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label><label class="story-list-filter" for="userStorySearch"><span>Search</span><input id="userStorySearch" type="search" value="${escapeHtml(saved.search || '')}" placeholder="Search stories..." aria-label="Search stories" oninput="queueUserStorySearch()"></label><div class="story-list-filter-actions"><button type="button" class="btn secondary" onclick="clearUserStoryFilters()">Clear filters</button><button type="button" class="btn primary" onclick="openUserStoryStoryModal()">+ New Story</button></div></div>`; }
+  function renderUserStoryBacklog(content) { const saved = readUserStoryFilters(); const priority = saved.priority || ''; const rows = userStoryStories.items.filter(s => !priority || s.priority === priority); content.innerHTML = `<div class="user-story-backlog">${userStoryFilters()}<div class="panel story-list-panel"><div class="panel-head"><h2>${userStoryView === 'stories' ? 'All Stories' : 'Backlog'}</h2><span class="tag">${userStoryStories.total} total · ${rows.filter(s => !s.sprintId).length} unassigned on this page</span></div>${rows.length ? `<div class="story-list-scroll" tabindex="0" role="region" aria-label="Stories table"><table class="instructions-table story-list-table"><thead><tr><th scope="col">Story</th><th>Project</th><th>Sprint</th><th>Status</th><th>Priority</th><th>Points</th><th>Actions</th></tr></thead><tbody>${rows.map(s => `<tr><td><div class="story-list-title">${escapeHtml(s.title)}</div><div class="story-list-key">${escapeHtml(s.id)}</div></td><td>${escapeHtml(userStoryProjects.find(p=>p.id===s.projectId)?.key || '')}</td><td>${escapeHtml(userStorySprints.find(sp=>sp.id===s.sprintId)?.name || 'Backlog')}</td><td><span class="story-list-pill story-list-status" data-value="${escapeHtml(s.status || '')}">${escapeHtml(s.status || '—')}</span></td><td><span class="story-list-pill story-list-priority" data-value="${escapeHtml(s.priority || '')}">${escapeHtml(s.priority || '—')}</span></td><td>${s.storyPoints}</td><td><div class="story-list-row-actions"><button type="button" class="btn secondary story-list-coverage" onclick="openStoryQaCoverage(userStoryStories.items.find(s=>s.id==='${s.id}'))">QA Coverage</button> <button type="button" class="btn secondary" onclick="openUserStoryStoryModal(userStoryStories.items.find(s=>s.id==='${s.id}'))">Edit</button> <button type="button" class="btn secondary" onclick="archiveUserStoryStory('${s.id}')">Archive</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No stories match these filters. Try clearing one or more filters.</div>'}<div class="story-list-pagination"><button type="button" class="btn secondary" ${userStoryPage === 0 ? 'disabled' : ''} onclick="userStoryPage--;loadUserStoryList().then(renderUserStoryView)">Previous</button><span>Page ${userStoryPage + 1}</span><button type="button" class="btn secondary" ${(userStoryPage + 1) * USER_STORY_PAGE_SIZE >= userStoryStories.total ? 'disabled' : ''} onclick="userStoryPage++;loadUserStoryList().then(renderUserStoryView)">Next</button></div></div></div>`; const priorityFilter = document.getElementById('userStoryPriorityFilter'); if (priorityFilter) priorityFilter.value = priority; }
   let sprintBoardState = { items: [], total: 0, projectId: '', sprintId: '', assignee: '', priority: '' };
   const sprintBoardSaving = new Set();
   let sprintBoardDraggedStoryId = '';
@@ -11305,6 +11770,12 @@ paths:
     const candidate = [preferred, tenantState.projectId].find(projectId => projectId && allowed.has(projectId));
     const projectId = candidate || userStoryProjects.find(project => !project.archived)?.id || '';
     if (projectId && allowed.has(projectId)) tenantState.projectId = projectId;
+    return projectId;
+  }
+
+  async function requireActiveSaveProject() {
+    const projectId = await ensureActiveProjectContext();
+    if (!projectId) throw new Error('Create or select an authorized project before saving.');
     return projectId;
   }
 
@@ -11333,17 +11804,17 @@ paths:
   function renderSprintBoardFromState(content) {
     const { items, projectId, sprintId, assignee, priority } = sprintBoardState;
     const assignees = [...new Set(items.map(story => story.assignee).filter(Boolean))].sort();
-    const filters = `<div class="user-story-filter-bar"><select id="userStoryBoardProject" onchange="renderUserStoryBoard(document.getElementById('userStoryContent'))"><option value="">All projects</option>${projectOptions(projectId)}</select><select id="userStoryBoardSprint" onchange="renderUserStoryBoard(document.getElementById('userStoryContent'))"><option value="">All sprints</option>${userStorySprints.filter(s => !projectId || s.projectId === projectId).map(s => `<option value="${s.id}" ${s.id === sprintId ? 'selected' : ''}>${escapeHtml(s.id)} — ${escapeHtml(s.name)}</option>`).join('')}</select></div>`;
+    const filters = `<div class="sprint-board-filters" role="group" aria-label="Sprint board filters"><label class="sprint-board-filter" for="userStoryBoardProject"><span>Project</span><select id="userStoryBoardProject" onchange="renderUserStoryBoard(document.getElementById('userStoryContent'))"><option value="">All projects</option>${projectOptions(projectId)}</select></label><label class="sprint-board-filter" for="userStoryBoardSprint"><span>Sprint</span><select id="userStoryBoardSprint" onchange="renderUserStoryBoard(document.getElementById('userStoryContent'))"><option value="">All sprints</option>${userStorySprints.filter(s => !projectId || s.projectId === projectId).map(s => `<option value="${s.id}" ${s.id === sprintId ? 'selected' : ''}>${escapeHtml(s.id)} — ${escapeHtml(s.name)}</option>`).join('')}</select></label></div>`;
     const boardItems = items.filter(story => (!assignee || story.assignee === assignee) && (!priority || story.priority === priority));
-    const boardFilterControls = `<select id="userStoryBoardAssignee" aria-label="Filter board by assignee" onchange="sprintBoardState.assignee=this.value;renderSprintBoardFromState(document.getElementById('userStoryContent'))"><option value="">All assignees</option>${assignees.map(name => `<option ${name === assignee ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select><select id="userStoryBoardPriority" aria-label="Filter board by priority" onchange="sprintBoardState.priority=this.value;renderSprintBoardFromState(document.getElementById('userStoryContent'))"><option value="">All priorities</option>${['Low','Medium','High','Critical'].map(name => `<option ${name === priority ? 'selected' : ''}>${name}</option>`).join('')}</select>`;
+    const boardFilterControls = `<label class="sprint-board-filter" for="userStoryBoardAssignee"><span>Assignee</span><select id="userStoryBoardAssignee" aria-label="Filter board by assignee" onchange="sprintBoardState.assignee=this.value;renderSprintBoardFromState(document.getElementById('userStoryContent'))"><option value="">All assignees</option>${assignees.map(name => `<option ${name === assignee ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label><label class="sprint-board-filter" for="userStoryBoardPriority"><span>Priority</span><select id="userStoryBoardPriority" aria-label="Filter board by priority" onchange="sprintBoardState.priority=this.value;renderSprintBoardFromState(document.getElementById('userStoryContent'))"><option value="">All priorities</option>${['Low','Medium','High','Critical'].map(name => `<option ${name === priority ? 'selected' : ''}>${name}</option>`).join('')}</select></label>`;
     const columns = BOARD_STATUSES.map(status => {
       const columnItems = boardItems.filter(story => story.status === status);
       return `<div class="user-story-kanban-column" data-board-status="${status}" ondragover="handleStoryDragOver(event,this)" ondragleave="handleStoryDragLeave(event,this)" ondrop="handleStoryDrop(event,this)"><div class="panel-head"><h3>${escapeHtml(status)}</h3><span class="tag">${columnItems.length}</span></div>${columnItems.map(story => {
         const saving = sprintBoardSaving.has(story.id);
-        return `<div class="user-story-card${saving ? ' is-saving' : ''}" draggable="true" data-story-id="${escapeHtml(story.id)}" ondragstart="handleStoryDragStart(event,this)" ondragend="handleStoryDragEnd(event,this)" tabindex="0" aria-label="${escapeHtml(story.id + ' ' + story.title)}"><strong>${escapeHtml(story.id)}</strong><div>${escapeHtml(story.title)}</div><div style="font-size:12px;margin-top:6px">${escapeHtml(story.priority)} · ${story.storyPoints} pts · ${escapeHtml(story.assignee || 'Unassigned')}</div><div class="user-story-card-status"><select aria-label="Change status for ${escapeHtml(story.id)}" ${saving ? 'disabled' : ''} onchange="moveStoryOnBoard('${escapeHtml(story.id)}',this.value)">${BOARD_STATUSES.map(next => `<option ${next === status ? 'selected' : ''}>${next}</option>`).join('')}</select>${saving ? '<span class="user-story-card-saving" role="status">Saving…</span>' : ''}</div><button type="button" class="btn secondary" style="margin-top:8px;width:100%" onclick="openUserStoryStoryModal(userStoryStories.items.find(item => item.id === '${escapeHtml(story.id)}'))">Details</button></div>`;
+        return `<div class="user-story-card${saving ? ' is-saving' : ''}" draggable="true" data-story-id="${escapeHtml(story.id)}" ondragstart="handleStoryDragStart(event,this)" ondragend="handleStoryDragEnd(event,this)" tabindex="0" aria-label="${escapeHtml(story.id + ' ' + story.title)}"><strong class="sprint-board-key">${escapeHtml(story.id)}</strong><div class="sprint-board-title">${escapeHtml(story.title)}</div><div class="sprint-board-meta"><span class="sprint-board-priority" data-priority="${escapeHtml(story.priority || '')}">${escapeHtml(story.priority || 'No priority')}</span><span>${story.storyPoints} pts</span><span>${escapeHtml(story.assignee || 'Unassigned')}</span></div><div class="sprint-board-actions"><div class="user-story-card-status"><select aria-label="Change status for ${escapeHtml(story.id)}" ${saving ? 'disabled' : ''} onchange="moveStoryOnBoard('${escapeHtml(story.id)}',this.value)">${BOARD_STATUSES.map(next => `<option ${next === status ? 'selected' : ''}>${next}</option>`).join('')}</select>${saving ? '<span class="user-story-card-saving" role="status">Saving…</span>' : ''}</div><button type="button" class="btn secondary" onclick="openUserStoryStoryModal(userStoryStories.items.find(item => item.id === '${escapeHtml(story.id)}'))">Details</button></div></div>`;
       }).join('') || '<div class="module-empty">No stories</div>'}</div>`;
     }).join('');
-    content.innerHTML = filters.replace('</div>', boardFilterControls + '</div>') + `<div class="user-story-kanban">${columns}</div>`;
+    content.innerHTML = filters.replace('</div>', boardFilterControls + '</div>') + `<div class="user-story-kanban sprint-board-columns">${columns}</div>`;
     content.querySelectorAll('.user-story-card[tabindex="0"]').forEach(card => card.addEventListener('keydown', event => handleStoryCardKeydown(event, card)));
   }
 

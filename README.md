@@ -10,7 +10,7 @@ writes an HTML report and CSV aggregate summary for every run under
 Prerequisites:
 
 - Windows 10/11
-- JDK 17 or later
+- JDK 25 or later
 - Maven 3.8 or later on `PATH`
 - Node.js 18 or later for Newman
 - Chrome or Firefox for the selected Selenium tests
@@ -105,7 +105,7 @@ Reports contain aggregate counts only; test names, exception text, response
 bodies, and credentials are not copied into the reports. Console output is
 shown during the run with common credential patterns redacted.
 
-A Java 17 Maven project using Selenium WebDriver with Cucumber for end-to-end UI
+A Java 25 Maven project using Selenium WebDriver with Cucumber for end-to-end UI
 testing of [DemoQA](https://demoqa.com/). A reusable Rest Assured API client is
 also available to Java tests. The Text Box feature submits valid form data in
 Chrome and Firefox, and the Elements feature exercises all nine
@@ -117,7 +117,7 @@ configurable; `src/test/resources/junit-platform.properties` sets it to two.
 
 ## Prerequisites
 
-- JDK 17 or later
+- JDK 25 or later
 - Maven 3.8 or later
 - Chrome and/or Firefox installed for the browser scenarios you run
 

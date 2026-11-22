@@ -115,8 +115,10 @@ class AuthenticationRecoveryBrowserE2ETest {
         assertTrue(new WebDriverWait(browser, Duration.ofSeconds(10)).until(
                 ExpectedConditions.visibilityOfElementLocated(By.id("authUsername"))).isDisplayed());
 
-        browser.findElement(By.id("authPassword")).clear();
-        browser.findElement(By.id("authPassword")).sendKeys(registeredPassword);
+        browser.get(baseUrl + "/login");
+        wait(By.id("authUsername")).clear();
+        browser.findElement(By.id("authUsername")).sendKeys(registeredUsername);
+        wait(By.id("authPassword")).sendKeys(registeredPassword);
         browser.findElement(By.id("authSubmitButton")).click();
         new WebDriverWait(browser, Duration.ofSeconds(10)).until(ExpectedConditions.invisibilityOfElementLocated(By.id("authUsername")));
 

@@ -444,13 +444,35 @@ final class RunnerServer implements AutoCloseable {
             int page = parseQueryInt(exchange, "page", 0); int pageSize = parseQueryInt(exchange, "pageSize", 10);
             sendJson(exchange, 200, databaseConnectionService.listForOrganization(organizationId, queryValue(exchange, "search"), page, pageSize)); return;
         }
+        if (path.equals("/api/database/connections/test-draft") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            requireDatabaseManageForOrganization(exchange, stringField(values, "organizationId"));
+            databaseConnectionService.testDraft(values);
+            sendJson(exchange, 200, Map.of("message", "Connection test passed."));
+            return;
+        }
         if (path.equals("/api/database/connections") && method.equals("POST")) {
             Map<String,Object> values=requestObject(exchange); String organizationId = requireDatabaseManageForOrganization(exchange, stringField(values, "organizationId"));
             sendJson(exchange, 201, databaseConnectionService.createForOrganization(organizationId, values)); return;
         }
+        if (path.equals("/api/database/connections/sample/browse") && method.equals("POST")) {
+            requireAuthenticatedCsrf(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            sendJson(exchange, 200, SampleDatabase.browse(optionalString(values, "schema"), optionalString(values, "table")));
+            return;
+        }
         if (path.startsWith("/api/database/connections/")) {
             String remainder=path.substring("/api/database/connections/".length());
             String organizationId = queryValue(exchange, "organizationId");
+            if (remainder.endsWith("/browse") && method.equals("POST")) {
+                requireDatabaseManageForOrganization(exchange, organizationId);
+                String id = remainder.substring(0, remainder.length() - "/browse".length());
+                Map<String, Object> values = requestObject(exchange);
+                sendJson(exchange, 200, databaseConnectionService.browseForOrganization(organizationId, id,
+                        optionalString(values, "schema"), optionalString(values, "table")));
+                return;
+            }
             if (remainder.endsWith("/test") && method.equals("POST")) { requireDatabaseManageForOrganization(exchange, organizationId); String id=remainder.substring(0,remainder.length()-5); requireDatabaseConnectionOrganization(id, organizationId); ConnectionTestService.TestState state=databaseConnectionService.submitTestForOrganization(organizationId,id); sendJson(exchange,202,databaseTestToMap(state)); return; }
             if (remainder.endsWith("/connect") && method.equals("POST")) { requireDatabaseManageForOrganization(exchange, organizationId); String id=remainder.substring(0,remainder.length()-8); requireDatabaseConnectionOrganization(id, organizationId); sendJson(exchange,200,databaseConnectionService.connectForOrganization(organizationId,id)); return; }
             if (remainder.endsWith("/disconnect") && method.equals("POST")) { requireDatabaseManageForOrganization(exchange, organizationId); String id=remainder.substring(0,remainder.length()-11); requireDatabaseConnectionOrganization(id, organizationId); sendJson(exchange,200,databaseConnectionService.disconnectForOrganization(organizationId,id)); return; }
@@ -5945,7 +5967,7 @@ final class RunnerServer implements AutoCloseable {
                 
                 **Basic Dockerfile:**
                 ```dockerfile
-                FROM openjdk:17-slim
+                FROM eclipse-temurin:25-jre
                 WORKDIR /app
                 COPY target/*.jar app.jar
                 EXPOSE 8081
@@ -6024,7 +6046,7 @@ final class RunnerServer implements AutoCloseable {
                       - uses: actions/checkout@v3
                       - uses: actions/setup-java@v3
                         with:
-                          java-version: '17'
+                          java-version: '25'
                       - run: mvn clean test
                       - run: mvn package
                 ```

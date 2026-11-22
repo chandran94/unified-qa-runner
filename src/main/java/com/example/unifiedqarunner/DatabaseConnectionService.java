@@ -22,6 +22,39 @@ final class DatabaseConnectionService implements AutoCloseable {
     Map<String,Object> createForOrganization(String organizationId,Map<String,Object> values)throws IOException{requireKey();factory.validate(repository.preview(values));DatabaseConnectionRepository.ConnectionConfig c=repository.createForOrganization(organizationId,values,protector.encrypt(String.valueOf(values.getOrDefault("username",""))),protector.encrypt(String.valueOf(values.getOrDefault("password",""))));return safe(c);}
     Map<String,Object> update(String id,Map<String,Object> values)throws IOException{requireKey();DatabaseConnectionRepository.ConnectionConfig current=repository.find(id);Map<String,Object> preview=new LinkedHashMap<>();preview.put("name",values.getOrDefault("name",current.name()));preview.put("type",values.getOrDefault("type",current.type()));preview.put("host",values.getOrDefault("host",current.host()));preview.put("port",values.getOrDefault("port",current.port()));preview.put("databaseName",values.getOrDefault("databaseName",current.databaseName()));preview.put("environment",values.getOrDefault("environment",current.environment()));preview.put("tlsMode",values.getOrDefault("tlsMode",current.tlsMode()));preview.put("connectionTimeoutSeconds",values.getOrDefault("connectionTimeoutSeconds",current.connectionTimeoutSeconds()));preview.put("readOnly",values.getOrDefault("readOnly",current.readOnly()));factory.validate(repository.preview(preview));String u=String.valueOf(values.getOrDefault("username","")),p=String.valueOf(values.getOrDefault("password",""));DatabaseConnectionRepository.ConnectionConfig c=repository.update(id,values,protector.encrypt(u),protector.encrypt(p));return safe(c);}
     Map<String,Object> updateForOrganization(String organizationId,String id,Map<String,Object> values)throws IOException{requireOwner(organizationId,id);return update(id,values);}
+    void testDraft(Map<String, Object> values) {
+        var config = repository.preview(values);
+        String username = String.valueOf(values.getOrDefault("username", "")).trim();
+        String password = String.valueOf(values.getOrDefault("password", ""));
+        if (username.isBlank() || password.isEmpty()) {
+            throw new IllegalArgumentException("Enter the database username and password.");
+        }
+        try (Connection connection = factory.open(config, username, password)) {
+            if (!connection.isValid(config.connectionTimeoutSeconds())) {
+                throw new IllegalArgumentException("The database did not respond to the connection check.");
+            }
+        } catch (java.sql.SQLException error) {
+            String state = error.getSQLState();
+            String message = state != null && state.startsWith("28")
+                    ? "Database authentication failed. Check the database username and password."
+                    : "Could not connect. Check the host, port, database name, and TLS settings.";
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    Map<String, Object> browseForOrganization(String organizationId, String id, String schema, String table) throws Exception {
+        requireOwner(organizationId, id);
+        requireKey();
+        var config = repository.find(id);
+        if (!config.readOnly()) throw new IllegalArgumentException("Enable read-only mode for this connection before browsing.");
+        try (Connection connection = factory.open(config, protector.decrypt(config.usernameEncrypted()),
+                protector.decrypt(config.passwordEncrypted()))) {
+            return DatabaseWorkspace.browse(connection, schema, table);
+        } catch (java.sql.SQLException error) {
+            throw new IllegalArgumentException("Could not browse the database. Check connectivity and the account's read permissions.");
+        }
+    }
+
     void delete(String id)throws Exception{disconnect(id);repository.delete(id);}
     Map<String,Object> connect(String id)throws Exception{requireKey();DatabaseConnectionRepository.ConnectionConfig c=repository.find(id);Connection connection=factory.open(c,protector.decrypt(c.usernameEncrypted()),protector.decrypt(c.passwordEncrypted()));Connection old=active.put(id,connection);if(old!=null)try{old.close();}catch(Exception ignored){}return safe(repository.status(id,"CONNECTED",""));}
     Map<String,Object> connectForOrganization(String organizationId,String id)throws Exception{requireOwner(organizationId,id);return connect(id);}
