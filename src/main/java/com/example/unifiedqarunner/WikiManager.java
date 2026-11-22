@@ -69,6 +69,19 @@ final class WikiManager {
     }
     synchronized Page setPageStatus(String id, String status, String actor, int expectedVersion) throws IOException { Map<String, Object> values = new LinkedHashMap<>(); values.put("title", getPage(id).title()); values.put("status", status); values.put("version", expectedVersion); return updatePage(id, values, actor); }
 
+    synchronized void deletePage(String id, int expectedVersion) throws IOException {
+        Page page = getPage(id);
+        if (page.version() != expectedVersion) {
+            throw new IllegalStateException("This page changed since it was loaded. Refresh before deleting.");
+        }
+        if (readPages().stream().anyMatch(child -> id.equals(child.parentPageId()))) {
+            throw new IllegalArgumentException("Move or delete child pages before deleting this page.");
+        }
+        List<Map<String, Object>> pages = readList("wikiPages");
+        pages.removeIf(item -> id.equals(item.get("id")));
+        writeList("wikiPages", pages);
+    }
+
     static String sanitize(String content) {
         if (content == null) return "";
         return content.replaceAll("(?is)<(script|style|iframe|object|embed)[^>]*>.*?</\\1>", "")

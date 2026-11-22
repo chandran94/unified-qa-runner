@@ -436,6 +436,20 @@ final class RunnerServer implements AutoCloseable {
             if (remainder.endsWith("/archive") || remainder.endsWith("/restore")) {
                 boolean restore = remainder.endsWith("/restore"); String id = remainder.substring(0, remainder.lastIndexOf('/')); requireOwnedProjectAccess(exchange, "WIKI_PAGE", id, TeamAuthorization.WIKI, true); Map<String,Object> values=requestObject(exchange); int version=Integer.parseInt(String.valueOf(values.getOrDefault("version", wikiManager.getPage(id).version()))); sendJson(exchange, 200, wikiPageToMap(wikiManager.setPageStatus(id, restore ? WikiManager.DRAFT : WikiManager.ARCHIVED, authActorName(exchange), version))); return;
             }
+            if (method.equals("DELETE")) {
+                requireOwnedProjectAccess(exchange, "WIKI_PAGE", remainder, TeamAuthorization.WIKI, true);
+                Object rawVersion = requestObject(exchange).get("version");
+                int version;
+                try {
+                    version = Integer.parseInt(String.valueOf(rawVersion));
+                } catch (NumberFormatException error) {
+                    throw new IllegalArgumentException("A current page version is required.");
+                }
+                if (version < 1) throw new IllegalArgumentException("A current page version is required.");
+                wikiManager.deletePage(remainder, version);
+                sendJson(exchange, 200, Map.of("deleted", true));
+                return;
+            }
             if (method.equals("GET")) { requireOwnedProjectAccess(exchange, "WIKI_PAGE", remainder, TeamAuthorization.WIKI, false); sendJson(exchange, 200, wikiPageToMap(wikiManager.getPage(remainder))); return; }
             if (method.equals("PUT")) { requireOwnedProjectAccess(exchange, "WIKI_PAGE", remainder, TeamAuthorization.WIKI, true); sendJson(exchange, 200, wikiPageToMap(wikiManager.updatePage(remainder, requestObject(exchange), authActorName(exchange)))); return; }
         }
@@ -447,8 +461,8 @@ final class RunnerServer implements AutoCloseable {
         if (path.equals("/api/database/connections/test-draft") && method.equals("POST")) {
             requireSameOrigin(exchange);
             Map<String, Object> values = requestObject(exchange);
-            requireDatabaseManageForOrganization(exchange, stringField(values, "organizationId"));
-            databaseConnectionService.testDraft(values);
+            String organizationId = requireDatabaseManageForOrganization(exchange, stringField(values, "organizationId"));
+            databaseConnectionService.testDraft(organizationId, values);
             sendJson(exchange, 200, Map.of("message", "Connection test passed."));
             return;
         }

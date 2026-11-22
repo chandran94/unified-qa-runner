@@ -1176,8 +1176,132 @@
     .db-wizard-engines{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
     .db-wizard-engines .btn{text-align:left}
     .db-wizard-engines [aria-pressed="true"]{background:#e8ecff;color:#3730a3;border-color:#7778dc}
+    .db-wizard-auth{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;width:100%;max-width:420px}
     .db-wizard details{margin-top:14px}.db-wizard details .user-story-form-grid{margin-top:12px}
     @media(max-width:480px){.db-wizard-engines{grid-template-columns:1fr}}
+    .database-command-bar{margin-bottom:12px;border:1px solid #dce4f0;border-radius:10px;background:#fff}
+    .database-command-menus,.database-command-shortcuts{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:6px 10px}
+    .database-command-menus{border-bottom:1px solid #e2e8f0;background:#f7f9ff;border-radius:10px 10px 0 0}
+    .database-command-menus details{position:relative}
+    .database-command-menus summary{list-style:none;padding:6px 8px;color:#334155;font-size:13px;font-weight:700;cursor:pointer}
+    .database-command-menus summary::-webkit-details-marker{display:none}
+    .database-command-menus details[open]>summary{background:#e8ecff;border-radius:6px;color:#3730a3}
+    .database-command-menus details>div{position:absolute;top:100%;left:0;z-index:10;min-width:170px;padding:5px;border:1px solid #dce4f0;border-radius:8px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.12)}
+    .database-command-menus details button{display:block;width:100%;border:0;border-radius:5px;padding:8px;text-align:left;color:#172033;background:#fff;font:inherit;font-size:13px;cursor:pointer}
+    .database-command-menus details button:hover,.database-command-menus details button:focus-visible{background:#eef2ff}
+    .database-command-shortcuts .btn{padding:7px 10px;min-height:34px;font-size:12px;box-shadow:none}
+    @media(max-width:600px){.database-command-menus details[open]{flex-basis:100%}.database-command-menus details>div{position:static;box-shadow:none}}
+    .database-plug-menu{position:relative}
+    .database-plug-menu summary{display:flex;align-items:center;gap:6px;list-style:none;cursor:pointer}
+    .database-plug-menu summary::-webkit-details-marker{display:none}
+    .database-plug-menu .database-plug-options{position:absolute;top:calc(100% + 5px);left:0;z-index:11;min-width:210px;padding:5px;border:1px solid #dce4f0;border-radius:9px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.14)}
+    .database-plug-options button{display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-radius:5px;background:#fff;color:#172033;font:inherit;font-size:13px;cursor:pointer}
+    .database-plug-options button:hover,.database-plug-options button:focus-visible{background:#eef2ff}
+    .database-plug-options .database-plug-wizard{border-top:1px solid #dce4f0;border-radius:0;margin-top:3px;color:#3730a3;font-weight:700}
+    .database-connection-actions{position:fixed;inset:auto;margin:0;min-width:190px;max-width:calc(100vw - 8px);padding:5px;border:1px solid #dce4f0;border-radius:8px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.18)}
+    .database-connection-actions button{display:block;width:100%;border:0;border-radius:5px;padding:8px 10px;text-align:left;background:#fff;color:#172033;font:inherit;font-size:13px;cursor:pointer}
+    .database-connection-actions button:hover,.database-connection-actions button:focus-visible{background:#eef2ff}
+    .db-current-connection{width:100%;text-align:left;overflow-wrap:anywhere}
+    .db-current-connection-status{margin-top:5px;overflow-wrap:anywhere}
+    .db-edit-dialog [hidden]{display:none!important}
+    .db-edit-heading,.db-edit-tabs{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:13px}
+    .db-edit-heading{justify-content:space-between;padding:12px;border-radius:9px;background:#edf1fb}
+    .db-edit-heading strong,.db-edit-heading span{display:block}
+    .db-edit-heading div span{margin-top:3px;font-size:12px;color:#475569}
+    .db-edit-tabs .btn{padding:7px 11px;min-height:36px;box-shadow:none}
+    .db-edit-tabs [aria-pressed="true"]{background:#e8ecff;color:#3730a3;border-color:#7778dc}
+    .db-edit-dialog h3{margin:12px 0 8px;font-size:14px}
+    .db-edit-url{margin:8px 0;color:#475569;overflow-wrap:anywhere}
+    .db-edit-dialog .db-edit-auth-fields{grid-template-columns:minmax(0,1fr);max-width:420px}
+    .db-edit-check{align-self:end;padding:10px 0}
+    .db-edit-footer [data-test]{margin-right:auto}
+    .wiki-nav input[type="search"]{box-sizing:border-box;min-height:38px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#172033;font:inherit}
+    #wikiPageTree:not(:empty){margin-top:16px;padding-top:14px;border-top:1px solid #dce4f0}
+    .wiki-info{color:#172033}
+    .wiki-empty p{margin:8px 0 14px}
+    .wiki-reader{max-width:880px;margin:0 auto;padding:8px clamp(0px,2vw,22px) 24px}
+    .wiki-breadcrumb{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:#52627c;font-size:13px}
+    .wiki-breadcrumb button,.wiki-outline button{font:inherit;color:#3730a3;border:0;background:transparent;padding:4px;cursor:pointer;text-align:left;overflow-wrap:anywhere}
+    .wiki-reader-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:17px 0 22px;padding-bottom:18px;border-bottom:1px solid #e2e8f0}
+    .wiki-reader-header h1{margin:6px 0;color:#172033;font-size:clamp(25px,3vw,36px);overflow-wrap:anywhere}
+    .wiki-reader-header p{margin:0}
+    .wiki-status[data-status="PUBLISHED"]{background:#dcfce7;color:#176340}
+    .wiki-page-actions{position:relative}
+    .wiki-page-actions>summary{list-style:none;cursor:pointer}
+    .wiki-page-actions>summary::-webkit-details-marker{display:none}
+    .wiki-page-action-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:2;display:grid;gap:4px;padding:5px;background:#fff;border:1px solid #dce4f0;border-radius:9px;white-space:nowrap}
+    .wiki-page-action-menu .wiki-delete-action{color:#a42331}
+    .wiki-reader article{line-height:1.65;color:#24324b;overflow-wrap:anywhere}
+    .wiki-reader article h1,.wiki-reader article h2,.wiki-reader article h3,.wiki-reader article h4{scroll-margin-top:16px}
+    .wiki-outline{display:grid;gap:4px;margin-top:8px}
+    .wiki-info details>summary{cursor:pointer;font-weight:700;color:#334155}
+    .wiki-page-details{margin-top:15px;padding-top:12px;border-top:1px solid #dce4f0}
+    .wiki-space-home{max-width:920px;margin:0 auto}
+    .wiki-space-hero{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:22px;border:1px solid #dce4f4;border-radius:14px;background:linear-gradient(125deg,#edf2ff,#fbfaff)}
+    .wiki-space-hero h1{margin:8px 0 0;font-size:clamp(25px,3vw,34px)}
+    .wiki-space-hero p{margin:7px 0 0;color:#52627c;overflow-wrap:anywhere}
+    .wiki-space-key{display:inline-block;padding:3px 8px;border-radius:8px;background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:700}
+    .wiki-space-page-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:22px 0 10px}
+    .wiki-space-page-heading h2{margin:0;font-size:19px}
+    .wiki-space-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(245px,100%),1fr));gap:10px}
+    .wiki-space-card{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;text-align:left;padding:14px;border:1px solid #dce4f0;border-radius:10px;background:#fff;color:#172033;font:inherit;cursor:pointer}
+    .wiki-space-card:hover,.wiki-space-card:focus-visible{background:#f4f6ff;border-color:#9298e7}
+    .wiki-space-card strong,.wiki-space-card .wiki-meta{display:block;overflow-wrap:anywhere}
+    .wiki-space-card .wiki-meta{margin-top:5px}
+    .wiki-page-links button{display:flex;gap:6px;align-items:center;justify-content:space-between}
+    .wiki-page-links button>span:first-child{overflow-wrap:anywhere}
+    .wiki-space-actions summary{list-style:none;cursor:pointer;padding:6px 8px;font-size:12px;box-shadow:none}
+    .wiki-space-actions button{display:block;margin-top:4px}
+    .wiki-add-page{margin-top:10px}
+    #dashboard:has(#moduleDetail:not([hidden]) .wiki-workspace)>header.top{display:none}
+    .wiki-template-picker>p{margin:0 0 14px;color:#52627c}
+    .wiki-template-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .wiki-template-card{display:grid;gap:7px;align-content:start;min-width:0;text-align:left;padding:14px;border:1px solid #dce4f0;border-radius:11px;background:#fff;color:#172033;font:inherit;cursor:pointer}
+    .wiki-template-card:hover,.wiki-template-card:focus-visible{background:#f1f4ff;border-color:#8f94e2}
+    .wiki-template-card>span:last-child{color:#52627c;font-size:12px}
+    .wiki-template-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:#e8ecff;color:#3730a3}
+    @media(max-width:720px){.wiki-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:430px){.wiki-template-grid{grid-template-columns:1fr}}
+    .wiki-template-editor-heading{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:14px;border:1px solid #dce4f4;border-radius:12px;background:linear-gradient(120deg,#edf2ff,#f9faff)}
+    .wiki-template-editor-heading h3{margin:0;color:#172033;font-size:17px}
+    .wiki-template-editor-heading p{margin:4px 0 0;color:#52627c;font-size:13px}
+    .wiki-template-meta,.wiki-template-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+    .wiki-template-meta{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+    .wiki-template-section{min-width:0;padding:12px;border:1px solid #dce4f0;border-radius:10px;background:#fff}
+    .wiki-template-section strong{color:#273856}
+    .wiki-template-section textarea{min-height:74px}
+    .wiki-template-section textarea::placeholder{color:#52627c}
+    .wiki-template-footer{position:sticky;bottom:0;z-index:1;margin-top:10px;padding:10px 0;background:#fff;border-top:1px solid #e2e8f0}
+    @media(max-width:640px){.wiki-template-meta,.wiki-template-sections{grid-template-columns:minmax(0,1fr)}}
+    .wiki-project-fields{min-width:0;margin:0 0 14px;padding:14px;border:1px solid #dce4f4;border-radius:12px;background:#f6f8ff}
+    .wiki-project-fields legend{padding:0 7px;color:#363d9d;font-weight:700}
+    .wiki-project-fields h3{margin:10px 0;color:#273856;font-size:15px}
+    .wiki-milestone-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .wiki-reader article h2{margin-top:24px;padding:7px 10px;border-left:3px solid #6366d8;border-radius:0 7px 7px 0;background:#f1f4ff;color:#273856}
+    .wiki-reader article table,.wiki-editor table{width:100%;border-collapse:collapse;margin:12px 0 20px;table-layout:fixed}
+    .wiki-reader article th,.wiki-reader article td,.wiki-editor th,.wiki-editor td{padding:9px 11px;border:1px solid #dce4f0;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+    .wiki-reader article th,.wiki-editor th{background:#edf1fb;color:#273856}
+    .wiki-plan-summary th,.wiki-plan-scope th{width:27%}
+    .wiki-plan-scope tr:nth-child(1)>th{background:#e3f7ef;color:#17634a}
+    .wiki-plan-scope tr:nth-child(2)>th{background:#fff3d7;color:#734d13}
+    .wiki-plan-scope tr:nth-child(3)>th{background:#fce9ed;color:#8b304c}
+    .wiki-plan-status{display:inline-block;padding:2px 8px;border-radius:12px;background:#edf1fb;color:#384b73}
+    .wiki-plan-progress{background:#fff1cb;color:#79480c}
+    .wiki-plan-complete{background:#dcfce7;color:#176340}
+    @media(max-width:640px){.wiki-milestone-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    .wiki-meeting-topic-fields+.wiki-meeting-topic-fields{margin-top:12px}
+    .wiki-template-callout{margin:14px 0;padding:12px 15px;border-radius:9px;border-left:4px solid #6872d5;background:#edf1ff;color:#273856}
+    .wiki-template-callout.wiki-template-positive{border-color:#248166;background:#e4f6ee;color:#174e3b}
+    .wiki-template-callout.wiki-template-attention{border-color:#ba5d3f;background:#fff0ea;color:#713725}
+    .wiki-template-callout.wiki-template-focus{border-color:#7261bf;background:#f0ebff;color:#443579}
+    .wiki-reader article .wiki-template-callout h2{margin:0;padding:0;background:none;border:0;color:inherit}
+    .wiki-template-callout :is(p,ul):last-child{margin-bottom:0}
+    .wiki-editor-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:9px}
+    .wiki-editor-toolbar .btn{min-height:36px;padding:6px 9px;font-size:12px;box-shadow:none}
+    .wiki-table-format{display:flex;align-items:center;gap:6px;color:#334155;font-size:12px}
+    .wiki-table-format select{padding:5px 8px;max-width:150px}
+    .wiki-editor td:focus-within{background:#f4f6ff}
+    .wiki-editor-toolbar .wiki-delete-action{color:#a42331}
   </style>
 </head>
 <body class="auth-pending">
@@ -9916,26 +10040,643 @@ paths:
   let databaseOverview = null, databaseConnections = [], databaseConnectionPage = 0, databaseConnectionPageSize = 10, databaseConnectionSearch = '';
   let databaseConnectionSearchTimer, databaseConnectionsRequest = 0;
   const databaseTestsInProgress = new Set();
-  function renderWikiModule() { return `<div class="wiki-workspace"><nav class="wiki-nav" aria-label="Wiki navigation"><div class="wiki-toolbar"><strong>Spaces</strong><button type="button" class="btn secondary" onclick="openWikiSpaceModal()">+ Space</button></div><input id="wikiSpaceSearch" type="search" placeholder="Search spaces" aria-label="Search spaces" oninput="renderWikiSpaces()" style="width:100%;margin-top:12px"><div id="wikiSpacesList" class="wiki-list"><div class="wiki-empty">Loading spaces…</div></div></nav><main class="wiki-main"><div id="wikiPageArea" class="wiki-empty">Select a space to begin.</div></main><aside class="wiki-info" id="wikiInfoPanel"><div class="wiki-toolbar"><strong>Page information</strong><button id="wikiInfoToggle" type="button" class="btn secondary" onclick="toggleWikiInfo()">Hide</button></div><div id="wikiPageInfo" class="wiki-meta" style="margin-top:18px">Select a page to view metadata.</div></aside></div>`; }
-  async function loadWikiSpaces() { const list=document.getElementById('wikiSpacesList'); if(!list)return; list.innerHTML='<div class="wiki-empty">Loading spaces…</div>'; try { wikiSpaces=await api('/api/wiki/spaces'); renderWikiSpaces(); const activeSpaces=wikiSpaces.filter(s=>s.status!=='ARCHIVED'); if(wikiSelectedSpaceId && activeSpaces.some(s=>s.id===wikiSelectedSpaceId)) await selectWikiSpace(wikiSelectedSpaceId); else if(activeSpaces[0]) await selectWikiSpace(activeSpaces[0].id); else { wikiSelectedSpaceId=''; wikiSelectedPageId=''; document.getElementById('wikiPageArea').innerHTML='<div class="wiki-empty">Create a space to begin documenting.</div>'; } } catch(e){ list.innerHTML=`<div class="wiki-empty">Unable to load spaces: ${escapeHtml(e.message)}</div>`; } }
+  function renderWikiModule() { return `<div class="wiki-workspace"><nav class="wiki-nav" aria-label="Wiki navigation"><div class="wiki-toolbar"><strong>Spaces</strong><button type="button" class="btn secondary" onclick="openWikiSpaceModal()">+ Space</button></div><input id="wikiSpaceSearch" type="search" placeholder="Search spaces" aria-label="Search spaces" oninput="renderWikiSpaces()" style="width:100%;margin-top:12px"><div id="wikiSpacesList" class="wiki-list"><div class="wiki-empty">Loading spaces…</div></div><div id="wikiPageTree"></div></nav><main class="wiki-main"><div id="wikiPageArea">Select a space to begin.</div></main><section class="wiki-info" id="wikiInfoPanel"><div class="wiki-toolbar"><strong>Page information</strong><button id="wikiInfoToggle" type="button" class="btn secondary" onclick="toggleWikiInfo()">Hide</button></div><div id="wikiPageInfo" class="wiki-meta" style="margin-top:18px">Select a page to view metadata.</div></section></div>`; }
+  async function loadWikiSpaces(preferredSpaceId = wikiSelectedSpaceId) { const list=document.getElementById('wikiSpacesList'); if(!list)return; list.innerHTML='<div class="wiki-empty">Loading spaces…</div>'; try { wikiSpaces=await api('/api/wiki/spaces'); renderWikiSpaces(); const activeSpaces=wikiSpaces.filter(s=>s.status!=='ARCHIVED'); if(preferredSpaceId && activeSpaces.some(s=>s.id===preferredSpaceId)) await selectWikiSpace(preferredSpaceId); else if(activeSpaces[0]) await selectWikiSpace(activeSpaces[0].id); else { wikiSelectedSpaceId=''; wikiSelectedPageId=''; document.getElementById('wikiPageArea').innerHTML='<div class="wiki-empty"><strong>Start your project wiki</strong><p>Create a space for your test plans, release notes, and team guides.</p><button type="button" class="btn primary" onclick="openWikiSpaceModal()">Create a space</button></div>'; } } catch(e){ list.innerHTML=`<div class="wiki-empty">Unable to load spaces: ${escapeHtml(e.message)}</div>`; } }
   function renderWikiSpaces() { const list=document.getElementById('wikiSpacesList'); if(!list)return; const query=(document.getElementById('wikiSpaceSearch')?.value||'').toLowerCase(); const spaces=wikiSpaces.filter(s=>s.status!=='ARCHIVED').filter(s=>(s.name+' '+s.key).toLowerCase().includes(query)); list.innerHTML=spaces.length?spaces.map(s=>`<button type="button" class="${s.id===wikiSelectedSpaceId?'active':''}" onclick="selectWikiSpace('${escapeHtml(s.id)}')"><strong>${escapeHtml(s.key)}</strong><br><small>${escapeHtml(s.name)}</small></button>`).join(''):'<div class="wiki-empty">No spaces found.</div>'; }
   async function selectWikiSpace(id) { wikiSelectedSpaceId=id; wikiSelectedPageId=''; renderWikiSpaces(); try { wikiPages=await api(`/api/wiki/spaces/${encodeURIComponent(id)}/pages`); renderWikiTree(); } catch(e){ document.getElementById('wikiPageArea').innerHTML=`<div class="wiki-empty">Unable to load pages: ${escapeHtml(e.message)}</div>`; } }
-  function renderWikiTree() { const space=wikiSpaces.find(s=>s.id===wikiSelectedSpaceId); const area=document.getElementById('wikiPageArea'); const nav=document.getElementById('wikiSpacesList'); if(!space||!area)return; const tree=(parent,depth=0)=>wikiPages.filter(p=>(p.parentPageId||'')===parent).map(p=>`<button type="button" class="${p.id===wikiSelectedPageId?'active':''}" onclick="selectWikiPage('${escapeHtml(p.id)}')">${depth?'↳ ':''}${escapeHtml(p.title)} <span class="wiki-status">${escapeHtml(p.status)}</span></button>${depth<50?`<div class="wiki-tree-child">${tree(p.id,depth+1)}</div>`:''}`).join(''); nav.innerHTML=`<div class="wiki-toolbar"><strong>${escapeHtml(space.key)}</strong><button type="button" class="btn secondary" onclick="openWikiSpaceModal()">+ Space</button><button type="button" class="btn secondary" onclick="wikiArchiveSpace()">Archive</button></div><button type="button" class="btn primary" style="width:100%;margin-top:10px" onclick="openWikiPageModal()">+ Create Page</button><input id="wikiSpaceSearch" type="search" placeholder="Search spaces" aria-label="Search spaces" oninput="renderWikiSpaces()" style="width:100%;margin-top:12px"><div class="wiki-list">${tree('')||'<div class="wiki-empty">No pages yet.</div>'}</div>`; if(!wikiSelectedPageId) area.innerHTML=`<div class="wiki-toolbar"><div><div class="wiki-meta">Space</div><h2>${escapeHtml(space.name)}</h2><p>${escapeHtml(space.description||'No description')}</p></div><button type="button" class="btn secondary" onclick="openWikiPageModal()">Create Page</button></div>`; }
+  function renderWikiTree() {
+    const space = wikiSpaces.find(item => item.id === wikiSelectedSpaceId);
+    const area = document.getElementById('wikiPageArea');
+    const nav = document.getElementById('wikiPageTree');
+    if (!space || !area || !nav) return;
+    const tree = (parent, depth = 0) => wikiPages.filter(page => (page.parentPageId || '') === parent)
+      .map(page => `<button type="button" class="${page.id === wikiSelectedPageId ? 'active' : ''}" data-page-id="${escapeHtml(page.id)}"><span>${escapeHtml(page.title)}</span><span class="wiki-status" data-status="${escapeHtml(page.status)}">${escapeHtml(page.status)}</span></button>${depth < 50 ? `<div class="wiki-tree-child">${tree(page.id, depth + 1)}</div>` : ''}`).join('');
+    nav.innerHTML = `<div class="wiki-toolbar"><strong>Pages</strong><details class="wiki-space-actions">
+      <summary class="btn secondary">Space actions</summary>
+      <button type="button" class="btn secondary" data-wiki-edit-space>Edit space</button>
+      <button type="button" class="btn secondary" onclick="wikiArchiveSpace()">Archive space</button>
+      </details></div><div class="wiki-list wiki-page-links">${tree('') || '<p class="wiki-meta">No pages yet.</p>'}</div>`;
+    nav.querySelector('[data-wiki-edit-space]').onclick = () => openWikiSpaceModal(space);
+    nav.querySelectorAll('[data-page-id]').forEach(button => button.onclick = () => selectWikiPage(button.dataset.pageId));
+    if (wikiSelectedPageId) {
+      const addPage = document.createElement('button');
+      addPage.type = 'button';
+      addPage.className = 'btn secondary wiki-add-page';
+      addPage.textContent = '+ Create page';
+      addPage.onclick = openWikiPageModal;
+      nav.appendChild(addPage);
+      return;
+    }
+    renderWikiSpaceHome(area, space);
+  }
+
+  function renderWikiSpaceHome(area, space) {
+    const pages = wikiPages.filter(page => page.status !== 'ARCHIVED');
+    const published = pages.filter(page => page.status === 'PUBLISHED').length;
+    const drafts = pages.filter(page => page.status === 'DRAFT').length;
+    const info = document.getElementById('wikiPageInfo');
+    if (info) info.textContent = 'Open a page to see its outline and details.';
+    area.innerHTML = `<div class="wiki-space-home">
+      <header class="wiki-space-hero">
+        <div><span class="wiki-space-key">${escapeHtml(space.key)}</span><h1>${escapeHtml(space.name)}</h1>
+          ${space.description ? `<p>${escapeHtml(space.description)}</p>` : ''}</div>
+        <button type="button" class="btn primary" onclick="openWikiPageModal()">+ Create page</button>
+      </header>
+      <div class="wiki-space-page-heading"><h2>Pages</h2><span class="wiki-meta">${published} published · ${drafts} drafts</span></div>
+      ${pages.length ? `<div class="wiki-space-cards">${pages.map(page => `<button type="button" class="wiki-space-card" data-page-id="${escapeHtml(page.id)}"><div><strong>${escapeHtml(page.title)}</strong><span class="wiki-meta">Updated ${escapeHtml(formatWikiDate(page.updatedAt))}</span></div><span class="wiki-status" data-status="${escapeHtml(page.status)}">${escapeHtml(page.status)}</span></button>`).join('')}</div>`
+        : '<div class="wiki-empty">Create your first page to start documenting this project.</div>'}
+    </div>`;
+    area.querySelectorAll('[data-page-id]').forEach(button => button.onclick = () => selectWikiPage(button.dataset.pageId));
+  }
   async function selectWikiPage(id) { try { const page=await api(`/api/wiki/pages/${encodeURIComponent(id)}`); wikiSelectedPageId=id; wikiPageVersion=page.version; renderWikiTree(); renderWikiPage(page); } catch(e){ notify('Unable to load page: '+e.message); } }
-  function renderWikiPage(page) { const area=document.getElementById('wikiPageArea'); if(!area)return; area.innerHTML=`<div class="wiki-toolbar"><div><div class="wiki-meta">${escapeHtml((wikiSpaces.find(s=>s.id===page.spaceId)||{}).name||'Wiki')} / ${escapeHtml(page.title)}</div><h1>${escapeHtml(page.title)}</h1><div class="wiki-meta">${escapeHtml(page.updatedBy||page.createdBy)} · ${escapeHtml(page.updatedAt)} · Version ${page.version}</div></div><div class="wiki-toolbar-actions"><button type="button" class="btn secondary" onclick="openWikiPageEditor()">Edit</button><button type="button" class="btn secondary" onclick="wikiArchivePage()">Archive</button></div></div><div style="margin:18px 0"><span class="wiki-status">${escapeHtml(page.status)}</span></div><article class="wiki-rendered-content">${page.content||'<p class="wiki-meta">This page has no content yet.</p>'}</article>`; document.getElementById('wikiPageInfo').innerHTML=`<dl><dt>Created by</dt><dd>${escapeHtml(page.createdBy)}</dd><dt>Updated by</dt><dd>${escapeHtml(page.updatedBy)}</dd><dt>Created</dt><dd>${escapeHtml(page.createdAt)}</dd><dt>Updated</dt><dd>${escapeHtml(page.updatedAt)}</dd><dt>Parent page</dt><dd>${escapeHtml(wikiPages.find(p=>p.id===page.parentPageId)?.title||'Root page')}</dd><dt>Linked project</dt><dd>Not linked</dd><dt>Integrations</dt><dd>User Stories · Test Cases · Defects · CI/CD (future links)</dd></dl>`; }
-  function openWikiSpaceModal(space=null) { const overlay=modalShell(space?'Edit Wiki Space':'Create Wiki Space',`<form onsubmit="event.preventDefault();saveWikiSpace(this)"><div class="user-story-form-grid"><div class="user-story-field"><label>Name</label><input name="name" required maxlength="120" value="${escapeHtml(space?.name||'')}"></div><div class="user-story-field"><label>Key</label><input name="key" required maxlength="20" value="${escapeHtml(space?.key||'')}"></div><div class="user-story-field full"><label>Description</label><textarea name="description" maxlength="500">${escapeHtml(space?.description||'')}</textarea></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button class="btn primary">Save Space</button></div></form>`); overlay.dataset.spaceId=space?.id||''; }
-  async function saveWikiSpace(form) { const overlay=form.closest('.modal-overlay'); const values={name:form.name.value.trim(),key:form.key.value.trim(),description:form.description.value.trim()}; try { const saved=await api(overlay.dataset.spaceId?`/api/wiki/spaces/${encodeURIComponent(overlay.dataset.spaceId)}`:'/api/wiki/spaces',{method:overlay.dataset.spaceId?'PUT':'POST',body:JSON.stringify(values)}); closeModalOverlay(overlay); notify('Wiki space saved.'); await loadWikiSpaces(); await selectWikiSpace(saved.id); } catch(e){ notify('Unable to save space: '+e.message); } }
-  function openWikiPageModal() { if(!wikiSelectedSpaceId){notify('Select a space first.');return;} const parents=wikiPages.filter(p=>p.status!=='ARCHIVED').map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.title)}</option>`).join(''); const overlay=modalShell('Create Wiki Page',`<form onsubmit="event.preventDefault();saveWikiPage(this,'DRAFT')"><div class="user-story-form-grid"><div class="user-story-field full"><label>Title</label><input name="title" required maxlength="200"></div><div class="user-story-field full"><label>Parent page</label><select name="parentPageId"><option value="">Root page</option>${parents}</select></div><div class="user-story-field full"><label>Content</label><textarea name="content" rows="12" placeholder="Write documentation…"></textarea></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button class="btn primary">Save Draft</button></div></form>`); overlay.dataset.newPage='true'; }
-  function openWikiPageEditor() { const page=wikiPages.find(p=>p.id===wikiSelectedPageId); if(!page)return; const overlay=modalShell('Edit Wiki Page',`<form onsubmit="event.preventDefault();saveWikiPage(this,document.getElementById('wikiPublishToggle')?.checked?'PUBLISHED':'DRAFT')"><div class="user-story-form-grid"><div class="user-story-field full"><label>Title</label><input name="title" required maxlength="200" value="${escapeHtml(page.title)}"></div><div class="user-story-field full"><label>Content</label><div class="wiki-editor-toolbar"><button type="button" class="btn secondary" onclick="document.execCommand('bold')"><strong>B</strong></button><button type="button" class="btn secondary" onclick="document.execCommand('italic')"><em>I</em></button><button type="button" class="btn secondary" onclick="document.execCommand('insertUnorderedList')">• List</button><button type="button" class="btn secondary" onclick="document.execCommand('formatBlock',false,'h2')">Heading</button></div><div id="wikiEditor" class="wiki-editor" contenteditable="true">${page.content||''}</div></div><label><input id="wikiPublishToggle" type="checkbox"> Publish</label></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button class="btn primary">Save Changes</button></div></form>`); overlay.dataset.pageId=page.id; }
-  async function saveWikiPage(form,status) { const overlay=form.closest('.modal-overlay'); const id=overlay.dataset.pageId; const values={spaceId:wikiSelectedSpaceId,parentPageId:form.parentPageId?.value||'',title:form.title.value.trim(),content:id?document.getElementById('wikiEditor').innerHTML:form.content.value,status,version:id?wikiPageVersion:undefined}; try { const saved=await api(id?`/api/wiki/pages/${encodeURIComponent(id)}`:'/api/wiki/pages',{method:id?'PUT':'POST',body:JSON.stringify(values)}); closeModalOverlay(overlay); notify(status==='PUBLISHED'?'Page published.':'Draft saved.'); wikiPageVersion=saved.version; await selectWikiSpace(saved.spaceId); await selectWikiPage(saved.id); } catch(e){ notify('Unable to save page: '+e.message); } }
+  function formatWikiDate(value) {
+    const date = new Date(value || '');
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString(undefined, {dateStyle:'medium'});
+  }
+
+  function renderWikiPage(page) {
+    const area = document.getElementById('wikiPageArea');
+    const info = document.getElementById('wikiPageInfo');
+    if (!area || !info) return;
+    const spaceName = wikiSpaces.find(space => space.id === page.spaceId)?.name || 'Wiki';
+    const parent = wikiPages.find(item => item.id === page.parentPageId);
+    const hasContent = Boolean(page.content?.trim());
+    area.innerHTML = `<div class="wiki-reader">
+      <nav class="wiki-breadcrumb" aria-label="Page location">
+        <button type="button" data-wiki-space>${escapeHtml(spaceName)}</button>
+        ${parent ? `<span aria-hidden="true">/</span><button type="button" data-wiki-parent>${escapeHtml(parent.title)}</button>` : ''}
+        <span aria-hidden="true">/</span><span aria-current="page">${escapeHtml(page.title)}</span>
+      </nav>
+      <header class="wiki-reader-header">
+        <div><span class="wiki-status" data-status="${escapeHtml(page.status)}">${escapeHtml(page.status)}</span>
+          <h1>${escapeHtml(page.title)}</h1>
+          <p class="wiki-meta">Updated ${escapeHtml(formatWikiDate(page.updatedAt))} · ${escapeHtml(page.updatedBy || page.createdBy)} · Version ${page.version}</p>
+        </div>
+        <div class="wiki-toolbar-actions"><button type="button" class="btn primary" onclick="openWikiPageEditor()">Edit</button>
+          <details class="wiki-page-actions"><summary class="btn secondary">More</summary>
+            <div class="wiki-page-action-menu">
+              <button type="button" class="btn secondary" onclick="wikiArchivePage()">Archive page</button>
+              <button type="button" class="btn secondary wiki-delete-action" onclick="wikiDeletePage(this)">Delete page</button>
+            </div>
+          </details>
+        </div>
+      </header>
+      <article class="wiki-rendered-content">${hasContent ? page.content : '<div class="wiki-empty"><strong>This page is empty</strong><p>Add content before sharing it with your team.</p><button type="button" class="btn secondary" onclick="openWikiPageEditor()">Add content</button></div>'}</article>
+    </div>`;
+    area.querySelector('[data-wiki-space]').onclick = () => selectWikiSpace(page.spaceId);
+    const parentLink = area.querySelector('[data-wiki-parent]');
+    if (parentLink) parentLink.onclick = () => selectWikiPage(parent.id);
+
+    const article = area.querySelector('article');
+    const headings = [...article.querySelectorAll('h1,h2,h3,h4')].filter(heading => heading.textContent.trim());
+    info.innerHTML = `<details open><summary>On this page</summary><div class="wiki-outline"></div></details>
+      <details class="wiki-page-details"><summary>Page details</summary><dl>
+        <dt>Created by</dt><dd>${escapeHtml(page.createdBy)}</dd>
+        <dt>Created</dt><dd>${escapeHtml(formatWikiDate(page.createdAt))}</dd>
+        <dt>Last updated</dt><dd>${escapeHtml(formatWikiDate(page.updatedAt))}</dd>
+        <dt>Parent page</dt><dd>${escapeHtml(parent?.title || 'Root page')}</dd>
+        <dt>Version</dt><dd>${page.version}</dd>
+      </dl></details>`;
+    const outline = info.querySelector('.wiki-outline');
+    if (!headings.length) outline.textContent = 'Add headings to build the page outline.';
+    for (const heading of headings) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = heading.textContent.trim();
+      button.onclick = () => {
+        heading.setAttribute('tabindex', '-1');
+        heading.focus({preventScroll:true});
+        heading.scrollIntoView({block:'start'});
+      };
+      outline.appendChild(button);
+    }
+  }
+  async function openWikiSpaceModal(space=null) {
+    const organizationId = tenantState.organizationId;
+    let projectOptionsHtml = '';
+    if (!space) {
+      try {
+        const activeProject = await ensureActiveProjectContext();
+        if (organizationId !== tenantState.organizationId) return;
+        projectOptionsHtml = projectOptions(activeProject);
+        if (!userStoryProjects.some(project => !project.archived)) {
+          notify('Create or join a project before creating a Wiki space.');
+          return;
+        }
+      } catch (error) {
+        notify('Unable to load Wiki projects: ' + error.message);
+        return;
+      }
+    }
+    const overlay=modalShell(space?'Edit Wiki Space':'Create Wiki Space',`<form onsubmit="event.preventDefault();saveWikiSpace(this)"><div class="user-story-form-grid">${space ? '' : `<label class="user-story-field full">Project<select name="projectId" required><option value="">Select a project</option>${projectOptionsHtml}</select></label>`}<div class="user-story-field"><label>Name</label><input name="name" required maxlength="120" value="${escapeHtml(space?.name||'')}"></div><div class="user-story-field"><label>Key</label><input name="key" required maxlength="20" value="${escapeHtml(space?.key||'')}"></div><div class="user-story-field full"><label>Description</label><textarea name="description" maxlength="500">${escapeHtml(space?.description||'')}</textarea></div></div><p class="form-error" role="alert"></p><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button class="btn primary">Save Space</button></div></form>`); overlay.dataset.spaceId=space?.id||''; overlay.dataset.organizationId=organizationId || ''; }
+  async function saveWikiSpace(form) {
+    const overlay = form.closest('.modal-overlay');
+    const button = form.querySelector('button[type="submit"], button:not([type])');
+    const error = form.querySelector('[role="alert"]');
+    if (button.disabled) return;
+    if (overlay.dataset.organizationId !== (tenantState.organizationId || '')) {
+      error.textContent = 'The active organization changed. Reopen this dialog.';
+      return;
+    }
+    const id = overlay.dataset.spaceId;
+    const fields = Object.fromEntries(new FormData(form));
+    const values = {name:fields.name.trim(), key:fields.key.trim(), description:fields.description.trim()};
+    if (!id) values.projectId = fields.projectId;
+    button.disabled = true;
+    error.textContent = '';
+    try {
+      const saved = await api(id ? '/api/wiki/spaces/' + encodeURIComponent(id) : '/api/wiki/spaces',
+        {method:id ? 'PUT' : 'POST', body:JSON.stringify(values)});
+      closeModalOverlay(overlay);
+      notify('Wiki space saved.');
+      await loadWikiSpaces(saved.id);
+    } catch (failure) {
+      error.textContent = 'Unable to save space: ' + failure.message;
+    } finally {
+      button.disabled = false;
+    }
+  }
+  const wikiPageTemplates = [
+    {title:'Project plan', layout:'project', icon:'▤', description:'Define scope, owners, and milestones.', sections:['Purpose','Scope','Milestones','Owners','Risks']},
+    {title:'Brainwriting', icon:'✎', description:'Collect ideas and agree on next steps.', sections:['Prompt','Ideas','Themes','Next steps']},
+    {title:'Meeting notes', layout:'meeting', icon:'☰', description:'Capture decisions and follow-ups.', sections:['Date','Participants','Goals','Brainstorm','Action items','Decisions','Related information']},
+    {title:'Team poster', icon:'◎', description:'Introduce your team and how you work.', sections:['Team mission','People and roles','How we work','Contact']},
+    {title:'Weekly status report', layout:'weekly', icon:'↗', description:'Share progress, blockers, and priorities.', sections:['Wins','Needs input','Focus','Notes','Important links']},
+    {title:'Presentation outline', layout:'presentation', icon:'▣', description:'Organize talking points into a page.', sections:['Agenda','Key points','Supporting evidence','Discussion','Takeaways']}
+  ];
+
+  function openWikiPageModal() {
+    if (!wikiSelectedSpaceId) { notify('Select a space first.'); return; }
+    const spaceId = wikiSelectedSpaceId;
+    const parents = wikiPages.filter(page => page.status !== 'ARCHIVED');
+    const overlay = modalShell('Create Wiki Page', `<div class="wiki-template-picker">
+      <p>Choose a template to start with ready-made sections.</p>
+      <div class="wiki-template-grid">${wikiPageTemplates.map((template, index) => `
+        <button type="button" class="wiki-template-card" data-wiki-template="${index}">
+          <span class="wiki-template-icon" aria-hidden="true">${template.icon}</span>
+          <strong>${escapeHtml(template.title)}</strong><span>${escapeHtml(template.description)}</span>
+        </button>`).join('')}</div>
+      <div class="user-story-modal-footer">
+        <button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button>
+        <button type="button" class="btn primary" data-wiki-blank>Start blank page</button>
+      </div>
+    </div>`);
+    overlay.dataset.spaceId = spaceId;
+    overlay.querySelectorAll('[data-wiki-template]').forEach(button => {
+      button.onclick = () => renderNewWikiPageForm(overlay, parents, wikiPageTemplates[Number(button.dataset.wikiTemplate)]);
+    });
+    overlay.querySelector('[data-wiki-blank]').onclick = () => renderNewWikiPageForm(overlay, parents);
+  }
+
+  function renderNewWikiPageForm(overlay, parents, template) {
+    const body = overlay.querySelector('.user-story-modal-body');
+    const prompts = {
+      Purpose:'What should this project achieve?', Scope:'What is included in this work?',
+      Milestones:'Add a milestone and target date.', Owners:'Who is responsible for each part?',
+      Risks:'What might delay the work?',
+      Prompt:'What question should the team explore?', Ideas:'Capture ideas as they come up.',
+      Themes:'Group related ideas.', 'Next steps':'What should happen next?',
+      Agenda:'List the topics for this meeting.', Attendees:'Who joined or was invited?',
+      Discussion:'Summarize the key points.', Decisions:'What did the team decide?',
+      'Action items':'Add an action, owner, and due date.',
+      'Team mission':'What does this team do?', 'People and roles':'Introduce the team members.',
+      'How we work':'Describe your working agreements.', Contact:'How should people reach the team?',
+      Highlights:'What went well this week?', Progress:'What moved forward?',
+      Blockers:'Where do you need help?', 'Next week':'What are the next priorities?',
+      Opening:'What should your audience know first?', 'Key points':'List your main talking points.',
+      'Wrap-up':'Summarize the takeaway or call to action.',
+      Date:'Enter the meeting date.', Participants:'List attendees.', Goals:'What should this meeting achieve?',
+      Brainstorm:'Capture ideas for discussion.', 'Related information':'Add supporting references.',
+      Wins:'List one achievement per line.', 'Needs input':'List decisions or help you need.', Focus:'List your next priorities.',
+      Notes:'Add context for the team.', 'Important links':'List relevant resources.',
+      'Supporting evidence':'Add data or examples for your key points.', Takeaways:'Summarize the main points.'
+    };
+    body.innerHTML = `<form class="wiki-template-editor" data-wiki-layout="${escapeHtml(template?.layout || '')}" onsubmit="event.preventDefault();saveWikiPage(this,'DRAFT')">
+      ${template ? `<header class="wiki-template-editor-heading">
+        <span class="wiki-template-icon" aria-hidden="true">${template.icon}</span>
+        <div><h3>${escapeHtml(template.title)}</h3><p>${escapeHtml(template.description)}</p></div>
+      </header>` : ''}
+      <div class="wiki-template-meta">
+        <label class="user-story-field">Title<input name="title" required maxlength="200" value="${escapeHtml(template?.title || '')}"></label>
+        <label class="user-story-field">Parent page<select name="parentPageId"><option value="">Root page</option>${parents.map(page => `<option value="${escapeHtml(page.id)}">${escapeHtml(page.title)}</option>`).join('')}</select></label>
+      </div>
+      ${template?.layout === 'project' ? renderWikiProjectFields() : ''}
+      ${template?.layout === 'meeting' ? renderWikiMeetingTopics() : ''}
+      ${template ? `<div class="wiki-template-sections">${template.sections.filter(heading => template.layout !== 'project' || !['Scope', 'Milestones'].includes(heading)).map(heading => `
+        <label class="user-story-field wiki-template-section"><strong>${escapeHtml(heading)}</strong><textarea rows="3" data-wiki-heading="${escapeHtml(heading)}" placeholder="${escapeHtml(prompts[heading] || 'Add your notes.')}"></textarea></label>`).join('')}</div>`
+        : '<label class="user-story-field wiki-template-section"><strong>Content</strong><textarea name="content" rows="12" placeholder="Write documentation…"></textarea></label>'}
+      <div class="user-story-modal-footer wiki-template-footer">
+        <button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button>
+        <button type="submit" class="btn primary">Save Draft</button>
+      </div>
+    </form>`;
+    body.scrollTop = 0;
+    body.querySelector('[name="title"]').focus({preventScroll:true});
+  }
+
+  const wikiProjectSummary = ['Lead','Approver','Contributors','Target date','Status'];
+  const wikiProjectScope = ['Must have','Nice to have','Out of scope'];
+  const wikiMilestoneColumns = ['Milestone','Owner','Due date','Status'];
+
+  function renderWikiProjectFields() {
+    return `<fieldset class="wiki-project-fields" data-wiki-project><legend>Project plan details</legend>
+      <div class="wiki-template-sections">${wikiProjectSummary.map((label, index) => `<label class="user-story-field">${label}
+        ${label === 'Status' ? '<select name="plan-4"><option>Not started</option><option>In progress</option><option>Complete</option></select>' :
+          `<input name="plan-${index}" type="${label === 'Target date' ? 'date' : 'text'}">`}</label>`).join('')}</div>
+      <h3>Scope</h3><div class="wiki-template-sections">${wikiProjectScope.map((label, index) =>
+        `<label class="user-story-field">${label}<textarea name="scope-${index}" rows="2"></textarea></label>`).join('')}</div>
+      <h3>Milestones</h3><div class="wiki-milestone-fields">${wikiMilestoneColumns.map((label, index) =>
+        `<label class="user-story-field">${label}<input name="milestone-${index}" type="${label === 'Due date' ? 'date' : 'text'}"></label>`).join('')}</div>
+    </fieldset>`;
+  }
+
+  function wikiProjectContent(form) {
+    const value = name => escapeHtml(form.elements.namedItem(name).value.trim()).replace(/\r?\n/g, '<br>') || '&nbsp;';
+    const detailRows = (labels, prefix) => labels.map((label, index) => '<tr><th scope="row">' +
+      label + '</th><td>' + value(prefix + index) + '</td></tr>').join('');
+    const status = form.elements.namedItem('plan-4').value;
+    const tone = status === 'Complete' ? 'complete' : status === 'In progress' ? 'progress' : 'pending';
+    const summary = detailRows(wikiProjectSummary.slice(0,-1), 'plan-') +
+      '<tr><th scope="row">Status</th><td><strong class="wiki-plan-status wiki-plan-' + tone + '">' +
+      value('plan-4') + '</strong></td></tr>';
+    const headingCells = wikiMilestoneColumns.map(label => '<th scope="col">' + label + '</th>').join('');
+    const milestone = wikiMilestoneColumns.map((_, index) => '<td>' + value('milestone-' + index) + '</td>').join('');
+    return '<h2>Project summary</h2><table class="wiki-plan-summary"><tbody>' + summary +
+      '</tbody></table><h2>Scope</h2><table class="wiki-plan-scope"><tbody>' + detailRows(wikiProjectScope, 'scope-') +
+      '</tbody></table><h2>Milestones</h2><table class="wiki-plan-milestones"><thead><tr>' + headingCells +
+      '</tr></thead><tbody><tr>' + milestone + '</tr></tbody></table>';
+  }
+
+  const wikiMeetingTopicColumns = ['Time','Topic','Presenter','Notes'];
+
+  function renderWikiMeetingTopics() {
+    return `<fieldset class="wiki-project-fields"><legend>Discussion topics</legend>
+      ${[0,1].map(row => `<div class="wiki-milestone-fields wiki-meeting-topic-fields">${wikiMeetingTopicColumns.map((label, column) =>
+        `<label class="user-story-field">${label}<input name="meeting-topic-${row}-${column}"></label>`).join('')}</div>`).join('')}
+    </fieldset>`;
+  }
+
+  function wikiMeetingTopicsContent(form) {
+    const headers = wikiMeetingTopicColumns.map(label => '<th scope="col">' + label + '</th>').join('');
+    const rows = [0,1].map(row => '<tr>' + wikiMeetingTopicColumns.map((_, column) =>
+      '<td>' + (escapeHtml(form.elements.namedItem('meeting-topic-' + row + '-' + column).value.trim()) || '&nbsp;') + '</td>'
+    ).join('') + '</tr>').join('');
+    return '<h2>Discussion topics</h2><table><thead><tr>' + headers + '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function newWikiPageContent(form) {
+    const paragraphs = value => value.trim().split(/\r?\n\s*\r?\n/)
+      .filter(Boolean).map(text => '<p>' + escapeHtml(text).replace(/\r?\n/g, '<br>') + '</p>').join('');
+    const sections = [...form.querySelectorAll('[data-wiki-heading]')];
+    if (!sections.length) return paragraphs(form.elements.namedItem('content').value);
+    const overview = form.querySelector('[data-wiki-project]') ? wikiProjectContent(form) : '';
+    const layout = form.dataset.wikiLayout;
+    const color = {Wins:'positive', 'Needs input':'attention', Focus:'focus', Decisions:'focus', Takeaways:'positive', Agenda:'focus'};
+    return overview + sections.map(section => {
+      const heading = section.dataset.wikiHeading;
+      const title = '<h2>' + escapeHtml(heading) + '</h2>';
+      const notes = paragraphs(section.value);
+      if (layout === 'meeting' && heading === 'Action items') return wikiMeetingTopicsContent(form) + title + notes;
+      if (layout === 'weekly' && ['Wins','Needs input','Focus'].includes(heading)) {
+        const entries = section.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        const list = entries.length ? '<ul>' + entries.map(line => '<li>' + escapeHtml(line) + '</li>').join('') + '</ul>' : '';
+        return '<section class="wiki-template-callout wiki-template-' + color[heading] + '">' + title + list + '</section>';
+      }
+      if ((layout === 'meeting' || layout === 'presentation') && color[heading]) {
+        return '<section class="wiki-template-callout wiki-template-' + color[heading] + '">' + title + notes + '</section>';
+      }
+      return title + notes;
+    }).join('');
+  }
+
+  function openWikiPageEditor() { const page=wikiPages.find(p=>p.id===wikiSelectedPageId); if(!page)return; const overlay=modalShell('Edit Wiki Page',`<form onsubmit="event.preventDefault();saveWikiPage(this,document.getElementById('wikiPublishToggle')?.checked?'PUBLISHED':'DRAFT')"><div class="user-story-form-grid"><div class="user-story-field full"><label>Title</label><input name="title" required maxlength="200" value="${escapeHtml(page.title)}"></div><div class="user-story-field full"><label>Content</label><div class="wiki-editor-toolbar"><button type="button" class="btn secondary" onclick="document.execCommand('bold')"><strong>B</strong></button><button type="button" class="btn secondary" onclick="document.execCommand('italic')"><em>I</em></button><button type="button" class="btn secondary" onclick="document.execCommand('insertUnorderedList')">• Bullets</button><button type="button" class="btn secondary" onclick="document.execCommand('insertOrderedList')">1. Numbered list</button><button type="button" class="btn secondary" onclick="document.execCommand('formatBlock',false,'h2')">Heading</button>
+      <label class="wiki-table-format">Table format <select aria-label="Table format"><option value="simple">Simple table</option><option value="actions">Action items</option><option value="status">Status tracker</option></select></label>
+      <button type="button" class="btn secondary" onclick="insertWikiEditorTable(this)">Insert table</button>
+      <button type="button" class="btn secondary" onclick="addWikiEditorTableRow(this)">Add table row</button>
+      <button type="button" class="btn secondary" onclick="changeWikiEditorTable(this,'delete-row')">Delete row</button>
+      <button type="button" class="btn secondary" onclick="changeWikiEditorTable(this,'add-column')">Add column</button>
+      <button type="button" class="btn secondary" onclick="changeWikiEditorTable(this,'delete-column')">Delete column</button>
+      <button type="button" class="btn secondary wiki-delete-action" onclick="changeWikiEditorTable(this,'delete-table')">Delete table</button></div>
+      <div id="wikiEditor" class="wiki-editor" contenteditable="true" role="textbox" aria-label="Wiki content" aria-multiline="true" onkeyup="rememberWikiEditorPosition(this)" onpointerup="rememberWikiEditorPosition(this)" oninput="rememberWikiEditorPosition(this)">${page.content||''}</div></div><label><input id="wikiPublishToggle" type="checkbox" ${page.status==='PUBLISHED'?'checked':''}> Publish</label></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button class="btn primary">Save Changes</button></div></form>`); overlay.dataset.pageId=page.id; overlay.dataset.version=page.version; }
+  const wikiEditorTableFormats = {
+    simple: ['Column 1', 'Column 2', 'Column 3'],
+    actions: ['Action item', 'Owner', 'Due date'],
+    status: ['Item', 'Status', 'Notes']
+  };
+
+  function wikiEditorSelection(editor) {
+    const selection = window.getSelection();
+    const anchor = selection?.anchorNode;
+    return anchor && editor.contains(anchor) ? anchor : editor._wikiAnchor;
+  }
+
+  function rememberWikiEditorPosition(editor) {
+    const anchor = window.getSelection()?.anchorNode;
+    if (anchor && editor.contains(anchor)) editor._wikiAnchor = anchor;
+  }
+
+  function focusWikiEditorCell(editor, cell) {
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editor._wikiAnchor = cell;
+  }
+
+  function createWikiEditorTable(format) {
+    const headers = wikiEditorTableFormats[format] || wikiEditorTableFormats.simple;
+    const table = document.createElement('table');
+    const heading = table.createTHead().insertRow();
+    for (const label of headers) {
+      const cell = document.createElement('th');
+      cell.scope = 'col';
+      cell.textContent = label;
+      heading.appendChild(cell);
+    }
+    const body = table.createTBody();
+    for (let index = 0; index < 2; index++) {
+      const row = body.insertRow();
+      for (const label of headers) row.insertCell().appendChild(document.createElement('br'));
+    }
+    return table;
+  }
+
+  function insertWikiEditorTable(button) {
+    const form = button.closest('form');
+    const editor = form.querySelector('#wikiEditor');
+    const format = form.querySelector('.wiki-table-format select').value;
+    const table = createWikiEditorTable(format);
+    let anchor = wikiEditorSelection(editor);
+    if (anchor && anchor !== editor && editor.contains(anchor)) {
+      while (anchor.parentNode !== editor) anchor = anchor.parentNode;
+      anchor.after(table);
+    } else {
+      editor.appendChild(table);
+    }
+    if (!table.nextSibling) {
+      const paragraph = document.createElement('p');
+      paragraph.appendChild(document.createElement('br'));
+      table.after(paragraph);
+    }
+    focusWikiEditorCell(editor, table.tBodies[0].rows[0].cells[0]);
+  }
+
+  function addWikiEditorTableRow(button) {
+    const editor = button.closest('form').querySelector('#wikiEditor');
+    const anchor = wikiEditorSelection(editor);
+    const element = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
+    const table = element?.closest('table');
+    if (!table || !editor.contains(table)) {
+      notify('Click a table cell before adding a row.');
+      return;
+    }
+    const current = element.closest('tr');
+    const body = current?.parentElement?.tagName === 'TBODY' ? current.parentElement : table.tBodies[0] || table.createTBody();
+    const columnCount = current?.cells.length || table.rows[0]?.cells.length || 1;
+    const row = body.insertRow(current?.parentElement === body ? current.sectionRowIndex + 1 : -1);
+    for (let index = 0; index < columnCount; index++) row.insertCell().appendChild(document.createElement('br'));
+    focusWikiEditorCell(editor, row.cells[0]);
+  }
+
+  function changeWikiEditorTable(button, action) {
+    const editor = button.closest('form').querySelector('#wikiEditor');
+    const anchor = wikiEditorSelection(editor);
+    const element = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
+    const cell = element?.closest('td,th');
+    const table = cell?.closest('table');
+    if (!table || !editor.contains(table)) {
+      notify('Click a cell in the table first.');
+      return;
+    }
+    if (action === 'delete-table') {
+      if (!confirm('Remove this table and all its contents from the page draft?')) return;
+      const paragraph = document.createElement('p');
+      paragraph.appendChild(document.createElement('br'));
+      table.replaceWith(paragraph);
+      focusWikiEditorCell(editor, paragraph);
+      return;
+    }
+    const rows = Array.from(table.rows);
+    const columns = rows[0].cells.length;
+    if (rows.some(row => row.cells.length !== columns || Array.from(row.cells).some(item => item.colSpan !== 1 || item.rowSpan !== 1))) {
+      notify('Row and column changes require a table without merged cells.');
+      return;
+    }
+    const row = cell.parentElement;
+    const index = cell.cellIndex;
+    if (action === 'delete-row') {
+      if (rows.length === 1) { notify('Use Delete table to remove the last row.'); return; }
+      if (!confirm('Remove this row and its contents from the page draft?')) return;
+      const alternative = rows[row.rowIndex + 1] || rows[row.rowIndex - 1];
+      row.remove();
+      focusWikiEditorCell(editor, alternative.cells[index]);
+      return;
+    }
+    if (action === 'delete-column') {
+      if (columns === 1) { notify('Use Delete table to remove the last column.'); return; }
+      if (!confirm('Remove this column and its contents from the page draft?')) return;
+      for (const item of rows) item.deleteCell(index);
+      focusWikiEditorCell(editor, row.cells[Math.min(index, columns - 2)]);
+      return;
+    }
+    for (const item of rows) {
+      const header = item.parentElement.tagName === 'THEAD';
+      const added = document.createElement(header ? 'th' : 'td');
+      if (header) {
+        added.scope = 'col';
+        added.textContent = 'New column';
+      } else {
+        added.appendChild(document.createElement('br'));
+      }
+      item.cells[index].after(added);
+    }
+    focusWikiEditorCell(editor, row.cells[index + 1]);
+  }
+
+  async function saveWikiPage(form,status) { const overlay=form.closest('.modal-overlay'); const id=overlay.dataset.pageId; const values={...(!id ? {spaceId:overlay.dataset.spaceId || wikiSelectedSpaceId,parentPageId:form.elements.namedItem('parentPageId')?.value||''} : {}),title:form.title.value.trim(),content:id?document.getElementById('wikiEditor').innerHTML:newWikiPageContent(form),status,version:id?Number(overlay.dataset.version):undefined}; try { const saved=await api(id?`/api/wiki/pages/${encodeURIComponent(id)}`:'/api/wiki/pages',{method:id?'PUT':'POST',body:JSON.stringify(values)}); closeModalOverlay(overlay); notify(status==='PUBLISHED'?'Page published.':'Draft saved.'); wikiPageVersion=saved.version; await selectWikiSpace(saved.spaceId); await selectWikiPage(saved.id); } catch(e){ notify('Unable to save page: '+e.message); } }
+  async function wikiDeletePage(button) {
+    const page = wikiPages.find(item => item.id === wikiSelectedPageId);
+    if (!page || button.disabled) return;
+    if (wikiPages.some(item => item.parentPageId === page.id)) {
+      notify('Move or delete child pages before deleting this page.');
+      return;
+    }
+    if (!confirm('Permanently delete “' + page.title + '”? This cannot be undone.')) return;
+    button.disabled = true;
+    try {
+      await api('/api/wiki/pages/' + encodeURIComponent(page.id), {
+        method:'DELETE',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({version:wikiPageVersion})
+      });
+      notify('Wiki page deleted.');
+      if (wikiSelectedSpaceId === page.spaceId) await selectWikiSpace(page.spaceId);
+    } catch (error) {
+      notify('Unable to delete page: ' + error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function wikiArchivePage(){ const page=wikiPages.find(p=>p.id===wikiSelectedPageId); if(!page||!confirm('Archive this page?'))return; try{await api(`/api/wiki/pages/${encodeURIComponent(page.id)}/archive`,{method:'POST',body:JSON.stringify({version:page.version})});notify('Page archived.');await selectWikiSpace(page.spaceId);}catch(e){notify('Unable to archive page: '+e.message);} }
   async function wikiArchiveSpace(){ const space=wikiSpaces.find(s=>s.id===wikiSelectedSpaceId); if(!space||!confirm('Archive this space?'))return; try{await api(`/api/wiki/spaces/${encodeURIComponent(space.id)}/archive`,{method:'POST'});notify('Space archived.');wikiSelectedSpaceId='';wikiSelectedPageId='';await loadWikiSpaces();}catch(e){notify('Unable to archive space: '+e.message);} }
-  function toggleWikiInfo(){ wikiInfoCollapsed=!wikiInfoCollapsed; const panel=document.getElementById('wikiInfoPanel'); const button=document.getElementById('wikiInfoToggle'); if(panel) panel.hidden=wikiInfoCollapsed; if(button) button.textContent=wikiInfoCollapsed?'Show':'Hide'; }
+  function toggleWikiInfo() {
+    const info = document.getElementById('wikiPageInfo');
+    const button = document.getElementById('wikiInfoToggle');
+    wikiInfoCollapsed = !wikiInfoCollapsed;
+    info.hidden = wikiInfoCollapsed;
+    button.textContent = wikiInfoCollapsed ? 'Show' : 'Hide';
+    button.setAttribute('aria-expanded', String(!wikiInfoCollapsed));
+  }
 
-  function renderDatabaseModule() { return `<div class="database-module"><nav class="database-subnav" aria-label="Database navigation"><button data-section="overview" type="button" class="active" onclick="showDatabaseSection('overview')">Overview</button><button data-section="connections" type="button" onclick="showDatabaseSection('connections')">Connections</button><button data-section="workspace" type="button" onclick="showDatabaseSection('workspace')">Workspace</button><button data-section="cases" type="button" onclick="showDatabaseSection('cases')">Database Test Cases</button><button data-section="data" type="button" onclick="showDatabaseSection('data')">Test Data</button><button data-section="history" type="button" onclick="showDatabaseSection('history')">Execution History</button><button data-section="reports" type="button" onclick="showDatabaseSection('reports')">Reports</button></nav><div id="databaseSectionBody"><div class="module-empty">Loading database overview…</div></div></div>`; }
+  const databaseEngines = {POSTGRESQL:'PostgreSQL', MYSQL:'MySQL', SQLSERVER:'SQL Server', ORACLE:'Oracle', SAMPLE:'Sample database'};
+
+  function renderDatabaseMenuBar() {
+    const menus = {
+      File: [['New connection', 'startDatabaseConnectionFromMenu()']],
+      Edit: [['Copy generated SQL', 'copyDatabasePreviewSql()'], ['Clear connection search', 'clearDatabaseMenuSearch()']],
+      Navigate: [['Overview', "showDatabaseSection('overview')"], ['Connections', "showDatabaseSection('connections')"], ['Workspace', "showDatabaseSection('workspace')"]],
+      Search: [['Find connections', 'focusDatabaseMenuSearch()']],
+      'SQL Editor': [['Open SQL preview', 'openDatabaseSqlPreview()'], ['Copy generated SQL', 'copyDatabasePreviewSql()']],
+      Database: [['Manage connections', "showDatabaseSection('connections')"], ['Refresh current view', 'refreshDatabaseMenuView()']],
+      Window: [['Open workspace', "showDatabaseSection('workspace')"], ['Back to dashboard', "location.hash='#dashboard'"]],
+      Help: [['Database workspace help', 'openDatabaseMenuHelp()']]
+    };
+    return `<div class="database-command-bar">
+      <nav class="database-command-menus" aria-label="Database menus" onclick="if(event.target.closest('button')) event.target.closest('details')?.removeAttribute('open')" onkeydown="if(event.key==='Escape' && event.target.closest('details[open]')) { const menu=event.target.closest('details'); menu.open=false; menu.querySelector('summary').focus(); }">
+        ${Object.entries(menus).map(([label, actions]) => `<details name="database-command"><summary>${label}</summary><div>${actions.map(([text, action]) => `<button type="button" onclick="${action}">${text}</button>`).join('')}</div></details>`).join('')}
+      </nav>
+      <div class="database-command-shortcuts" role="group" aria-label="Database shortcuts">
+        <details class="database-plug-menu" name="database-command" onclick="if(event.target.closest('button')) this.open=false" onkeydown="if(event.key==='Escape' && this.open){this.open=false;this.querySelector('summary').focus()}">
+          <summary class="btn primary" aria-label="Choose a database"><span aria-hidden="true">🔌</span> Connect <span aria-hidden="true">▾</span></summary>
+          <div class="database-plug-options">${Object.entries(databaseEngines).map(([key, name]) =>
+            `<button type="button" onclick="startDatabaseConnectionFromMenu('${key}')">${name}</button>`).join('')}
+            <button type="button" class="database-plug-wizard" onclick="startDatabaseConnectionFromMenu()">New Database Connection…</button>
+          </div>
+        </details>
+        <button type="button" class="btn secondary" onclick="showDatabaseSection('workspace')">Workspace</button>
+        <button type="button" class="btn secondary" onclick="openDatabaseSqlPreview()">SQL preview</button>
+        <button type="button" class="btn secondary" onclick="focusDatabaseMenuSearch()">Search</button>
+        <button type="button" class="btn secondary" onclick="refreshDatabaseMenuView()">Refresh</button>
+      </div>
+    </div>`;
+  }
+
+  function startDatabaseConnectionFromMenu(engine) {
+    showDatabaseSection('connections');
+    openDatabaseConnectionWizard(engine);
+  }
+
+  async function focusDatabaseMenuSearch() {
+    await showDatabaseSection('connections');
+    document.getElementById('databaseConnectionSearch')?.focus();
+  }
+
+  function clearDatabaseMenuSearch() {
+    databaseConnectionSearch = '';
+    databaseConnectionPage = 0;
+    return focusDatabaseMenuSearch();
+  }
+
+  function refreshDatabaseMenuView() {
+    const section = document.querySelector('.database-module')?.dataset.section || 'overview';
+    const refresh = document.querySelector('.db-tree-refresh');
+    if (section === 'workspace' && refresh) refresh.click();
+    else showDatabaseSection(section);
+  }
+
+  function openDatabaseSqlPreview() {
+    const preview = document.querySelector('.db-preview-body pre');
+    if (preview) {
+      preview.focus();
+      preview.scrollIntoView({block:'nearest'});
+      return;
+    }
+    if (!document.querySelector('.db-workspace')) showDatabaseSection('workspace');
+    notify('Select a table to see its generated SQL.');
+  }
+
+  async function copyDatabasePreviewSql() {
+    const sql = document.querySelector('.db-preview-body pre')?.textContent;
+    if (!sql) { openDatabaseSqlPreview(); return; }
+    try {
+      await navigator.clipboard.writeText(sql);
+      notify('Generated SQL copied.');
+    } catch (error) {
+      notify('Copy is unavailable here. Select the generated SQL and copy it manually.');
+    }
+  }
+
+  function openDatabaseMenuHelp() {
+    modalShell('Database workspace help', '<p>Use <strong>File → New connection</strong> to set up a database. Open <strong>Workspace</strong> and select a table to view its rows and copy its generated SQL.</p><p>The built-in sample is available without a database login.</p>');
+  }
+
+  function renderDatabaseModule() { return `<div class="database-module" data-section="overview">${renderDatabaseMenuBar()}<div id="databaseSectionBody"><div class="module-empty">Loading database overview…</div></div><div class="database-connection-actions" popover aria-label="Connection actions"></div></div>`; }
   async function loadDatabaseOverview() { const body=document.getElementById('databaseSectionBody'); if(!body)return; body.innerHTML='<div class="module-empty">Loading database overview…</div>'; try { databaseOverview=await api('/api/database/overview'); renderDatabaseOverview(); } catch(e){ body.innerHTML=`<div class="module-empty">Unable to load database overview: ${escapeHtml(e.message)}</div>`; } }
   function renderDatabaseOverview() { const body=document.getElementById('databaseSectionBody'); const data=databaseOverview||{}; if(!body)return; const results=data.results||{}; const latest=data.latestExecution; const failures=Array.isArray(data.recentConnectionFailures)?data.recentConnectionFailures:[]; body.innerHTML=`<div class="module-actions"><button type="button" class="btn secondary" onclick="loadDatabaseOverview()">🔄 Refresh</button></div><div class="module-stats"><div class="module-stat"><div class="module-stat-value">${data.configuredConnections??0}</div><div class="module-stat-label">Configured Connections</div></div><div class="module-stat"><div class="module-stat-value">${data.connectedConnections??0}</div><div class="module-stat-label">Connected</div></div><div class="module-stat"><div class="module-stat-value">${data.databaseTestCases??0}</div><div class="module-stat-label">Database Test Cases</div></div><div class="module-stat"><div class="module-stat-value">${data.databaseAssets??0}</div><div class="module-stat-label">Discovered SQL Assets</div></div></div><div class="database-overview-grid"><section class="panel"><div class="panel-head"><h2>Execution results</h2></div><div class="database-result-grid"><div><strong>${results.PASSED||0}</strong><span>Passed</span></div><div><strong>${results.FAILED||0}</strong><span>Failed</span></div><div><strong>${results.SKIPPED||0}</strong><span>Skipped</span></div><div><strong>${results.NOT_RUN||0}</strong><span>Not run</span></div></div></section><section class="panel"><div class="panel-head"><h2>Latest database execution</h2></div>${latest?`<p><strong>${escapeHtml(latest.selection||latest.id||'Database run')}</strong></p><p class="muted">${escapeHtml(latest.status||'Unknown')} · ${escapeHtml(latest.startedAt||'')}</p>`:'<div class="module-empty">No database execution recorded.</div>'}</section><section class="panel"><div class="panel-head"><h2>Connection failures</h2></div>${failures.length?failures.map(item=>`<div class="database-failure"><strong>${escapeHtml(item.selection||item.id||'Connection')}</strong><span>${escapeHtml(item.error||item.status||'Failed')}</span></div>`).join(''):'<div class="module-empty">No connection failures recorded.</div>'}</section><section class="panel"><div class="panel-head"><h2>Database engine distribution</h2></div>${data.engineDistribution?.length?data.engineDistribution.map(item=>`<div class="database-failure"><strong>${escapeHtml(item.engine)}</strong><span>${item.count}</span></div>`).join(''):'<div class="module-empty">No database connections configured yet.</div>'}</section></div>`; }
-  function showDatabaseSection(section, preferredConnection) { document.querySelectorAll('.database-subnav button').forEach(button=>button.classList.toggle('active',button.dataset.section===section)); if(section==='overview'){loadDatabaseOverview();return;} if(section==='connections'){loadDatabaseConnections();return;} if(section==='workspace'){openDatabaseWorkspace(preferredConnection);return;} const labels={sql:'The read-only SQL Editor is planned for Phase 3.',schema:'Schema Explorer is planned for Phase 3.',cases:'Database Test Cases will reuse the existing TCM in Phase 4.',data:'Test Data management is planned for Phase 6.',history:'Database execution history will reuse the existing run store in Phase 4.',reports:'Database reporting will be added with execution integration in Phase 5.'}; const body=document.getElementById('databaseSectionBody'); if(body)body.innerHTML=`<div class="panel"><div class="panel-head"><h2>${escapeHtml(section[0].toUpperCase()+section.slice(1))}</h2></div><div class="module-empty">${escapeHtml(labels[section]||'This Database section is not available yet.')}</div></div>`; }
+  function showDatabaseSection(section, preferredConnection) {
+    const module = document.querySelector('.database-module');
+    if (!module) return;
+    module.querySelector(':popover-open')?.hidePopover();
+    module.dataset.section = section;
+    if (section === 'connections') return loadDatabaseConnections();
+    if (section === 'workspace') return openDatabaseWorkspace(preferredConnection);
+    return loadDatabaseOverview();
+  }
+
+  function openDatabaseConnectionActions(event, id, status) {
+    event.preventDefault();
+    const module = document.querySelector('.database-module');
+    const menu = module.querySelector('.database-connection-actions');
+    if (menu.matches(':popover-open')) menu.hidePopover();
+    const trigger = event.currentTarget;
+    const fromWorkspace = module.dataset.section === 'workspace';
+    const connected = status === 'CONNECTED';
+    const actions = [
+      ['Browse tables', async () => {
+        try {
+          const connection = id === 'sample' ? null : await getDatabaseMenuConnection(id);
+          if (connection && !connection.readOnly) { notify('Enable read-only mode to browse this connection.'); return; }
+          showDatabaseSection('workspace', connection);
+        } catch (error) { notify(error.message); }
+      }]
+    ];
+    if (id !== 'sample') {
+      actions.push(
+        ['Edit Connection', async () => {
+          try { openDatabaseConnectionModal(id, await getDatabaseMenuConnection(id)); }
+          catch (error) { notify(error.message); }
+        }],
+        ['Test Connection', () => testDatabaseConnection(id)],
+        [connected ? 'Disconnect' : 'Connect', () => connectDatabaseConnection(id, connected ? 'disconnect' : 'connect')],
+        ['Delete Connection', () => deleteDatabaseConnection(id)]
+      );
+    }
+    actions.push(['Refresh', () => fromWorkspace ? refreshDatabaseMenuView() : loadDatabaseConnections()]);
+    menu.replaceChildren();
+    for (const [label, action] of actions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.onclick = () => { menu.hidePopover(); action(); };
+      menu.appendChild(button);
+    }
+    menu.showPopover();
+    const anchor = trigger.getBoundingClientRect();
+    const mouse = event.type === 'contextmenu' && (event.clientX || event.clientY);
+    menu.style.left = Math.max(4, Math.min(mouse ? event.clientX : anchor.left, innerWidth - menu.offsetWidth - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(mouse ? event.clientY : anchor.bottom, innerHeight - menu.offsetHeight - 4)) + 'px';
+    menu.firstElementChild.focus();
+  }
+
+  function getDatabaseMenuConnection(id) {
+    return api('/api/database/connections/' + encodeURIComponent(id) + '?' +
+      new URLSearchParams({organizationId:tenantState.organizationId}));
+  }
+
   function queueDatabaseConnectionSearch(value) {
     databaseConnectionSearch = value;
     databaseConnectionPage = 0;
@@ -9951,15 +10692,22 @@ paths:
     body.innerHTML = `<div class="db-workspace"><nav class="db-navigator" aria-label="Database navigator"><div class="db-pane-heading"><h3>Database navigator</h3><button type="button" class="btn secondary db-tree-refresh">Refresh</button></div>
       <select aria-label="Workspace connection"><option value="sample">QA Runner Sample Database (H2)</option></select>
       <p class="muted db-workspace-hint" role="status">Sample data uses the built-in driver and needs no database login.</p>
-      <div class="db-objects" aria-live="polite"></div></nav>
+      <button type="button" class="btn secondary db-current-connection"></button><div class="muted db-current-connection-status" role="status"></div><div class="db-objects" aria-live="polite"></div></nav>
       <section class="db-preview"><div class="db-pane-heading"><h3>Data preview</h3><span class="db-preview-mode">Read only</span></div><div class="db-preview-body" aria-live="polite">Select a connection and a table.</div></section></div>`;
     const workspace = body.firstElementChild;
     const selector = workspace.querySelector('select');
     const objects = workspace.querySelector('.db-objects');
+    const connectionButton = workspace.querySelector('.db-current-connection');
+    const connectionStatus = workspace.querySelector('.db-current-connection-status');
     const preview = workspace.querySelector('.db-preview-body');
     const isCurrent = () => workspace.isConnected && organizationId === tenantState.organizationId;
     selector.onchange = async () => {
       const id = selector.value;
+      const option = selector.selectedOptions[0];
+      connectionButton.textContent = option.textContent + ' ▾';
+      connectionStatus.id = id === 'sample' ? '' : 'db-test-' + id;
+      connectionStatus.textContent = '';
+      connectionButton.onclick = connectionButton.oncontextmenu = event => openDatabaseConnectionActions(event, id, option.dataset.status);
       const request = Symbol();
       workspace.navigationRequest = request;
       workspace.selection = null;
@@ -10013,7 +10761,9 @@ paths:
     };
     workspace.querySelector('.db-tree-refresh').onclick = selector.onchange;
     if (preferredConnection?.readOnly) {
-      selector.add(new Option(preferredConnection.name + ' · ' + preferredConnection.type, preferredConnection.id));
+      const option = new Option(preferredConnection.name + ' · ' + preferredConnection.type, preferredConnection.id);
+      option.dataset.status = preferredConnection.status || '';
+      selector.add(option);
       selector.value = preferredConnection.id;
     }
     await selector.onchange();
@@ -10023,7 +10773,9 @@ paths:
       const data = await api('/api/database/connections?' + query);
       if (!isCurrent()) return;
       for (const item of (data.items || []).filter(item => item.readOnly && item.id !== preferredConnection?.id)) {
-      selector.add(new Option(item.name + ' · ' + item.type, item.id));
+      const option = new Option(item.name + ' · ' + item.type, item.id);
+      option.dataset.status = item.status || '';
+      selector.add(option);
     }
     } catch (error) {
       if (isCurrent()) workspace.querySelector('.db-workspace-hint').textContent =
@@ -10035,7 +10787,7 @@ paths:
     const columns = result.columns.map(label => '<th scope="col">' + escapeHtml(label) + '</th>').join('');
     const rows = result.rows.map(row => '<tr>' + row.map(value => '<td>' +
       (value === null ? '<em>NULL</em>' : escapeHtml(value)) + '</td>').join('') + '</tr>').join('');
-    panel.innerHTML = '<pre>' + escapeHtml(result.sql) + '</pre><p>' + result.rows.length +
+    panel.innerHTML = '<pre tabindex="0" aria-label="Generated SQL">' + escapeHtml(result.sql) + '</pre><p>' + result.rows.length +
       (result.limited ? ' rows shown · Preview limited' : ' rows') +
       '</p><div class="db-results" tabindex="0" role="region" aria-label="Preview results"><table><thead><tr>' +
       columns + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
@@ -10054,7 +10806,7 @@ paths:
       body.innerHTML = '<div class="module-empty">Loading database connections…</div>';
     }
     const isCurrent = () => request === databaseConnectionsRequest && organizationId === tenantState.organizationId
-      && document.querySelector('.database-subnav [data-section="connections"]')?.classList.contains('active');
+      && document.querySelector('.database-module')?.dataset.section === 'connections';
     const query = new URLSearchParams({organizationId, search: databaseConnectionSearch,
       page: databaseConnectionPage, pageSize: databaseConnectionPageSize});
     try {
@@ -10082,12 +10834,13 @@ paths:
     }
   }
 
-  function renderDatabaseConnections(result={total:databaseConnections.length,page:databaseConnectionPage,pageSize:databaseConnectionPageSize}){const body=document.getElementById('databaseSectionBody');if(!body)return;const signedIn=Boolean(authState.user);const rows=databaseConnections.map(c=>`<tr><td><strong>${escapeHtml(c.name)}</strong><div class="muted">${escapeHtml(c.host)}:${c.port}/${escapeHtml(c.databaseName)}</div></td><td>${escapeHtml(c.type)}</td><td>${escapeHtml(c.environment)}</td><td><span class="status-badge">${escapeHtml(c.status||'DISCONNECTED')}</span></td><td>${c.readOnly?'Read-only':'Restricted'}</td><td><div class="database-row-actions"><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="testDatabaseConnection('${escapeHtml(c.id)}')">Test</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="connectDatabaseConnection('${escapeHtml(c.id)}','${c.status==='CONNECTED'?'disconnect':'connect'}')">${c.status==='CONNECTED'?'Disconnect':'Connect'}</button><button class="btn secondary" type="button" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionModal('${escapeHtml(c.id)}')">Edit</button><button class="btn danger" type="button" ${signedIn?'':'disabled'} onclick="deleteDatabaseConnection('${escapeHtml(c.id)}')">Delete</button></div><div id="db-test-${escapeHtml(c.id)}" class="muted" role="status"></div></td></tr>`).join('');const total=Number(result.total||0),from=total?result.page*result.pageSize+1:0,to=Math.min((result.page+1)*result.pageSize,total);body.innerHTML=`<div class="database-connections-toolbar"><div><h2>Connections</h2><p class="muted">Credentials are encrypted and never returned to the browser.</p></div><div class="database-toolbar-actions"><input type="search" placeholder="Search connections" aria-label="Search connections" value="${escapeHtml(databaseConnectionSearch)}" id="databaseConnectionSearch" oninput="queueDatabaseConnectionSearch(this.value)"><select aria-label="Rows per page" onchange="databaseConnectionPageSize=Number(this.value);databaseConnectionPage=0;loadDatabaseConnections()"><option value="10" ${databaseConnectionPageSize===10?'selected':''}>10</option><option value="20" ${databaseConnectionPageSize===20?'selected':''}>20</option><option value="50" ${databaseConnectionPageSize===50?'selected':''}>50</option></select><button type="button" class="btn primary" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionWizard()">+ Add Connection</button></div></div><div class="tablewrap"><table class="instructions-table"><thead><tr><th>Name</th><th>Type</th><th>Environment</th><th>Status</th><th>Access</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="module-empty">No database connections configured.</div></td></tr>'}</tbody></table></div><div class="database-pagination"><span>Showing ${from}–${to} of ${total}</span><button type="button" class="btn secondary" ${databaseConnectionPage<1?'disabled':''} onclick="databaseConnectionPage--;loadDatabaseConnections()">Previous</button><button type="button" class="btn secondary" ${(to>=total||!total)?'disabled':''} onclick="databaseConnectionPage++;loadDatabaseConnections()">Next</button></div>${signedIn?'':'<div class="database-auth-note">Sign in with an authorized team role to create, edit, test or delete connections.</div>'}`;}
-  function openDatabaseConnectionWizard() {
+  function renderDatabaseConnections(result={total:databaseConnections.length,page:databaseConnectionPage,pageSize:databaseConnectionPageSize}){const body=document.getElementById('databaseSectionBody');if(!body)return;const signedIn=Boolean(authState.user);const rows=databaseConnections.map(c=>`<tr data-connection-id="${escapeHtml(c.id)}" data-status="${escapeHtml(c.status || '')}" oncontextmenu="openDatabaseConnectionActions(event,this.dataset.connectionId,this.dataset.status)"><td><strong>${escapeHtml(c.name)}</strong><div class="muted">${escapeHtml(c.host)}:${c.port}/${escapeHtml(c.databaseName)}</div></td><td>${escapeHtml(c.type)}</td><td>${escapeHtml(c.environment)}</td><td><span class="status-badge">${escapeHtml(c.status||'DISCONNECTED')}</span></td><td>${c.readOnly?'Read-only':'Restricted'}</td><td><div class="database-row-actions"><button class="btn secondary" type="button" onclick="const row=this.closest('tr');openDatabaseConnectionActions(event,row.dataset.connectionId,row.dataset.status)">Actions ▾</button></div><div id="db-test-${escapeHtml(c.id)}" class="muted" role="status"></div></td></tr>`).join('');const total=Number(result.total||0),from=total?result.page*result.pageSize+1:0,to=Math.min((result.page+1)*result.pageSize,total);body.innerHTML=`<div class="database-connections-toolbar"><div><h2>Connections</h2><p class="muted">Credentials are encrypted and never returned to the browser.</p></div><div class="database-toolbar-actions"><input type="search" placeholder="Search connections" aria-label="Search connections" value="${escapeHtml(databaseConnectionSearch)}" id="databaseConnectionSearch" oninput="queueDatabaseConnectionSearch(this.value)"><select aria-label="Rows per page" onchange="databaseConnectionPageSize=Number(this.value);databaseConnectionPage=0;loadDatabaseConnections()"><option value="10" ${databaseConnectionPageSize===10?'selected':''}>10</option><option value="20" ${databaseConnectionPageSize===20?'selected':''}>20</option><option value="50" ${databaseConnectionPageSize===50?'selected':''}>50</option></select><button type="button" class="btn primary" ${signedIn?'':'disabled'} onclick="openDatabaseConnectionWizard()">+ Add Connection</button></div></div><div class="tablewrap"><table class="instructions-table"><thead><tr><th>Name</th><th>Type</th><th>Environment</th><th>Status</th><th>Access</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="module-empty">No database connections configured.</div></td></tr>'}</tbody></table></div><div class="database-pagination"><span>Showing ${from}–${to} of ${total}</span><button type="button" class="btn secondary" ${databaseConnectionPage<1?'disabled':''} onclick="databaseConnectionPage--;loadDatabaseConnections()">Previous</button><button type="button" class="btn secondary" ${(to>=total||!total)?'disabled':''} onclick="databaseConnectionPage++;loadDatabaseConnections()">Next</button></div>${signedIn?'':'<div class="database-auth-note">Sign in with an authorized team role to create, edit, test or delete connections.</div>'}`;}
+  function openDatabaseConnectionWizard(preselectedEngine) {
     const organizationId = tenantState.organizationId;
-    const engines = {POSTGRESQL:'PostgreSQL', MYSQL:'MySQL', SQLSERVER:'SQL Server', ORACLE:'Oracle', SAMPLE:'Sample database'};
-    let engine = 'POSTGRESQL';
-    let step = 0;
+    const engines = databaseEngines;
+    const preselected = Object.hasOwn(engines, preselectedEngine);
+    let engine = preselected ? preselectedEngine : 'POSTGRESQL';
+    let step = preselected ? 1 : 0;
     let tested = null;
     const overlay = modalShell('New database connection', `<div class="db-wizard">
       <div class="db-wizard-steps" aria-label="Setup steps"><span>1. Database</span><span>2. Driver</span><span>3. Settings</span></div>
@@ -10102,8 +10855,10 @@ paths:
             <label class="user-story-field">Database / service name<input name="databaseName" required></label>
             <label class="user-story-field">Host<input name="host" value="localhost" required></label>
             <label class="user-story-field">Port<input name="port" type="number" min="1" max="65535" required></label>
-            <label class="user-story-field">Database username<input name="username" autocomplete="off" required></label>
-            <label class="user-story-field">Database password<input name="password" type="password" autocomplete="new-password" required></label>
+            <div class="db-wizard-auth">
+              <label class="user-story-field">Database username<input name="username" autocomplete="off" required></label>
+              <label class="user-story-field">Database password<input name="password" type="password" autocomplete="new-password" required></label>
+            </div>
           </div>
           <details><summary>Advanced and TLS</summary><div class="user-story-form-grid">
             <label class="user-story-field">Environment<select name="environment"><option>LOCAL</option><option>QA</option><option>STAGING</option><option>PRODUCTION</option></select></label>
@@ -10150,7 +10905,7 @@ paths:
       engine = key;
       render();
     }
-    form.elements.namedItem('port').value = databaseDefaultPorts[engine];
+    form.elements.namedItem('port').value = databaseDefaultPorts[engine] || '';
     choices.forEach(button => button.onclick = () => selectEngine(button.dataset.engine));
     find('input[type="search"]').oninput = event => {
       const query = event.target.value.trim().toLowerCase();
@@ -10221,16 +10976,147 @@ paths:
     render();
   }
 
-  function openDatabaseConnectionModal(id=''){const item=databaseConnections.find(c=>c.id===id);const types=Object.keys(databaseDefaultPorts);const overlay=modalShell(item?'Edit Database Connection':'Add Database Connection',`<form id="databaseConnectionForm" onsubmit="event.preventDefault();saveDatabaseConnection(this)"><div class="user-story-form-grid"><div class="user-story-field"><label>Connection name</label><input name="name" required maxlength="160" value="${escapeHtml(item?.name||'')}"></div><div class="user-story-field"><label>Database type</label><select name="type" onchange="updateDatabaseDefaultPort(this.form)">${types.map(t=>`<option value="${t}" ${t===item?.type?'selected':''}>${t}</option>`).join('')}</select></div><div class="user-story-field"><label>Host</label><input name="host" required value="${escapeHtml(item?.host||'localhost')}"></div><div class="user-story-field"><label>Port</label><input name="port" type="number" min="1" max="65535" required value="${item?.port || databaseDefaultPorts.MYSQL}"></div><div class="user-story-field"><label>Database / service name</label><input name="databaseName" required value="${escapeHtml(item?.databaseName||'')}"></div><div class="user-story-field"><label>Username</label><input name="username" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Password</label><input name="password" type="password" value="" placeholder="${item?'Leave blank to keep current':''}" ${item?'':'required'}></div><div class="user-story-field"><label>Environment</label><select name="environment">${['LOCAL','QA','STAGING','PRODUCTION'].map(x=>`<option ${x===(item?.environment||'LOCAL')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>TLS / SSL</label><select name="tlsMode">${['VERIFY','REQUIRED','DISABLED'].map(x=>`<option ${x===(item?.tlsMode||'VERIFY')?'selected':''}>${x}</option>`).join('')}</select></div><div class="user-story-field"><label>Connection timeout (seconds)</label><input name="connectionTimeoutSeconds" type="number" min="1" max="60" value="${item?.connectionTimeoutSeconds||5}"></div><div class="user-story-field"><label><input name="readOnly" type="checkbox" ${item?.readOnly!==false?'checked':''}> Read-only mode</label></div></div><div id="databaseConnectionError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="databaseConnectionSave">${item?'Save Changes':'Add Connection'}</button></div></form>`);overlay.dataset.connectionId=id;}
   const databaseDefaultPorts = {MYSQL:3306, POSTGRESQL:5432, SQLSERVER:1433, ORACLE:1521};
 
-  function updateDatabaseDefaultPort(form) {
-    form.elements.namedItem('port').value = databaseDefaultPorts[form.elements.namedItem('type').value];
+  function openDatabaseConnectionModal(id, selectedConnection) {
+    const item = selectedConnection || databaseConnections.find(connection => connection.id === id);
+    if (!item) { notify('Connection not found. Refresh the list and try again.'); return; }
+    const type = databaseEngines[item.type] || item.type;
+    const organizationId = tenantState.organizationId;
+    const overlay = modalShell('Edit Connection', `<div class="db-edit-dialog">
+      <div class="db-edit-heading"><div><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(type)} JDBC</span></div><span class="db-preview-mode">${item.readOnly ? 'Read only' : 'Connection settings'}</span></div>
+      <div class="db-edit-tabs" role="group" aria-label="Connection settings">
+        <button type="button" class="btn secondary" data-page="main">Main</button>
+        <button type="button" class="btn secondary" data-page="advanced">Advanced</button>
+        <button type="button" class="btn secondary" data-page="driver">Driver</button>
+      </div>
+      <form autocomplete="off">
+        <section data-panel="main">
+          <h3>Server</h3>
+          <div class="user-story-form-grid">
+            <label class="user-story-field">Host<input name="host" required value="${escapeHtml(item.host)}"></label>
+            <label class="user-story-field">Port<input name="port" type="number" min="1" max="65535" required value="${item.port}"></label>
+            <label class="user-story-field">Database / service name<input name="databaseName" required value="${escapeHtml(item.databaseName)}"></label>
+            <label class="user-story-field">Connection name<input name="name" required maxlength="160" value="${escapeHtml(item.name)}"></label>
+          </div>
+          <p class="db-edit-url" hidden><code></code></p>
+          <h3>Authentication</h3>
+          <div class="user-story-form-grid db-edit-auth-fields">
+            <label class="user-story-field">Database username<input name="username" autocomplete="off" placeholder="Leave blank to keep saved username"></label>
+            <label class="user-story-field">Database password<input name="password" type="password" autocomplete="new-password" placeholder="Leave blank to keep saved password"></label>
+          </div>
+        </section>
+        <section data-panel="advanced" hidden>
+          <h3>Connection options</h3>
+          <div class="user-story-form-grid">
+            <label class="user-story-field">Environment<select name="environment">${['LOCAL','QA','STAGING','PRODUCTION'].map(option => `<option ${option === item.environment ? 'selected' : ''}>${option}</option>`).join('')}</select></label>
+            <label class="user-story-field">TLS mode<select name="tlsMode">${['VERIFY','REQUIRED','DISABLED'].map(option => `<option ${option === item.tlsMode ? 'selected' : ''}>${option}</option>`).join('')}</select></label>
+            <label class="user-story-field">Connection timeout (seconds)<input name="connectionTimeoutSeconds" type="number" min="1" max="60" required value="${item.connectionTimeoutSeconds || 5}"></label>
+            <label class="db-edit-check"><input name="readOnly" type="checkbox" ${item.readOnly ? 'checked' : ''}> Read-only mode</label>
+          </div>
+        </section>
+        <section data-panel="driver" hidden>
+          <h3>Database driver</h3><p>${escapeHtml(type)} JDBC · Bundled with QA Runner</p>
+        </section>
+        <p class="form-error" role="alert"></p><p data-status role="status"></p>
+        <div class="user-story-modal-footer db-edit-footer">
+          <button type="button" class="btn secondary" data-test>Test Connection</button>
+          <button type="button" class="btn secondary" data-cancel>Cancel</button>
+          <button type="submit" class="btn primary">Save Changes</button>
+        </div>
+      </form></div>`);
+    const form = overlay.querySelector('form');
+    const find = selector => overlay.querySelector(selector);
+    const field = name => form.elements.namedItem(name);
+    const error = find('[role="alert"]');
+    const status = find('[data-status]');
+    const test = find('[data-test]');
+    const save = find('[type="submit"]');
+    let busy = false;
+    function showPage(page) {
+      overlay.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== page);
+      overlay.querySelectorAll('[data-page]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.page === page)));
+    }
+    function updateUrl() {
+      const url = find('.db-edit-url');
+      url.hidden = item.type !== 'POSTGRESQL';
+      if (!url.hidden) url.firstElementChild.textContent = 'jdbc:postgresql://' + field('host').value +
+        ':' + field('port').value + '/' + field('databaseName').value;
+    }
+    async function submit(testOnly) {
+      if (busy) return;
+      error.textContent = '';
+      status.textContent = '';
+      if (tenantState.organizationId !== organizationId) {
+        error.textContent = 'The active organization changed. Reopen the connection settings.';
+        return;
+      }
+      if (!form.checkValidity()) {
+        const panel = form.querySelector(':invalid')?.closest('[data-panel]');
+        if (panel) showPage(panel.dataset.panel);
+        form.reportValidity();
+        return;
+      }
+      const values = Object.fromEntries(new FormData(form));
+      for (const name of ['name','host','databaseName','username']) values[name] = values[name].trim();
+      values.port = Number(values.port);
+      values.connectionTimeoutSeconds = Number(values.connectionTimeoutSeconds);
+      values.readOnly = field('readOnly').checked;
+      values.type = item.type;
+      values.organizationId = organizationId;
+      if (['host','port','databaseName','tlsMode','environment'].some(name => values[name] !== item[name]) &&
+          (!values.username || !values.password)) {
+        showPage('main');
+        error.textContent = 'Re-enter the database username and password when changing the server or connection security.';
+        return;
+      }
+      busy = test.disabled = save.disabled = true;
+      status.textContent = testOnly ? 'Testing connection…' : 'Saving changes…';
+      try {
+        const url = testOnly ? '/api/database/connections/test-draft' :
+          '/api/database/connections/' + encodeURIComponent(id) + '?' + new URLSearchParams({organizationId});
+        if (testOnly) values.connectionId = id;
+        const result = await api(url, {method:testOnly ? 'POST' : 'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(values)});
+        if (testOnly) status.textContent = result.message;
+        else {
+          closeModalOverlay(overlay);
+          notify('Database connection saved.');
+          if (tenantState.organizationId === organizationId) {
+            const section = document.querySelector('.database-module')?.dataset.section;
+            await (section === 'workspace' && result.readOnly
+              ? showDatabaseSection('workspace', result) : showDatabaseSection('connections'));
+          }
+        }
+      } catch (failure) {
+        status.textContent = '';
+        error.textContent = failure.message;
+      } finally {
+        busy = test.disabled = save.disabled = false;
+      }
+    }
+    overlay.querySelectorAll('[data-page]').forEach(button => button.onclick = () => showPage(button.dataset.page));
+    form.noValidate = true;
+    form.oninput = () => { updateUrl(); status.textContent = ''; };
+    form.onsubmit = event => { event.preventDefault(); submit(false); };
+    test.onclick = () => submit(true);
+    find('[data-cancel]').onclick = () => closeModalOverlay(overlay);
+    showPage('main');
+    updateUrl();
   }
 
-  async function saveDatabaseConnection(form){const button=document.getElementById('databaseConnectionSave'),error=document.getElementById('databaseConnectionError');button.disabled=true;button.textContent='Saving…';if(error)error.textContent='';const values={organizationId:tenantState.organizationId,name:form.elements.namedItem('name').value.trim(),type:form.type.value,host:form.host.value.trim(),port:Number(form.port.value),databaseName:form.databaseName.value.trim(),username:form.username.value,password:form.password.value,environment:form.environment.value,tlsMode:form.tlsMode.value,connectionTimeoutSeconds:Number(form.connectionTimeoutSeconds.value),readOnly:form.readOnly.checked};const id=form.closest('.modal-overlay').dataset.connectionId;try{await api(id?`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`:'/api/database/connections',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});closeModalOverlay(form.closest('.modal-overlay'));notify('Database connection saved.');await loadDatabaseConnections();}catch(e){if(error)error.textContent=e.message||'Unable to save connection.';else notify(e.message);}finally{button.disabled=false;button.textContent=id?'Save Changes':'Add Connection';}}
-  async function deleteDatabaseConnection(id){if(!confirm('Delete this connection metadata?'))return;try{await api(`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'DELETE'});notify('Connection deleted.');await loadDatabaseConnections();}catch(e){notify(e.message);}}
-  async function connectDatabaseConnection(id,action){try{await api(`/api/database/connections/${encodeURIComponent(id)}/${action}?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'POST'});notify(action==='connect'?'Connection opened.':'Connection closed.');await loadDatabaseConnections();}catch(e){notify(e.message);}}
+  async function deleteDatabaseConnection(id){if(!confirm('Delete this connection metadata?'))return;try{await api(`/api/database/connections/${encodeURIComponent(id)}?organizationId=${encodeURIComponent(tenantState.organizationId)}`,{method:'DELETE'});notify('Connection deleted.');await showDatabaseSection('connections');}catch(e){notify(e.message);}}
+  async function connectDatabaseConnection(id, action) {
+    try {
+      const connection = await api('/api/database/connections/' + encodeURIComponent(id) + '/' + action + '?' +
+        new URLSearchParams({organizationId:tenantState.organizationId}), {method:'POST'});
+      notify(action === 'connect' ? 'Connection opened.' : 'Connection closed.');
+      if (document.querySelector('.database-module')?.dataset.section === 'workspace') {
+        await showDatabaseSection('workspace', connection);
+      } else {
+        await loadDatabaseConnections();
+      }
+    } catch (error) { notify(error.message); }
+  }
   async function testDatabaseConnection(id) {
     if (databaseTestsInProgress.has(id)) return;
     const organizationId = tenantState.organizationId;
@@ -10308,7 +11194,7 @@ paths:
       if (moduleId === 'defects') loadDefectStats();
       if (moduleId === 'team') loadTeamStats();
       if (moduleId === 'wiki') loadWikiSpaces();
-      if (moduleId === 'database') loadDatabaseOverview();
+      if (moduleId === 'database') showDatabaseSection('workspace');
     }
   }
   
@@ -11407,7 +12293,7 @@ paths:
       document.getElementById('moduleDetailTitle').textContent = '🗄️ Database';
       document.getElementById('moduleDetailContent').innerHTML = renderDatabaseModule();
       aiAssistantSection.hidden = true;
-      loadDatabaseOverview();
+      showDatabaseSection('workspace');
     } else if (isOrganizationSettings) {
       organizationSettings.hidden = false;
       aiAssistantSection.hidden = true;

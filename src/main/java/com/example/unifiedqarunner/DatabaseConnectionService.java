@@ -22,12 +22,25 @@ final class DatabaseConnectionService implements AutoCloseable {
     Map<String,Object> createForOrganization(String organizationId,Map<String,Object> values)throws IOException{requireKey();factory.validate(repository.preview(values));DatabaseConnectionRepository.ConnectionConfig c=repository.createForOrganization(organizationId,values,protector.encrypt(String.valueOf(values.getOrDefault("username",""))),protector.encrypt(String.valueOf(values.getOrDefault("password",""))));return safe(c);}
     Map<String,Object> update(String id,Map<String,Object> values)throws IOException{requireKey();DatabaseConnectionRepository.ConnectionConfig current=repository.find(id);Map<String,Object> preview=new LinkedHashMap<>();preview.put("name",values.getOrDefault("name",current.name()));preview.put("type",values.getOrDefault("type",current.type()));preview.put("host",values.getOrDefault("host",current.host()));preview.put("port",values.getOrDefault("port",current.port()));preview.put("databaseName",values.getOrDefault("databaseName",current.databaseName()));preview.put("environment",values.getOrDefault("environment",current.environment()));preview.put("tlsMode",values.getOrDefault("tlsMode",current.tlsMode()));preview.put("connectionTimeoutSeconds",values.getOrDefault("connectionTimeoutSeconds",current.connectionTimeoutSeconds()));preview.put("readOnly",values.getOrDefault("readOnly",current.readOnly()));factory.validate(repository.preview(preview));String u=String.valueOf(values.getOrDefault("username","")),p=String.valueOf(values.getOrDefault("password",""));DatabaseConnectionRepository.ConnectionConfig c=repository.update(id,values,protector.encrypt(u),protector.encrypt(p));return safe(c);}
     Map<String,Object> updateForOrganization(String organizationId,String id,Map<String,Object> values)throws IOException{requireOwner(organizationId,id);return update(id,values);}
-    void testDraft(Map<String, Object> values) {
+    void testDraft(String organizationId, Map<String, Object> values) {
         var config = repository.preview(values);
         String username = String.valueOf(values.getOrDefault("username", "")).trim();
         String password = String.valueOf(values.getOrDefault("password", ""));
+        Object savedId = values.get("connectionId");
+        if (savedId instanceof String id && !id.isBlank()) {
+            requireOwner(organizationId, id);
+            var saved = repository.find(id);
+            boolean sameEndpoint = config.type().equals(saved.type()) && config.host().equals(saved.host())
+                    && config.port() == saved.port() && config.databaseName().equals(saved.databaseName())
+                    && config.tlsMode().equals(saved.tlsMode()) && config.environment().equals(saved.environment());
+            if (sameEndpoint && (username.isBlank() || password.isEmpty())) {
+                requireKey();
+                if (username.isBlank()) username = protector.decrypt(saved.usernameEncrypted());
+                if (password.isEmpty()) password = protector.decrypt(saved.passwordEncrypted());
+            }
+        }
         if (username.isBlank() || password.isEmpty()) {
-            throw new IllegalArgumentException("Enter the database username and password.");
+            throw new IllegalArgumentException("Enter the database username and password to test these settings.");
         }
         try (Connection connection = factory.open(config, username, password)) {
             if (!connection.isValid(config.connectionTimeoutSeconds())) {
