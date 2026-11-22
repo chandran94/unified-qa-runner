@@ -17,6 +17,7 @@ final class AutomationExecutionManager {
 
     AutomationExecutionManager(Path projectRoot) {
         this.configFile = projectRoot.resolve("qa-runner.json").normalize();
+        StorageWriteCoordinator.registerPersistentWriter(configFile.getParent(), "automation-history");
     }
 
     synchronized List<Map<String, Object>> list(String testCaseId, String assetId) {
@@ -86,6 +87,10 @@ final class AutomationExecutionManager {
 
     @SuppressWarnings("unchecked")
     private void write(List<Map<String, Object>> executions) throws IOException {
+        StorageWriteCoordinator.coordinatedWrite(configFile.getParent(), "automation-history", () -> writeUncoordinated(executions));
+    }
+
+    private void writeUncoordinated(List<Map<String, Object>> executions) throws IOException {
         Map<String, Object> root;
         if (Files.exists(configFile)) {
             Object parsed = JsonParser.parse(Files.readString(configFile));

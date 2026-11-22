@@ -27,7 +27,7 @@ public class CiCdConfig {
 
     public CiCdConfig() { this(Path.of("qa-runner.json"), true); }
     public CiCdConfig(Path projectRoot) { this(projectRoot.resolve(CONFIG_FILE), true); }
-    private CiCdConfig(Path configPath, boolean ignored) { this.configPath = configPath.toAbsolutePath().normalize(); }
+    private CiCdConfig(Path configPath, boolean ignored) { this.configPath = configPath.toAbsolutePath().normalize(); StorageWriteCoordinator.registerPersistentWriter(this.configPath.getParent(), "cicd"); }
 
     public record CiCdSettings(
             String platform,
@@ -141,7 +141,7 @@ public class CiCdConfig {
             ciCd.putIfAbsent("projectId", "");
             root.put("ciCd", ciCd);
 
-            Files.writeString(path, toJson(root));
+            StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "cicd", () -> Files.writeString(path, toJson(root)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to save CI/CD config: " + e.getMessage(), e);
         }
@@ -170,7 +170,7 @@ public class CiCdConfig {
             ciCd.put("projectId", projectId);
             configurations.put(projectId, ciCd);
             root.put("ciCdConfigurations", configurations);
-            Files.writeString(configPath, toJson(root));
+            StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "cicd", () -> Files.writeString(configPath, toJson(root)));
         } catch (Exception error) { throw new RuntimeException("Failed to save CI/CD ownership: " + error.getMessage(), error); }
     }
 

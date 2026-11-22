@@ -38,6 +38,7 @@ final class AuthUserDirectory {
 
     AuthUserDirectory(Path projectRoot) {
         this.configPath = projectRoot.resolve("qa-runner.json").toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(configPath.getParent(), "auth");
     }
 
     synchronized List<User> list() { return read().stream().map(this::toUser).toList(); }
@@ -54,6 +55,12 @@ final class AuthUserDirectory {
 
     synchronized User findById(String id) {
         return list().stream().filter(user -> user.id().equals(id)).findFirst().orElse(null);
+    }
+
+    synchronized User findByEmail(String email) {
+        String normalized = normalizeEmail(email);
+        if (normalized.isBlank()) return null;
+        return list().stream().filter(user -> user.email().equals(normalized)).findFirst().orElse(null);
     }
 
     synchronized User create(String username, String email, char[] password, boolean emailVerified) throws IOException {
@@ -114,6 +121,20 @@ final class AuthUserDirectory {
         List<Map<String, Object>> raw = read();
         boolean removed = raw.removeIf(item -> id.equals(String.valueOf(item.get("id"))));
         if (removed) { write(raw); appendAudit("USER_REMOVED_AFTER_DELIVERY_FAILURE", id, ""); }
+    }
+
+    synchronized User resetPassword(String id, char[] password) throws IOException {
+        User user = findById(id);
+        if (user == null || !ACTIVE.equals(user.status())) throw new IllegalArgumentException("Password reset is unavailable.");
+        User updated = new User(user.id(), user.fullName(), user.username(), user.email(), user.mobile(),
+                PasswordHasher.hash(password), user.emailVerified(), user.mobileVerified(), user.status(),
+                user.createdAt(), Instant.now().toString(), user.lastLoginAt());
+        List<Map<String, Object>> raw = read();
+        raw.removeIf(item -> id.equals(String.valueOf(item.get("id"))));
+        raw.add(toMap(updated));
+        write(raw);
+        appendAudit("PASSWORD_RESET", user.id(), user.username());
+        return updated;
     }
 
     static String normalizeUsername(String value) { return value == null ? "" : value.trim().toLowerCase(Locale.ROOT); }
@@ -190,10 +211,12 @@ final class AuthUserDirectory {
 
     @SuppressWarnings("unchecked")
     private void writeRoot(Map<String, Object> root) throws IOException {
-        Path temporary = configPath.resolveSibling(configPath.getFileName() + ".auth-audit.tmp");
-        Files.writeString(temporary, CiCdConfig.toJson(root));
-        try { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (java.nio.file.AtomicMoveNotSupportedException ignored) { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING); }
+        StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "auth", () -> {
+            Path temporary = configPath.resolveSibling(configPath.getFileName() + ".auth-audit.tmp");
+            Files.writeString(temporary, CiCdConfig.toJson(root));
+            try { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
+            catch (java.nio.file.AtomicMoveNotSupportedException ignored) { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING); }
+        });
     }
 
     static final String PENDING = "PENDING";

@@ -26,6 +26,7 @@ final class TeamRoleManager {
 
     TeamRoleManager(Path projectRoot) {
         this.configPath = projectRoot.resolve("qa-runner.json").toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(configPath.getParent(), "roles");
         if (read().isEmpty()) {
             try { write(defaultRoles().stream().map(this::toMap).toList()); }
             catch (IOException error) { throw new IllegalStateException("The team role store could not be initialized.", error); }
@@ -205,10 +206,12 @@ final class TeamRoleManager {
     }
 
     private void writeRoot(Map<String, Object> root) throws IOException {
-        Path temporary = configPath.resolveSibling(configPath.getFileName() + ".tmp");
-        Files.writeString(temporary, CiCdConfig.toJson(root));
-        try { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (java.nio.file.AtomicMoveNotSupportedException ignored) { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING); }
+        StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "roles", () -> {
+            Path temporary = configPath.resolveSibling(configPath.getFileName() + ".tmp");
+            Files.writeString(temporary, CiCdConfig.toJson(root));
+            try { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
+            catch (java.nio.file.AtomicMoveNotSupportedException ignored) { Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING); }
+        });
     }
 
     @SuppressWarnings("unchecked")

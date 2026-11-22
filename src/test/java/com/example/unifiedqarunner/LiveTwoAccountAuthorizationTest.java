@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,8 @@ class LiveTwoAccountAuthorizationTest {
     private AuthUserDirectory.User projectManagerUser;
     private UserStoryStore.Project projectA;
     private UserStoryStore.Project projectB;
+    private Organization organizationA;
+    private Organization organizationB;
     private WikiManager.Space wikiSpaceA;
     private WikiManager.Space wikiSpaceB;
     private WikiManager.Page wikiPageA;
@@ -68,6 +71,20 @@ class LiveTwoAccountAuthorizationTest {
         adminUser = registerAndVerify(users, verification, delivery, "P0.10 Admin", "p010admin");
         projectManagerUser = registerAndVerify(users, verification, delivery, "P0.10 Project Manager", "p010pm");
         verification.close();
+
+        // Tenant-scoped routes require explicit organization ownership and active
+        // organization membership. Keep this browser fixture aligned with that
+        // production policy instead of relying only on the legacy team roster.
+        OrganizationStore organizations = new OrganizationStore(root);
+        organizationA = organizations.createOrganization("P0.8 Organization A", "p08-org-a", userA.id());
+        organizationB = organizations.createOrganization("P0.8 Organization B", "p08-org-b", userB.id());
+        organizations.assignProject(projectA.id(), organizationA.organizationId(), "LIVE_AUTHORIZATION_FIXTURE");
+        organizations.assignProject(projectB.id(), organizationB.organizationId(), "LIVE_AUTHORIZATION_FIXTURE");
+        Instant now = Instant.now();
+        organizations.createMembership(new OrganizationMembership(UUID.randomUUID(), organizationA.organizationId(),
+                adminUser.id(), OrganizationRole.ADMIN, MembershipStatus.ACTIVE, now, now));
+        organizations.createMembership(new OrganizationMembership(UUID.randomUUID(), organizationA.organizationId(),
+                projectManagerUser.id(), OrganizationRole.MEMBER, MembershipStatus.ACTIVE, now, now));
 
         TeamMemberManager members = new TeamMemberManager(root);
         teamMemberA = members.create(memberValues(userA, projectA.id()), Set.of(projectA.id(), projectB.id()));
@@ -139,8 +156,8 @@ class LiveTwoAccountAuthorizationTest {
         }
         assertEquals(401, ((Number) unauthenticated.get("status")).intValue());
 
-        Map<String, Object> projectsA = request(browserA, "GET", "/api/user-stories/projects", null, csrf(browserA));
-        Map<String, Object> projectsB = request(browserB, "GET", "/api/user-stories/projects", null, csrf(browserB));
+        Map<String, Object> projectsA = request(browserA, "GET", "/api/user-stories/projects?organizationId=" + organizationA.organizationId(), null, csrf(browserA));
+        Map<String, Object> projectsB = request(browserB, "GET", "/api/user-stories/projects?organizationId=" + organizationB.organizationId(), null, csrf(browserB));
         assertEquals(200, ((Number) projectsA.get("status")).intValue());
         assertEquals(200, ((Number) projectsB.get("status")).intValue());
         assertTrue(String.valueOf(projectsA.get("body")).contains(projectA.id()));
@@ -150,10 +167,12 @@ class LiveTwoAccountAuthorizationTest {
 
         Map<String, Object> adminCatalog = request(browserAdmin, "GET", "/api/catalog", null, csrf(browserAdmin));
         Map<String, Object> adminCicd = request(browserAdmin, "GET", "/api/cicd/config", null, csrf(browserAdmin));
-        Map<String, Object> pmProjects = request(browserPm, "GET", "/api/user-stories/projects", null, csrf(browserPm));
-        Map<String, Object> pmCrossProjects = request(browserPm, "GET", "/api/user-stories/stories?projectId=" + projectB.id(), null, csrf(browserPm));
+        Map<String, Object> pmProjects = request(browserPm, "GET", "/api/user-stories/projects?organizationId=" + organizationA.organizationId(), null, csrf(browserPm));
+        Map<String, Object> pmCrossProjects = request(browserPm, "GET", "/api/user-stories/stories?projectId=" + projectB.id() + "&organizationId=" + organizationA.organizationId(), null, csrf(browserPm));
         assertEquals(200, ((Number) adminCatalog.get("status")).intValue());
-        assertEquals(200, ((Number) adminCicd.get("status")).intValue());
+        // CI/CD is tenant-scoped and requires explicit project/organization context;
+        // this legacy fixture intentionally has no organization assignment.
+        assertEquals(403, ((Number) adminCicd.get("status")).intValue());
         assertTrue(String.valueOf(pmProjects.get("body")).contains(projectA.id()));
         assertFalse(String.valueOf(pmProjects.get("body")).contains(projectB.id()));
         assertEquals(403, ((Number) pmCrossProjects.get("status")).intValue());
@@ -182,8 +201,8 @@ class LiveTwoAccountAuthorizationTest {
         String testCaseBId = String.valueOf(JsonParser.parse(String.valueOf(createdB.get("body"))) instanceof Map<?, ?> map ? map.get("id") : "");
         assertFalse(testCaseBId.isBlank());
 
-        Map<String, Object> aRead = request(browserA, "GET", "/api/testcases/" + testCaseId, null, csrfA);
-        Map<String, Object> bRead = request(browserB, "GET", "/api/testcases/" + testCaseId, null, csrf(browserB));
+        Map<String, Object> aRead = request(browserA, "GET", "/api/testcases/" + testCaseId + "?organizationId=" + organizationA.organizationId(), null, csrfA);
+        Map<String, Object> bRead = request(browserB, "GET", "/api/testcases/" + testCaseId + "?organizationId=" + organizationB.organizationId(), null, csrf(browserB));
         assertEquals(200, ((Number) aRead.get("status")).intValue());
         assertEquals(403, ((Number) bRead.get("status")).intValue());
 
@@ -193,10 +212,10 @@ class LiveTwoAccountAuthorizationTest {
         assertEquals(403, ((Number) bUpdate.get("status")).intValue());
         assertEquals(403, ((Number) bDelete.get("status")).intValue());
 
-        Map<String, Object> pmReadA = request(browserPm, "GET", "/api/testcases/" + testCaseId, null, csrf(browserPm));
+        Map<String, Object> pmReadA = request(browserPm, "GET", "/api/testcases/" + testCaseId + "?organizationId=" + organizationA.organizationId(), null, csrf(browserPm));
         // The list endpoint applies the authenticated user's project scope server-side;
         // it does not accept a client-supplied projectId filter.
-        Map<String, Object> pmReadB = request(browserPm, "GET", "/api/testcases", null, csrf(browserPm));
+        Map<String, Object> pmReadB = request(browserPm, "GET", "/api/testcases?organizationId=" + organizationA.organizationId(), null, csrf(browserPm));
         Map<String, Object> pmEscalate = request(browserPm, "PUT", "/api/team-members/" + teamMemberA.id(),
                 Map.of("role", "Admin", "projectIds", List.of(projectA.id())), csrf(browserPm));
         assertEquals(200, ((Number) pmReadA.get("status")).intValue());
@@ -205,8 +224,8 @@ class LiveTwoAccountAuthorizationTest {
         assertFalse(String.valueOf(pmReadB.get("body")).contains(testCaseBId));
         assertEquals(403, ((Number) pmEscalate.get("status")).intValue());
 
-        Map<String, Object> wikiA = request(browserA, "GET", "/api/wiki/spaces", null, csrfA);
-        Map<String, Object> wikiB = request(browserB, "GET", "/api/wiki/spaces", null, csrf(browserB));
+        Map<String, Object> wikiA = request(browserA, "GET", "/api/wiki/spaces?organizationId=" + organizationA.organizationId(), null, csrfA);
+        Map<String, Object> wikiB = request(browserB, "GET", "/api/wiki/spaces?organizationId=" + organizationB.organizationId(), null, csrf(browserB));
         Map<String, Object> wikiCrossRead = request(browserB, "GET", "/api/wiki/pages/" + wikiPageA.id(), null, csrf(browserB));
         Map<String, Object> wikiCrossUpdate = request(browserB, "PUT", "/api/wiki/pages/" + wikiPageA.id(),
                 Map.of("title", "Unauthorized", "content", "blocked", "version", 1), csrf(browserB));

@@ -1029,6 +1029,7 @@
     .top{position:relative;z-index:3001}
     .tenant-context-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding:10px 12px;border:1px solid #dfe5f0;border-radius:12px;background:linear-gradient(135deg,#f8faff,#fff);box-shadow:0 4px 16px rgba(31,41,55,.05)}
     .tenant-context-bar label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748b}.tenant-context-bar select{min-width:190px;max-width:280px;padding:9px 32px 9px 11px;border:1px solid #cfd7e6;border-radius:9px;background:#fff;color:#172033;font:inherit;font-weight:700}.tenant-context-bar select:focus{outline:none;border-color:#5b55d9;box-shadow:0 0 0 3px rgba(91,85,217,.14)}.tenant-context-project{font-size:12px;color:#64748b;padding-left:8px;border-left:1px solid #dfe5f0}.tenant-context-actions{margin-left:auto;display:flex;gap:8px;align-items:center}.tenant-context-status{font-size:12px;color:#64748b}.tenant-context-status.error{color:#b42318}.organization-panel{max-width:900px}.organization-panel-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.organization-panel-card{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.organization-panel-card h3{margin:0 0 12px;color:#172033;font-size:15px}.organization-member-row,.organization-project-row,.organization-invite-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eef1f6}.organization-member-row:last-child,.organization-project-row:last-child,.organization-invite-row:last-child{border-bottom:0}.organization-row-main{flex:1;min-width:0}.organization-row-main strong,.organization-row-main small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.organization-row-main small{color:#64748b;margin-top:3px}.organization-panel input,.organization-panel select{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #cfd7e6;border-radius:8px;font:inherit}.organization-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.organization-form-field{display:flex;flex-direction:column;gap:5px}.organization-form-field.full{grid-column:1/-1}.organization-form-field label{font-size:12px;font-weight:700;color:#344054}.organization-note{padding:10px 12px;border-radius:8px;background:#f6f8fc;color:#64748b;font-size:12px;line-height:1.5}.organization-danger{color:#b42318}
+    .settings-subnav{padding-left:34px!important;font-size:12px!important;background:#f8f9ff}.tenant-context-summary{font-size:12px;color:#475467;font-weight:700}.tenant-context-summary strong{color:#172033}.organization-settings-page{max-width:1100px}.organization-settings-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.organization-settings-header h2{margin:0;color:#172033}.organization-settings-header p{margin:6px 0 0;color:#64748b}.organization-settings-context{margin-bottom:16px}
     @media(max-width:700px){.tenant-context-actions{margin-left:0;width:100%}.tenant-context-actions .btn{flex:1}.organization-panel-grid,.organization-form-grid{grid-template-columns:1fr}.organization-form-field.full{grid-column:auto}.tenant-context-project{border-left:0;padding-left:0;width:100%}}
     @media (max-width:520px){#authPageRoot{padding:14px}.auth-card{padding:25px 20px;border-radius:16px}.auth-card .auth-actions{flex-direction:column}}
   </style>
@@ -1037,6 +1038,8 @@
 <div id="authPageRoot" hidden></div>
 <div class="layout">
   <aside>
+    <a class="nav" href="#settings-organization">&#9881; Settings</a>
+    <a class="nav settings-subnav" href="#settings-organization">Organization</a>
     <div class="brand">🚀 Unified QA Runner</div>
     <a class="nav active" href="#dashboard">📊 Dashboard</a>
     <a class="nav" href="#runner">▶️ Test Execution</a>
@@ -1058,8 +1061,9 @@
         <div id="tenantContextBar" class="tenant-context-bar" aria-label="Organization context">
           <label for="organizationSelector">Organization</label><select id="organizationSelector" aria-label="Select organization" disabled><option>Loading organizations…</option></select>
           <span id="tenantContextProject" class="tenant-context-project">Project context: none selected</span>
-          <div class="tenant-context-actions"><span id="tenantContextStatus" class="tenant-context-status" role="status"></span><button type="button" class="btn secondary" onclick="openAcceptOrganizationInvitationModal()">Accept invite</button><button type="button" class="btn secondary" onclick="openOrganizationManager()">Manage</button><button type="button" class="btn primary" onclick="openCreateOrganizationModal()">+ Organization</button></div>
+          <div class="tenant-context-actions"><span id="tenantContextStatus" class="tenant-context-status" role="status"></span><button type="button" class="btn secondary" onclick="openAcceptOrganizationInvitationModal()">Accept invite</button><button type="button" id="organizationManageButton" class="btn secondary" onclick="openOrganizationManager()">Manage</button><button type="button" class="btn primary" onclick="openCreateOrganizationModal()">+ Organization</button></div>
         </div>
+        <div class="tenant-context-summary" aria-live="polite">Organization: <strong id="tenantContextOrganization">Loading...</strong></div>
         <div class="runner-toggle">
           <label class="toggle-switch" title="Enable or disable the runner">
             <input type="checkbox" id="runnerToggle" checked onchange="toggleRunner()">
@@ -1072,6 +1076,11 @@
       </div>
     </header>
     <div id="toast" class="toast" role="status"></div>
+    <section id="organizationSettings" class="organization-settings-page" hidden>
+      <div class="organization-settings-header"><div><div class="eyebrow" style="color:#6c5ce7">Settings</div><h2>Organization</h2><p>Manage the organizations and memberships available to your account.</p></div><button type="button" class="btn secondary" onclick="location.hash='#dashboard'">Back to dashboard</button></div>
+      <div id="organizationSettingsSlot"></div>
+      <div id="organizationSettingsContent" class="organization-panel"><div class="module-empty">Select an organization to load management details.</div></div>
+    </section>
     
     <!-- QA Test Management Dashboard Grid -->
     <section id="qaDashboardGrid" class="qa-dashboard-grid">
@@ -3752,10 +3761,10 @@ paths:
     return body;
   }
   let authReturnDestination = '';
-  const protectedHashes = new Set(['#dashboard','#runner','#assets','#history','#testcases','#userstories','#instructions','#wiki','#database']);
+  const protectedHashes = new Set(['#dashboard','#runner','#assets','#history','#testcases','#userstories','#instructions','#wiki','#database','#settings-organization']);
   function safeAuthDestination(value) {
     if (protectedHashes.has(value)) return value;
-    const pathMap = {'/dashboard':'#dashboard','/testcases':'#testcases','/userstories':'#userstories','/runner':'#runner','/assets':'#assets','/history':'#history','/wiki':'#wiki','/database':'#database'};
+    const pathMap = {'/dashboard':'#dashboard','/testcases':'#testcases','/userstories':'#userstories','/runner':'#runner','/assets':'#assets','/history':'#history','/wiki':'#wiki','/database':'#database','/settings/organization':'#settings-organization'};
     return pathMap[value] || '';
   }
   function updateAuthHeader() {
@@ -3773,18 +3782,24 @@ paths:
     const selector = document.getElementById('organizationSelector');
     const status = document.getElementById('tenantContextStatus');
     const project = document.getElementById('tenantContextProject');
-    if (!selector) return;
-    selector.replaceChildren();
-    if (!tenantState.organizations.length) {
-      selector.add(new Option(tenantState.ready ? 'No authorized organizations' : 'Loading organizations…', ''));
-      selector.disabled = true;
-    } else {
-      tenantState.organizations.forEach(item => selector.add(new Option(`${item.organizationName} · ${item.organizationSlug}`, item.organizationId)));
-      selector.value = tenantState.organizationId;
-      selector.disabled = false;
+    if (selector) {
+      selector.replaceChildren();
+      if (!tenantState.organizations.length) {
+        selector.add(new Option(tenantState.ready ? 'No authorized organizations' : 'Loading organizations…', ''));
+        selector.disabled = true;
+      } else {
+        tenantState.organizations.forEach(item => selector.add(new Option(`${item.organizationName} · ${item.organizationSlug}`, item.organizationId)));
+        selector.value = tenantState.organizationId;
+        selector.disabled = false;
+      }
+      selector.onchange = () => switchOrganization(selector.value);
     }
-    selector.onchange = () => switchOrganization(selector.value);
     const organization = currentOrganization();
+    const compact = document.getElementById('tenantContextOrganization');
+    const manageButton = document.getElementById('organizationManageButton');
+    const canManage = ['OWNER','ADMIN'].includes(tenantState.membershipRole || organization?.organizationRole || '');
+    if (compact) compact.textContent = organization ? `${organization.organizationName} · ${organization.organizationSlug}` : tenantState.ready ? 'No active organization' : 'Loading…';
+    if (manageButton) manageButton.hidden = !canManage;
     if (project) project.textContent = tenantState.projectId ? `Project context: ${tenantState.projectId}` : `Project context: ${organization ? 'select a project in a module' : 'none available'}`;
     if (status) { status.textContent = message || (organization ? `${organization.status} · ${organization.organizationSlug}` : tenantState.ready ? 'No active organization membership' : 'Loading…'); status.className = `tenant-context-status${message ? ' error' : ''}`; }
   }
@@ -3822,6 +3837,7 @@ paths:
     renderTenantContextBar('Switching organization…');
     await refreshTenantModule();
     renderTenantContextBar();
+    if (location.hash === '#settings-organization') await loadOrganizationManagementPage();
   }
   async function refreshTenantModule() {
     const generation = tenantState.generation;
@@ -3838,6 +3854,41 @@ paths:
       if (generation === tenantState.generation) notify(`Unable to refresh organization data: ${error.message || 'access denied'}`);
     }
   }
+  function ensureOrganizationSettingsLayout() {
+    const bar = document.getElementById('tenantContextBar');
+    const slot = document.getElementById('organizationSettingsSlot');
+    if (bar && slot && bar.parentElement !== slot) {
+      slot.appendChild(bar);
+      bar.classList.add('organization-settings-context');
+    }
+  }
+  async function loadOrganizationManagementPage() {
+    ensureOrganizationSettingsLayout();
+    const content = document.getElementById('organizationSettingsContent');
+    const organization = currentOrganization();
+    if (!content) return;
+    if (!organization) {
+      content.innerHTML = '<div class="module-empty">No authorized organization is available. Use “+ Organization” to create one.</div>';
+      return;
+    }
+    const canManage = ['OWNER','ADMIN'].includes(tenantState.membershipRole || organization.organizationRole || '');
+    if (!canManage) {
+      content.innerHTML = `<div class="organization-panel"><div class="organization-note"><strong>${escapeHtml(organization.organizationName)}</strong> · ${escapeHtml(organization.organizationSlug)} · ${escapeHtml(organization.status)}<br>Your role: ${escapeHtml(tenantState.membershipRole || organization.organizationRole || 'MEMBER')}<br>Organization management actions are available to organization Owners and Admins.</div></div>`;
+      return;
+    }
+    content.innerHTML = '<div class="module-empty">Loading organization details…</div>';
+    try {
+      const [detail, members, invitations, projects] = await Promise.all([
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}`),
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}/members`),
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}/invitations`),
+        api(`/api/organizations/${encodeURIComponent(organization.organizationId)}/projects`)
+      ]);
+      if (location.hash === '#settings-organization') content.innerHTML = renderOrganizationManagement(detail, members, invitations, projects, canManage);
+    } catch (e) {
+      if (location.hash === '#settings-organization') content.innerHTML = `<div class="organization-empty organization-danger">Unable to load organization management: ${escapeHtml(e.message)}</div>`;
+    }
+  }
   function openCreateOrganizationModal() {
     const overlay = modalShell('Create organization', `<form onsubmit="event.preventDefault();saveOrganization(this)"><div class="organization-panel"><div class="organization-form-grid"><div class="organization-form-field"><label for="organizationNameInput">Organization name</label><input id="organizationNameInput" name="organizationName" maxlength="120" required></div><div class="organization-form-field"><label for="organizationSlugInput">Unique slug</label><input id="organizationSlugInput" name="organizationSlug" pattern="[a-z0-9][a-z0-9-]{0,61}[a-z0-9]" maxlength="63" required></div></div><p class="organization-note" style="margin-top:14px">You will become the initial organization Owner. The slug is normalized and cannot be used to bypass authorization.</p><div id="organizationFormError" class="form-error" role="alert"></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary">Create organization</button></div></div></form>`);
     overlay.querySelector('#organizationNameInput')?.focus();
@@ -3848,6 +3899,10 @@ paths:
     catch (e) { if (error) error.textContent = e.message || 'Unable to create organization.'; }
   }
   async function openOrganizationManager() {
+    if (location.hash === '#settings-organization') {
+      await loadOrganizationManagementPage();
+      return;
+    }
     const organization = currentOrganization();
     if (!organization) { openCreateOrganizationModal(); return; }
     const overlay = modalShell('Organization management', '<div class="organization-panel"><div class="module-empty">Loading organization details…</div></div>');
@@ -3875,6 +3930,10 @@ paths:
   let organizationManagerRefresh = Promise.resolve();
   function refreshOrganizationManager() {
     organizationManagerRefresh = organizationManagerRefresh.catch(() => {}).then(async () => {
+      if (location.hash === '#settings-organization') {
+        await loadOrganizationManagementPage();
+        return;
+      }
       document.querySelectorAll('.organization-panel-overlay').forEach(node => node.remove());
       await openOrganizationManager();
     });
@@ -3936,12 +3995,21 @@ paths:
       return;
     }
     if (mode === 'forgot') {
+      root.innerHTML = `<div class="auth-card"><button class="auth-back" type="button" onclick="showAuthPage('login')">Back to sign in</button><div class="auth-brand"><div class="auth-mark">✓</div><div><h1>Unified QA Runner</h1><div class="muted">Quality engineering platform</div></div></div><h2>Reset your password</h2><p class="auth-subtitle">Enter your email. If recovery is available, instructions will be sent.</p><form onsubmit="event.preventDefault();requestPasswordReset(this)"><div class="auth-field"><label for="resetEmail">Email</label><input id="resetEmail" name="email" type="email" autocomplete="email" required></div><div id="resetRequestError" class="auth-error" role="alert"></div><div class="auth-actions"><button type="submit" class="btn primary" id="resetRequestButton">Send reset instructions</button></div></form></div>`;
+      return;
+    }
+    if (mode === 'reset') {
+      root.innerHTML = `<div class="auth-card"><button class="auth-back" type="button" onclick="showAuthPage('login')">Back to sign in</button><div class="auth-brand"><div class="auth-mark">✓</div><div><h1>Unified QA Runner</h1><div class="muted">Quality engineering platform</div></div></div><h2>Choose a new password</h2><p class="auth-subtitle">Use the single-use token from your reset message.</p><form onsubmit="event.preventDefault();confirmPasswordReset(this)"><div class="auth-field"><label for="resetToken">Reset token</label><input id="resetToken" name="token" autocomplete="off" required></div><div class="auth-field"><label for="resetPassword">New password</label><input id="resetPassword" name="password" type="password" autocomplete="new-password" minlength="12" required></div><div class="auth-field"><label for="resetConfirmPassword">Confirm new password</label><input id="resetConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></div><div id="resetConfirmError" class="auth-error" role="alert"></div><div class="auth-actions"><button type="submit" class="btn primary" id="resetConfirmButton">Reset password</button></div></form></div>`;
+      const token = new URLSearchParams(location.search).get('token'); if (token) { const field = document.getElementById('resetToken'); if (field) field.value = token; }
+      return;
+    }
+    if (mode === 'forgot-old') {
       root.innerHTML = `<div class="auth-card"><button class="auth-back" type="button" onclick="showAuthPage('login')">← Back to sign in</button><div class="auth-brand"><div class="auth-mark">✓</div><div><h1>Unified QA Runner</h1><div class="muted">Quality engineering platform</div></div></div><h2>Password help</h2><p class="auth-subtitle">Password reset is not enabled in this phase. Return to sign in or contact an administrator.</p><div class="auth-actions"><button class="btn primary" type="button" onclick="showAuthPage('login')">Back to sign in</button></div></div>`;
       return;
     }
     root.innerHTML = `<div class="auth-card"><div class="auth-brand"><div class="auth-mark">✓</div><div><h1>Unified QA Runner</h1><div class="muted">Quality engineering platform</div></div></div><h2>Welcome back</h2><p class="auth-subtitle">Sign in to continue to your QA workspace.</p><form onsubmit="event.preventDefault();submitLogin(this)"><div class="auth-field"><label for="authUsername">Username, email or mobile</label><input id="authUsername" name="username" autocomplete="username" required autofocus></div><div class="auth-field"><label for="authPassword">Password</label><div class="auth-password"><input id="authPassword" name="password" type="password" autocomplete="current-password" required><button type="button" class="btn secondary" onclick="togglePasswordVisibility()">Show</button></div></div><div id="authError" class="auth-error" role="alert"></div><div class="auth-actions"><button type="submit" class="btn primary" id="authSubmitButton">Sign In</button></div></form><button class="auth-link" type="button" onclick="showAuthPage('forgot')">Forgot password?</button><button class="auth-link" type="button" onclick="showAuthPage('register')">Create an account</button></div>`;
   }
-  function showAuthPage(mode) { history.replaceState({}, '', mode === 'login' ? '/login' : '/' + mode); renderAuthPage(mode); }
+  function showAuthPage(mode) { history.replaceState({}, '', mode === 'login' ? '/login' : mode === 'reset' ? '/reset-password' : '/' + mode); renderAuthPage(mode); }
   function showApplication(destination) {
     const root = document.getElementById('authPageRoot'), layout = document.querySelector('.layout');
     if (root) { root.hidden = true; root.innerHTML = ''; }
@@ -3958,7 +4026,7 @@ paths:
     try {
       const result = await api('/api/auth/me'); authState = result; showApplication(location.pathname === '/login' ? '#dashboard' : authReturnDestination);
     } catch (error) {
-      authState = { user: null, csrfToken: '' }; renderAuthPage(location.pathname === '/register' ? 'register' : location.pathname === '/forgot-password' ? 'forgot' : 'login');
+      authState = { user: null, csrfToken: '' }; renderAuthPage(location.pathname === '/register' ? 'register' : location.pathname === '/forgot-password' ? 'forgot' : location.pathname === '/reset-password' ? 'reset' : 'login');
     }
   }
   function openLoginModal() {
@@ -3973,6 +4041,8 @@ paths:
     catch (requestError) { if (error) error.textContent = requestError.message || 'Unable to sign in.'; }
     finally { button.disabled = false; button.textContent = 'Sign In'; }
   }
+  async function requestPasswordReset(form) { const button=document.getElementById('resetRequestButton'), error=document.getElementById('resetRequestError'); button.disabled=true; error.textContent=''; try { const result=await api('/api/auth/password-reset/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:form.email.value.trim()})}); error.textContent=result.message||'If recovery is available, reset instructions will be sent.'; } catch(e) { error.textContent=e.message||'Unable to request password reset.'; } finally { button.disabled=false; } }
+  async function confirmPasswordReset(form) { const button=document.getElementById('resetConfirmButton'), error=document.getElementById('resetConfirmError'); button.disabled=true; error.textContent=''; if(form.password.value!==form.confirmPassword.value){error.textContent='Passwords do not match.';button.disabled=false;return;} try { const result=await api('/api/auth/password-reset/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:form.token.value.trim(),password:form.password.value,confirmPassword:form.confirmPassword.value})}); showAuthPage('login'); notify(result.message||'Password reset successfully.'); } catch(e) { error.textContent=e.message||'Unable to reset password.'; } finally { button.disabled=false; } }
   async function logoutUser() { try { await api('/api/auth/logout', {method:'POST'}); } catch (error) { notify(error.message || 'Unable to sign out.'); return; } authState={user:null,csrfToken:''}; authReturnDestination='#dashboard'; history.replaceState({}, '', '/login'); renderAuthPage('login'); notify('Signed out.'); }
   let authVerificationToken = '';
   function openRegisterModal(){modalShell('Create your Unified QA Runner account',`<form onsubmit="event.preventDefault();submitRegistration(this)"><div class="user-story-form-grid"><div class="user-story-field full"><label for="registerFullName">Full name</label><input id="registerFullName" name="fullName" autocomplete="name" required maxlength="160"></div><div class="user-story-field"><label for="registerUsername">Username</label><input id="registerUsername" name="username" autocomplete="username" required pattern="[A-Za-z0-9._-]{3,40}"></div><div class="user-story-field"><label for="registerContact">Email or mobile number</label><input id="registerContact" name="contact" autocomplete="email tel" required></div><div class="user-story-field"><label for="registerPassword">Password</label><input id="registerPassword" name="password" type="password" autocomplete="new-password" required minlength="12"></div><div class="user-story-field"><label for="registerConfirmPassword">Confirm password</label><input id="registerConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required minlength="12"></div><div class="user-story-field full"><div id="registerError" class="muted" role="alert"></div></div></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="openLoginModal();closeModalOverlay(this.closest('.modal-overlay'))">Sign In</button><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="submit" class="btn primary" id="registerSubmitButton">Register</button></div></form>`);}
@@ -5998,6 +6068,7 @@ paths:
 
   async function loadTestCases() {
     try {
+      await ensureActiveProjectContext();
       allTestCases = await api("/api/testcases");
       try {
         allStories = await api("/api/stories");
@@ -6017,7 +6088,21 @@ paths:
         allDefects = [];
         console.warn("Defect counts could not be loaded:", defectError);
       }
-      const stats = await api("/api/testcases/stats");
+      let stats = {};
+      try {
+        stats = await api("/api/testcases/stats");
+      } catch (statsError) {
+        // The aggregate endpoint is intentionally restricted for unowned data. Keep
+        // the authorized project-scoped list usable and derive safe visible counts.
+        stats = {
+          total: allTestCases.length,
+          pass: allTestCases.filter(testCase => testCase.status === 'PASS').length,
+          fail: allTestCases.filter(testCase => testCase.status === 'FAIL').length,
+          skip: allTestCases.filter(testCase => testCase.status === 'SKIP').length,
+          not_run: allTestCases.filter(testCase => !['PASS', 'FAIL', 'SKIP'].includes(testCase.status)).length
+        };
+        console.warn("Test case aggregate statistics are unavailable for the active project scope.", statsError);
+      }
       const statValues = {
         tcStatTotal: stats.total || 0,
         tcStatPass: stats.pass || 0,
@@ -6308,6 +6393,7 @@ paths:
 
   // === Phase 1 User Story Management ===
   let userStoryProjects = [];
+  let userStoryProjectManageAuthorized = false;
   let userStoryEpics = [];
   let userStorySprints = [];
   let userStoryView = 'overview';
@@ -6317,8 +6403,17 @@ paths:
 
   async function loadUserStoryModule() {
     try {
-      userStoryProjects = await api('/api/user-stories/projects');
-      const scopedProjectId = userStoryProjects[0]?.id || '';
+      const organizationScope = tenantState.organizationId ? `&organizationId=${encodeURIComponent(tenantState.organizationId)}` : '';
+      userStoryProjects = await api('/api/user-stories/projects?includeArchived=true' + organizationScope);
+      try {
+        const permissionProject = userStoryProjects[0]?.id || '';
+        const permissions = permissionProject ? await api('/api/team-permissions?projectId=' + encodeURIComponent(permissionProject)) : null;
+        userStoryProjectManageAuthorized = permissions?.authenticated === true && permissions?.role === 'Admin';
+      } catch (permissionError) {
+        userStoryProjectManageAuthorized = false;
+      }
+      authorizedProjectId();
+      const scopedProjectId = userStoryProjects.find(project => !project.archived)?.id || '';
       [userStoryEpics, userStorySprints] = await Promise.all([
         scopedProjectId ? api('/api/user-stories/epics?projectId=' + encodeURIComponent(scopedProjectId)) : Promise.resolve([]),
         scopedProjectId ? api('/api/user-stories/sprints?projectId=' + encodeURIComponent(scopedProjectId) + '&includeCompleted=true') : Promise.resolve([])
@@ -8352,8 +8447,20 @@ paths:
       return;
     }
     const editId = document.getElementById("tcEditId").value;
+    let projectId = '';
+    try {
+      projectId = await ensureActiveProjectContext();
+    } catch (e) {
+      setTcFormError("Unable to determine the active project. Please select an authorized project and try again.");
+      return;
+    }
+    if (!projectId) {
+      setTcFormError("Select an authorized project before saving a test case.");
+      return;
+    }
     const data = {
       name,
+      projectId,
       description: document.getElementById("tcDescription").value.trim(),
       priority: document.getElementById("tcPriority").value,
       suiteId: document.getElementById("tcSuiteId").value || null,
@@ -10779,6 +10886,7 @@ paths:
     const qaDashboardGrid = document.getElementById('qaDashboardGrid');
     const statsCards = document.getElementById('statsCards');
     const aiAssistantSection = document.getElementById('aiAssistantSection');
+    const organizationSettings = document.getElementById('organizationSettings');
     
     const isInstructions = location.hash === '#instructions';
     const isTestCases = location.hash === '#testcases';
@@ -10788,6 +10896,7 @@ paths:
     const isHistory = location.hash === '#history';
     const isWiki = location.hash === '#wiki';
     const isDatabase = location.hash === '#database';
+    const isOrganizationSettings = location.hash === '#settings-organization';
     const isDashboard = location.hash === '#dashboard' || location.hash === '' || location.hash === undefined;
     
     // Hide all sections first
@@ -10798,6 +10907,7 @@ paths:
     moduleDetail.hidden = true;
     qaDashboardGrid.hidden = true;
     statsCards.hidden = true;
+    organizationSettings.hidden = true;
     aiAssistantSection.hidden = !isDashboard;
     
     // Show the appropriate section based on hash
@@ -10833,6 +10943,12 @@ paths:
       document.getElementById('moduleDetailContent').innerHTML = renderDatabaseModule();
       aiAssistantSection.hidden = true;
       loadDatabaseOverview();
+    } else if (isOrganizationSettings) {
+      organizationSettings.hidden = false;
+      aiAssistantSection.hidden = true;
+      ensureOrganizationSettingsLayout();
+      renderTenantContextBar();
+      loadOrganizationManagementPage();
     } else {
       // Default: show dashboard grid
       qaDashboardGrid.hidden = false;
@@ -10847,6 +10963,7 @@ paths:
 
   window.addEventListener('hashchange', updateInstructionsVisibility);
   window.addEventListener('load', function() {
+    ensureOrganizationSettingsLayout();
     initChatbotDrag();
     loadAuthState();
   });
@@ -11126,18 +11243,78 @@ paths:
   function field(label, id, value = '', type = 'text', required = false) { return `<div class="user-story-field"><label for="${id}">${label}${required ? '<span class="user-story-required">*</span>' : ''}</label><input id="${id}" type="${type}" value="${escapeHtml(String(value ?? ''))}" ${required ? 'required' : ''}></div>`; }
   function selectField(label, id, options, required = false) { return `<div class="user-story-field"><label for="${id}">${label}${required ? '<span class="user-story-required">*</span>' : ''}</label><select id="${id}" ${required ? 'required' : ''}>${options}</select></div>`; }
   function modalFooter(saveLabel, saveCall) { return `<div class="user-story-form-error" role="alert" aria-live="polite" hidden></div><div class="user-story-modal-footer"><button type="button" class="btn secondary" onclick="closeModalOverlay(this.closest('.modal-overlay'))">Cancel</button><button type="button" class="btn primary" onclick="${saveCall}">${saveLabel}</button></div>`; }
+  let userStoryProjectStatusFilter = 'active';
+  function projectStatusLabel(project) { return project.archived ? 'Archived' : 'Active'; }
+  function renderUserStoryOverview(content) {
+    const projects = userStoryProjects.filter(project => userStoryProjectStatusFilter === 'all' || (userStoryProjectStatusFilter === 'archived' ? project.archived : !project.archived));
+    const activeProjects = userStoryProjects.filter(project => !project.archived);
+    const activeEpics = userStoryEpics.filter(epic => !epic.archived);
+    const activeStories = userStoryStories.items.filter(story => !story.archived);
+    const actionButton = userStoryProjectManageAuthorized ? '<button type="button" class="btn primary" onclick="openUserStoryProjectModal()">+ New Project</button>' : '';
+    content.innerHTML = `<div class="tc-stat-row"><div class="tc-stat-chip"><span>📁 Active projects</span><span class="tc-stat-num">${activeProjects.length}</span></div><div class="tc-stat-chip"><span>🗂 Epics</span><span class="tc-stat-num">${activeEpics.length}</span></div><div class="tc-stat-chip"><span>📝 Stories</span><span class="tc-stat-num">${activeStories.length}</span></div><div class="tc-stat-chip"><span>✅ Done</span><span class="tc-stat-num">${activeStories.filter(story => story.status === 'Done').length}</span></div></div><div class="panel" style="margin-top:18px"><div class="panel-head"><h2>Projects</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label for="userStoryProjectStatusFilter" class="sr-only">Project status</label><select id="userStoryProjectStatusFilter" aria-label="Project status" onchange="userStoryProjectStatusFilter=this.value;renderUserStoryView()"><option value="active" ${userStoryProjectStatusFilter === 'active' ? 'selected' : ''}>Active</option><option value="archived" ${userStoryProjectStatusFilter === 'archived' ? 'selected' : ''}>Archived</option><option value="all" ${userStoryProjectStatusFilter === 'all' ? 'selected' : ''}>All</option></select>${actionButton}</div></div><div class="qa-dashboard-grid">${projects.length ? projects.map(renderProjectCard).join('') : `<div class="module-empty">No ${userStoryProjectStatusFilter === 'archived' ? 'archived ' : ''}projects found.</div>`}</div></div>`;
+  }
+  function renderProjectCard(project) {
+    const count = userStoryStories.items.filter(story => story.projectId === project.id && !story.archived).length;
+    const lifecycle = userStoryProjectManageAuthorized ? `<button type="button" class="btn secondary" onclick="openProjectLifecycleConfirm('${encodeURIComponent(project.id)}','${project.archived ? 'restore' : 'archive'}')">${project.archived ? 'Restore' : 'Archive'}</button>` : '<span class="muted">Read only</span>';
+    return `<div class="qa-module-card" style="--card-color:#6366f1;display:block"><div style="display:flex;justify-content:space-between;gap:8px"><div><div class="qa-module-title">${escapeHtml(project.key)} — ${escapeHtml(project.name)}</div><div class="qa-module-desc">${escapeHtml(project.description || 'No description')}</div></div><strong>${count}</strong></div><div style="display:flex;gap:8px;align-items:center;margin-top:12px"><span class="tag">${projectStatusLabel(project)}</span>${userStoryProjectManageAuthorized ? `<button type="button" class="btn secondary" onclick="openUserStoryProjectModal(userStoryProjects.find(item=>item.id===decodeURIComponent('${encodeURIComponent(project.id)}')))\">Edit</button>` : ''}${lifecycle}</div></div>`;
+  }
+  function openProjectLifecycleConfirm(encodedId, action) {
+    const id = decodeURIComponent(encodedId);
+    const verb = action === 'restore' ? 'restore' : 'archive';
+    const overlay = modalShell(`${verb[0].toUpperCase()}${verb.slice(1)} project`, `<p>Are you sure you want to ${verb} this project?</p>${modalFooter(verb[0].toUpperCase() + verb.slice(1), `submitProjectLifecycle('${encodeURIComponent(id)}','${verb}',this.closest('.modal-overlay'))`)}`);
+    overlay.querySelector('.btn.primary')?.focus();
+  }
+  async function submitProjectLifecycle(encodedId, action, overlay) {
+    if (!overlay || overlay.dataset.saving === 'true') return;
+    overlay.dataset.saving = 'true';
+    const button = overlay.querySelector('.btn.primary');
+    if (button) button.disabled = true;
+    try {
+      const id = decodeURIComponent(encodedId);
+      await api(`/api/user-stories/projects/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: '{}' });
+      closeModalOverlay(overlay);
+      notify(`✅ Project ${action === 'restore' ? 'restored' : 'archived'}.`);
+      await loadUserStoryModule();
+    } catch (error) {
+      overlay.dataset.saving = 'false';
+      if (button) button.disabled = false;
+      setUserStoryModalError(overlay, `Unable to ${action} project: ${error.message || 'Unknown server error'}`);
+    }
+  }
   function openUserStoryProjectModal(project) { const edit = project || null; modalShell(edit ? 'Edit Project' : 'New Project', `<div class="user-story-form-grid">${field('Project key','usProjectKey',edit?.key,'text',true)}${field('Name','usProjectName',edit?.name,'text',true)}<div class="user-story-field full"><label for="usProjectDescription">Description</label><textarea id="usProjectDescription">${escapeHtml(edit?.description || '')}</textarea></div>${field('Owner','usProjectOwner',edit?.owner)}</div>${modalFooter('Save Project',`saveUserStoryProject('${edit?.id || ''}',this.closest('.modal-overlay'))`)}`); }
   function openUserStoryEpicModal(epic) { const edit = epic || null; modalShell(edit ? 'Edit Epic' : 'New Epic', `<div class="user-story-form-grid">${selectField('Project','usEpicProject',projectOptions(edit?.projectId),true)}${field('Epic key','usEpicKey',edit?.key,'text',true)}${field('Name','usEpicName',edit?.name,'text',true)}${selectField('Status','usEpicStatus','<option>To Do</option><option>In Progress</option><option>Testing</option><option>Done</option>')}<div class="user-story-field full"><label for="usEpicDescription">Description</label><textarea id="usEpicDescription">${escapeHtml(edit?.description || '')}</textarea></div>${selectField('Priority','usEpicPriority','<option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option>')}</div>${modalFooter('Save Epic',`saveUserStoryEpic('${edit?.id || ''}',this.closest('.modal-overlay'))`)}`); if (edit) { document.getElementById('usEpicStatus').value = edit.status; document.getElementById('usEpicPriority').value = edit.priority; } }
   function ensureStoryDefectPanel(overlay) { if (overlay.querySelector('[data-user-story-panel="defects"]')) return; const panel = document.createElement('div'); panel.dataset.userStoryPanel = 'defects'; panel.innerHTML = '<div class="user-story-assets"><h3>Defects <span id="usStoryDefectCount" class="tag">(0)</span></h3><small>Defects linked to this User Story. Create/link operations are independent of Save Story.</small><div id="usStoryDefectList" class="user-story-asset-list"><small>Loading defects…</small></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn secondary" onclick="openStoryDefectCreate(this.closest(\'.modal-overlay\'))">Create Defect</button><button type="button" class="btn secondary" onclick="openStoryDefectLink(this.closest(\'.modal-overlay\'))">Link Existing</button></div></div>'; overlay.querySelector('.user-story-modal-footer').before(panel); loadStoryDefects(overlay, overlay.dataset.storyId); }
   function switchUserStoryDialogTab(tab, button) { const overlay = button.closest('.modal-overlay'); if (tab === 'defects') ensureStoryDefectPanel(overlay); overlay.querySelectorAll('.user-story-tab').forEach(item => item.classList.toggle('active', item === button)); overlay.querySelectorAll('[data-user-story-panel]').forEach(panel => { panel.hidden = panel.dataset.userStoryPanel !== tab; }); }
   function updateStoryEpicsForProject() { const projectId = document.getElementById('usStoryProject').value; const epic = document.getElementById('usStoryEpic'); const current = epic.value; epic.innerHTML = `<option value="">No epic</option>${userStoryEpics.filter(e=>!e.archived && (!projectId || e.projectId === projectId)).map(e=>`<option value="${e.id}">${escapeHtml(e.key)} — ${escapeHtml(e.name)}</option>`).join('')}`; if ([...epic.options].some(o => o.value === current)) epic.value = current; }
   function openUserStoryStoryModal(story) { const edit = story || null; const projectId = edit?.projectId || ''; const creator = edit?.createdBy || (edit ? 'Unknown' : 'Assigned automatically on creation'); const details = `<div class="user-story-form-grid">${selectField('Project','usStoryProject',projectOptions(projectId),true)}${selectField('Epic','usStoryEpic',`<option value="">No epic</option>${userStoryEpics.filter(e=>!e.archived && (!projectId || e.projectId === projectId)).map(e=>`<option value="${e.id}" ${e.id===edit?.epicId?'selected':''}>${escapeHtml(e.key)} — ${escapeHtml(e.name)}</option>`).join('')}`)}${field('Story title','usStoryTitle',edit?.title,'text',true)}${selectField('Sprint','usStorySprint',`<option value="">Backlog / unassigned</option>${userStorySprints.filter(s => s.status !== 'Completed' && (!projectId || s.projectId === projectId)).map(s=>`<option value="${s.id}" ${s.id===edit?.sprintId?'selected':''}>${escapeHtml(s.id)} — ${escapeHtml(s.name)}</option>`).join('')}`)}<div class="user-story-field full"><label for="usStoryDescription">Description</label><textarea id="usStoryDescription">${escapeHtml(edit?.description || '')}</textarea></div><div class="user-story-compact-grid">${selectField('Priority','usStoryPriority','<option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option>')}${selectField('Status','usStoryStatus','<option>To Do</option><option>In Progress</option><option>Testing</option><option>Done</option>')}${field('Story points','usStoryPoints',edit?.storyPoints ?? 0,'number')}${field('Assignee','usStoryAssignee',edit?.assignee)}</div><div class="user-story-field"><label for="usStoryCreatedBy">Created By</label><input id="usStoryCreatedBy" value="${escapeHtml(creator)}" readonly aria-readonly="true"></div><div class="user-story-assets"><h3>Attachments</h3><small>PNG, JPG, JPEG, PDF, TXT, LOG or CSV · maximum 10 MB per file.</small><input id="usStoryAttachments" type="file" multiple accept=".png,.jpg,.jpeg,.pdf,.txt,.log,.csv" onchange="showSelectedStoryFiles(this)" style="display:block;margin-top:8px">${edit ? '<div id="usStoryAttachmentList" class="user-story-asset-list"><small>Loading attachments…</small></div>' : '<div id="usStoryAttachmentList" class="user-story-asset-list"><small>Files upload after the story is created.</small></div>'}</div><div class="user-story-assets"><h3>Related Links</h3><div class="user-story-form-grid"><div class="user-story-field"><label for="usStoryLinkTitle">Link title</label><input id="usStoryLinkTitle" placeholder="Requirements or design"></div>${selectField('Type','usStoryLinkType','<option>Requirement</option><option>Bug</option><option>Test Case</option><option>Documentation</option><option selected>Other</option>')}<div class="user-story-field full"><label for="usStoryLinkUrl">URL</label><input id="usStoryLinkUrl" type="url" placeholder="https://example.com"></div></div>${edit ? '<button type="button" class="btn secondary" style="margin-top:8px" onclick="addStoryRelatedLink(this.closest(\'.modal-overlay\'))">Add link</button><div id="usStoryRelatedLinkList" class="user-story-asset-list"><small>Loading links…</small></div>' : '<small>Links can be added after the story is created.</small>'}</div></div>`; const body = `<input type="hidden" id="usStoryEditId" value="${escapeHtml(edit?.id || '')}"><div class="user-story-tabs" role="tablist"><button type="button" class="user-story-tab active" role="tab" aria-selected="true" onclick="switchUserStoryDialogTab('details',this)">Details</button><button type="button" class="user-story-tab" role="tab" aria-selected="false" onclick="switchUserStoryDialogTab('user-story',this)">User Story</button><button type="button" class="user-story-tab" role="tab" aria-selected="false" onclick="switchUserStoryDialogTab('acceptance',this)">Acceptance Criteria</button></div><div data-user-story-panel="details">${details}</div><div data-user-story-panel="user-story" hidden><div class="user-story-form-grid">${field('As a','usStoryAsA',edit?.asA)}${field('I want','usStoryIWant',edit?.iWant)}${field('So that','usStorySoThat',edit?.soThat)}</div></div><div data-user-story-panel="acceptance" hidden><div class="user-story-field"><label for="usStoryAcceptance">Acceptance criteria</label><textarea id="usStoryAcceptance" style="min-height:220px">${escapeHtml(edit?.acceptanceCriteria || '')}</textarea></div></div>${modalFooter('Save Story',`saveUserStoryStory('${edit?.id || ''}',this.closest('.modal-overlay'))`)}`; const overlay = modalShell(edit ? 'Edit User Story' : 'New User Story', body); overlay.dataset.storyId = edit?.id || ''; overlay.querySelector('#usStoryProject').addEventListener('change', updateStoryEpicsForProject); if (edit) { overlay.querySelector('#usStoryPriority').value = edit.priority; overlay.querySelector('#usStoryStatus').value = edit.status; loadStoryAssets(overlay, edit.id); } }
-  function userStoryFilters() { return `<div class="user-story-filter-bar"><select id="userStoryProjectFilter" onchange="userStoryPage=0;loadUserStoryList().then(renderUserStoryView)"><option value="">All projects</option>${projectOptions()}</select><select id="userStoryPriorityFilter" onchange="renderUserStoryView()"><option value="">All priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select><input id="userStorySearch" type="search" placeholder="Search stories..." oninput="userStoryPage=0;loadUserStoryList().then(renderUserStoryView)"><button type="button" class="btn primary" onclick="openUserStoryStoryModal()">+ New Story</button></div>`; }
-  function renderUserStoryBacklog(content) { const priority = document.getElementById('userStoryPriorityFilter')?.value || ''; const rows = userStoryStories.items.filter(s => !priority || s.priority === priority); content.innerHTML = `<div class="user-story-backlog">${userStoryFilters()}<div class="panel"><div class="panel-head"><h2>${userStoryView === 'stories' ? 'All Stories' : 'Backlog'}</h2><span class="tag">${userStoryStories.total} total · ${rows.filter(s => !s.sprintId).length} unassigned on this page</span></div>${rows.length ? `<div style="overflow:auto"><table class="instructions-table"><thead><tr><th>ID</th><th>Title</th><th>Project</th><th>Sprint</th><th>Status</th><th>Priority</th><th>Points</th><th>Actions</th></tr></thead><tbody>${rows.map(s => `<tr><td><strong>${escapeHtml(s.id)}</strong></td><td>${escapeHtml(s.title)}</td><td>${escapeHtml(userStoryProjects.find(p=>p.id===s.projectId)?.key || '')}</td><td>${escapeHtml(userStorySprints.find(sp=>sp.id===s.sprintId)?.name || 'Backlog')}</td><td>${escapeHtml(s.status)}</td><td>${escapeHtml(s.priority)}</td><td>${s.storyPoints}</td><td><button type="button" class="btn secondary" onclick="openStoryQaCoverage(userStoryStories.items.find(s=>s.id==='${s.id}'))">QA Coverage</button> <button type="button" class="btn secondary" onclick="openUserStoryStoryModal(userStoryStories.items.find(s=>s.id==='${s.id}'))">Edit</button> <button type="button" class="btn secondary" onclick="archiveUserStoryStory('${s.id}')">Archive</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No stories found.</div>'}<div style="display:flex;justify-content:space-between;margin-top:12px"><button type="button" class="btn secondary" ${userStoryPage === 0 ? 'disabled' : ''} onclick="userStoryPage--;loadUserStoryList().then(renderUserStoryView)">Previous</button><span>Page ${userStoryPage + 1}</span><button type="button" class="btn secondary" ${(userStoryPage + 1) * USER_STORY_PAGE_SIZE >= userStoryStories.total ? 'disabled' : ''} onclick="userStoryPage++;loadUserStoryList().then(renderUserStoryView)">Next</button></div></div></div>`; const filter = document.getElementById('userStoryPriorityFilter'); if (filter) filter.value = priority; }
-  let sprintBoardState = { items: [], total: 0, projectId: '', sprintId: '' };
+  const USER_STORY_FILTER_KEY = 'qa.userstories.filters.v1';
+  let userStorySearchTimer = null;
+  function readUserStoryFilters() { try { return JSON.parse(localStorage.getItem(USER_STORY_FILTER_KEY) || '{}'); } catch (e) { return {}; } }
+  function saveUserStoryFilters() { const filters = { projectId: document.getElementById('userStoryProjectFilter')?.value || '', priority: document.getElementById('userStoryPriorityFilter')?.value || '', search: document.getElementById('userStorySearch')?.value || '' }; try { localStorage.setItem(USER_STORY_FILTER_KEY, JSON.stringify(filters)); } catch (e) { /* storage may be unavailable; filters remain session-local */ } return filters; }
+  function clearUserStoryFilters() { try { localStorage.removeItem(USER_STORY_FILTER_KEY); } catch (e) {} const project = document.getElementById('userStoryProjectFilter'); const priority = document.getElementById('userStoryPriorityFilter'); const search = document.getElementById('userStorySearch'); if (project) project.value = ''; if (priority) priority.value = ''; if (search) search.value = ''; userStoryPage = 0; loadUserStoryList().then(renderUserStoryView); }
+  function queueUserStorySearch() { saveUserStoryFilters(); userStoryPage = 0; window.clearTimeout(userStorySearchTimer); userStorySearchTimer = window.setTimeout(() => loadUserStoryList().then(renderUserStoryView), 250); }
+  function userStoryFilters() { const saved = readUserStoryFilters(); return `<div class="user-story-filter-bar" role="search" aria-label="Filter user stories"><select id="userStoryProjectFilter" aria-label="Filter by project" onchange="saveUserStoryFilters();userStoryPage=0;loadUserStoryList().then(renderUserStoryView)"><option value="">All projects</option>${projectOptions(saved.projectId || '')}</select><select id="userStoryPriorityFilter" aria-label="Filter by priority" onchange="saveUserStoryFilters();renderUserStoryView()"><option value="">All priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select><input id="userStorySearch" type="search" value="${escapeHtml(saved.search || '')}" placeholder="Search stories..." aria-label="Search stories" oninput="queueUserStorySearch()"><button type="button" class="btn secondary" onclick="clearUserStoryFilters()">Clear filters</button><button type="button" class="btn primary" onclick="openUserStoryStoryModal()">+ New Story</button></div>`; }
+  function renderUserStoryBacklog(content) { const saved = readUserStoryFilters(); const priority = saved.priority || ''; const rows = userStoryStories.items.filter(s => !priority || s.priority === priority); content.innerHTML = `<div class="user-story-backlog">${userStoryFilters()}<div class="panel"><div class="panel-head"><h2>${userStoryView === 'stories' ? 'All Stories' : 'Backlog'}</h2><span class="tag">${userStoryStories.total} total · ${rows.filter(s => !s.sprintId).length} unassigned on this page</span></div>${rows.length ? `<div style="overflow:auto"><table class="instructions-table"><thead><tr><th>ID</th><th>Title</th><th>Project</th><th>Sprint</th><th>Status</th><th>Priority</th><th>Points</th><th>Actions</th></tr></thead><tbody>${rows.map(s => `<tr><td><strong>${escapeHtml(s.id)}</strong></td><td>${escapeHtml(s.title)}</td><td>${escapeHtml(userStoryProjects.find(p=>p.id===s.projectId)?.key || '')}</td><td>${escapeHtml(userStorySprints.find(sp=>sp.id===s.sprintId)?.name || 'Backlog')}</td><td>${escapeHtml(s.status)}</td><td>${escapeHtml(s.priority)}</td><td>${s.storyPoints}</td><td><button type="button" class="btn secondary" onclick="openStoryQaCoverage(userStoryStories.items.find(s=>s.id==='${s.id}'))">QA Coverage</button> <button type="button" class="btn secondary" onclick="openUserStoryStoryModal(userStoryStories.items.find(s=>s.id==='${s.id}'))">Edit</button> <button type="button" class="btn secondary" onclick="archiveUserStoryStory('${s.id}')">Archive</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="module-empty">No stories match these filters. Try clearing one or more filters.</div>'}<div style="display:flex;justify-content:space-between;margin-top:12px"><button type="button" class="btn secondary" ${userStoryPage === 0 ? 'disabled' : ''} onclick="userStoryPage--;loadUserStoryList().then(renderUserStoryView)">Previous</button><span>Page ${userStoryPage + 1}</span><button type="button" class="btn secondary" ${(userStoryPage + 1) * USER_STORY_PAGE_SIZE >= userStoryStories.total ? 'disabled' : ''} onclick="userStoryPage++;loadUserStoryList().then(renderUserStoryView)">Next</button></div></div></div>`; const priorityFilter = document.getElementById('userStoryPriorityFilter'); if (priorityFilter) priorityFilter.value = priority; }
+  let sprintBoardState = { items: [], total: 0, projectId: '', sprintId: '', assignee: '', priority: '' };
   const sprintBoardSaving = new Set();
   let sprintBoardDraggedStoryId = '';
   const BOARD_STATUSES = ['To Do', 'In Progress', 'Testing', 'Done'];
+
+  function authorizedProjectId(preferred = '') {
+    const allowed = new Set((userStoryProjects || []).filter(project => !project.archived).map(project => project.id));
+    const candidate = [preferred, tenantState.projectId].find(projectId => projectId && allowed.has(projectId));
+    const projectId = candidate || userStoryProjects.find(project => !project.archived)?.id || '';
+    if (projectId && allowed.has(projectId)) tenantState.projectId = projectId;
+    return projectId;
+  }
+
+  async function ensureActiveProjectContext() {
+    const organizationScope = tenantState.organizationId ? `?organizationId=${encodeURIComponent(tenantState.organizationId)}` : '';
+    userStoryProjects = await api('/api/user-stories/projects' + organizationScope);
+    const projectId = authorizedProjectId();
+    renderTenantContextBar();
+    return projectId;
+  }
 
   async function apiWithTimeout(url, options = {}, timeoutMs = 8000) {
     const controller = new AbortController();
@@ -11154,25 +11331,49 @@ paths:
   }
 
   function renderSprintBoardFromState(content) {
-    const { items, projectId, sprintId } = sprintBoardState;
+    const { items, projectId, sprintId, assignee, priority } = sprintBoardState;
+    const assignees = [...new Set(items.map(story => story.assignee).filter(Boolean))].sort();
     const filters = `<div class="user-story-filter-bar"><select id="userStoryBoardProject" onchange="renderUserStoryBoard(document.getElementById('userStoryContent'))"><option value="">All projects</option>${projectOptions(projectId)}</select><select id="userStoryBoardSprint" onchange="renderUserStoryBoard(document.getElementById('userStoryContent'))"><option value="">All sprints</option>${userStorySprints.filter(s => !projectId || s.projectId === projectId).map(s => `<option value="${s.id}" ${s.id === sprintId ? 'selected' : ''}>${escapeHtml(s.id)} — ${escapeHtml(s.name)}</option>`).join('')}</select></div>`;
+    const boardItems = items.filter(story => (!assignee || story.assignee === assignee) && (!priority || story.priority === priority));
+    const boardFilterControls = `<select id="userStoryBoardAssignee" aria-label="Filter board by assignee" onchange="sprintBoardState.assignee=this.value;renderSprintBoardFromState(document.getElementById('userStoryContent'))"><option value="">All assignees</option>${assignees.map(name => `<option ${name === assignee ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select><select id="userStoryBoardPriority" aria-label="Filter board by priority" onchange="sprintBoardState.priority=this.value;renderSprintBoardFromState(document.getElementById('userStoryContent'))"><option value="">All priorities</option>${['Low','Medium','High','Critical'].map(name => `<option ${name === priority ? 'selected' : ''}>${name}</option>`).join('')}</select>`;
     const columns = BOARD_STATUSES.map(status => {
-      const columnItems = items.filter(story => story.status === status);
+      const columnItems = boardItems.filter(story => story.status === status);
       return `<div class="user-story-kanban-column" data-board-status="${status}" ondragover="handleStoryDragOver(event,this)" ondragleave="handleStoryDragLeave(event,this)" ondrop="handleStoryDrop(event,this)"><div class="panel-head"><h3>${escapeHtml(status)}</h3><span class="tag">${columnItems.length}</span></div>${columnItems.map(story => {
         const saving = sprintBoardSaving.has(story.id);
         return `<div class="user-story-card${saving ? ' is-saving' : ''}" draggable="true" data-story-id="${escapeHtml(story.id)}" ondragstart="handleStoryDragStart(event,this)" ondragend="handleStoryDragEnd(event,this)" tabindex="0" aria-label="${escapeHtml(story.id + ' ' + story.title)}"><strong>${escapeHtml(story.id)}</strong><div>${escapeHtml(story.title)}</div><div style="font-size:12px;margin-top:6px">${escapeHtml(story.priority)} · ${story.storyPoints} pts · ${escapeHtml(story.assignee || 'Unassigned')}</div><div class="user-story-card-status"><select aria-label="Change status for ${escapeHtml(story.id)}" ${saving ? 'disabled' : ''} onchange="moveStoryOnBoard('${escapeHtml(story.id)}',this.value)">${BOARD_STATUSES.map(next => `<option ${next === status ? 'selected' : ''}>${next}</option>`).join('')}</select>${saving ? '<span class="user-story-card-saving" role="status">Saving…</span>' : ''}</div><button type="button" class="btn secondary" style="margin-top:8px;width:100%" onclick="openUserStoryStoryModal(userStoryStories.items.find(item => item.id === '${escapeHtml(story.id)}'))">Details</button></div>`;
       }).join('') || '<div class="module-empty">No stories</div>'}</div>`;
     }).join('');
-    content.innerHTML = filters + `<div class="user-story-kanban">${columns}</div>`;
+    content.innerHTML = filters.replace('</div>', boardFilterControls + '</div>') + `<div class="user-story-kanban">${columns}</div>`;
+    content.querySelectorAll('.user-story-card[tabindex="0"]').forEach(card => card.addEventListener('keydown', event => handleStoryCardKeydown(event, card)));
+  }
+
+  function handleStoryCardKeydown(event, card) {
+    if (event.target && event.target.tagName === 'SELECT') return;
+    const story = sprintBoardState.items.find(item => item.id === card.dataset.storyId);
+    if (!story || sprintBoardSaving.has(story.id)) return;
+    if (event.key === 'Enter') { event.preventDefault(); openUserStoryStoryModal(userStoryStories.items.find(item => item.id === story.id) || story); return; }
+    const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (!direction) return;
+    event.preventDefault();
+    const nextIndex = BOARD_STATUSES.indexOf(story.status) + direction;
+    if (nextIndex >= 0 && nextIndex < BOARD_STATUSES.length) moveStoryOnBoard(story.id, BOARD_STATUSES[nextIndex]);
   }
 
   async function renderUserStoryBoard(content) {
-    const projectId = document.getElementById('userStoryBoardProject')?.value || '';
+    const requestedProjectId = document.getElementById('userStoryBoardProject')?.value || '';
+    const projectId = authorizedProjectId(requestedProjectId);
     const sprintId = document.getElementById('userStoryBoardSprint')?.value || '';
+    if (!projectId) {
+      sprintBoardState = { items: [], total: 0, projectId: '', sprintId: '', assignee: '', priority: '' };
+      content.innerHTML = '<div class="module-empty">Select an authorized project to load the Sprint Board.</div>';
+      return;
+    }
     content.innerHTML = '<div class="module-empty">Loading sprint board...</div>';
     try {
-      const result = await apiWithTimeout('/api/user-stories/board?' + new URLSearchParams({ projectId, sprintId, offset: '0', limit: '100' }));
-      sprintBoardState = { items: result.items || [], total: result.total || 0, projectId, sprintId };
+      const boardQuery = new URLSearchParams({ projectId, offset: '0', limit: '100' });
+      if (sprintId) boardQuery.set('sprintId', sprintId);
+      const result = await apiWithTimeout('/api/user-stories/board?' + boardQuery);
+      sprintBoardState = { items: result.items || [], total: result.total || 0, projectId, sprintId, assignee: sprintBoardState.assignee || '', priority: sprintBoardState.priority || '' };
       renderSprintBoardFromState(content);
     } catch (e) { content.innerHTML = `<div class="module-empty">Unable to load sprint board: ${escapeHtml(e.message || 'Request timed out')}</div>`; }
   }

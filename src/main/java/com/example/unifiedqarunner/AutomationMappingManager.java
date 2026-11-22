@@ -26,6 +26,7 @@ final class AutomationMappingManager {
     AutomationMappingManager(Path configPath) {
         this.configPath = java.util.Objects.requireNonNull(configPath, "configPath")
                 .toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(this.configPath.getParent(), "automation-mapping");
     }
     private static final String KEY = "automationMappings";
 
@@ -109,7 +110,7 @@ final class AutomationMappingManager {
                 if (parsed instanceof Map<?, ?> values) root.putAll((Map<String, Object>) values);
             }
             root.put(KEY, entries);
-            Files.writeString(path, CiCdConfig.toJson(root));
+            StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "automation-mapping", () -> Files.writeString(path, CiCdConfig.toJson(root)));
         } catch (Exception error) {
             throw new RuntimeException("Failed to save automation mappings: " + error.getMessage(), error);
         }

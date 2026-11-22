@@ -50,6 +50,7 @@ final class AuthSessionManager {
     }
 
     synchronized void invalidate(String id) { if (id != null) sessions.remove(id); }
+    synchronized void invalidateUser(String userId) { if (userId != null) sessions.values().removeIf(session -> userId.equals(session.userId())); }
 
     String cookie(Session session, boolean secure) {
         return COOKIE + "=" + session.id() + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=" + sessionLifetime.toSeconds() + (secure ? "; Secure" : "");

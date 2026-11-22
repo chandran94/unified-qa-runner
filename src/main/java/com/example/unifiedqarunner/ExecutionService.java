@@ -181,13 +181,14 @@ final class ExecutionService {
         Path runDirectory = projectRoot.resolve("target").resolve("runner-reports")
                 .resolve(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(LocalDateTime.now()) + "-" + UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(runDirectory);
+        Path stagingDirectory = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "execution-newman-" + UUID.randomUUID().toString().substring(0, 8));
 
         HttpServer healthServer = null;
         if (kind == Kind.NEWMAN_COLLECTION) {
             // Newman doesn't use browsers; run directly
-            Path newmanJson = runDirectory.resolve("newman.json");
-            Path surefireDirectory = runDirectory.resolve("surefire");
+            Path newmanJson = stagingDirectory.resolve("newman.json");
+            Path surefireDirectory = stagingDirectory.resolve("surefire");
             Path collection = validateCollection(selection, target, authorized);
             if (isLoopbackTarget(target) && target.getPort() == 8080) {
                 try {
@@ -213,10 +214,15 @@ final class ExecutionService {
                 healthServer.stop(0);
                 output.accept("[runner] Local health fixture stopped");
             }
-            RunSummary summary = readSummary(projectRoot, kind, selection, surefireDirectory,
-                    null, newmanJson, exitCode);
-            ReportWriter.write(runDirectory, summary);
-            return new RunResult(runDirectory, exitCode, summary);
+            try {
+                RunSummary summary = readSummary(projectRoot, kind, selection, surefireDirectory,
+                        null, newmanJson, exitCode);
+                ArtifactPublicationService.publishDirectory(projectRoot, stagingDirectory, runDirectory);
+                ReportWriter.write(runDirectory, summary);
+                return new RunResult(runDirectory, exitCode, summary);
+            } finally {
+                ArtifactPublicationService.discardStaging(stagingDirectory);
+            }
         }
 
         // For Cucumber/Selenium/RestAssured: run for each selected browser

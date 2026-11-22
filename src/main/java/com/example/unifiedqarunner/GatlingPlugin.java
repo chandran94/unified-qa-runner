@@ -9,6 +9,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -103,6 +104,9 @@ public class GatlingPlugin implements RunnerPlugin {
                 .resolve(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(LocalDateTime.now()) + "-" + UUID.randomUUID().toString().substring(0, 8));
         Files.createDirectories(runDirectory);
+        Path gatlingStaging = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "gatling-" + UUID.randomUUID().toString().substring(0, 8));
+        Path isolatedBuildDirectory = gatlingStaging.resolve("maven-target");
 
         output.accept("[runner] Executing Gatling simulation: " + selection);
 
@@ -129,7 +133,11 @@ public class GatlingPlugin implements RunnerPlugin {
             output.accept("[runner] Warning: No pom.xml found near simulation file.");
             output.accept("[runner] To run Gatling simulations, place a pom.xml with Gatling Maven plugin in the same directory.");
             output.accept("[runner] Falling back to simulation mode — parsing simulation file for scenario count.");
-            return simulateFromSource(simFile, runDirectory, output);
+            try {
+                return simulateFromSource(simFile, runDirectory, output);
+            } finally {
+                ArtifactPublicationService.discardStaging(gatlingStaging);
+            }
         }
 
         // Extract simulation class name
@@ -152,17 +160,15 @@ public class GatlingPlugin implements RunnerPlugin {
         if (!mavenAvailable) {
             output.accept("[runner] Warning: Maven (mvn) not found in PATH.");
             output.accept("[runner] Falling back to simulation mode — parsing simulation file for scenario count.");
-            return simulateFromSource(simFile, runDirectory, output);
+            try {
+                return simulateFromSource(simFile, runDirectory, output);
+            } finally {
+                ArtifactPublicationService.discardStaging(gatlingStaging);
+            }
         }
 
         // Run via Maven with Gatling plugin
-        List<String> command = new ArrayList<>();
-        command.add("mvn");
-        command.add("test");
-        command.add("-Dgatling.simulationClass=" + simClassName);
-        if (targetUrl != null && !targetUrl.isEmpty()) {
-            command.add("-Dbase.url=" + targetUrl);
-        }
+        List<String> command = buildMavenCommand(simClassName, isolatedBuildDirectory, targetUrl);
 
         output.accept("[runner] Command: " + String.join(" ", command));
 
@@ -186,17 +192,25 @@ public class GatlingPlugin implements RunnerPlugin {
         outputThread.setDaemon(true);
         outputThread.start();
 
-        int exitCode = runningProcess.waitFor();
+        boolean completed = runningProcess.waitFor(30, TimeUnit.MINUTES);
+        if (!completed) {
+            runningProcess.destroyForcibly();
+            outputThread.join(5000);
+            ArtifactPublicationService.discardStaging(gatlingStaging);
+            runningProcess = null;
+            throw new IOException("Gatling process timed out after 30 minutes.");
+        }
+        int exitCode = runningProcess.exitValue();
         outputThread.join(5000);
 
         output.accept("[runner] Exit code: " + exitCode);
 
         // Parse Gatling results from the target/gatling-simulations directory
-        RunSummary summary = parseGatlingResults(simDir, runDirectory, output);
+        RunSummary summary = parseGatlingResults(isolatedBuildDirectory, runDirectory, output);
 
         if (summary == null) {
             // Fallback: parse from surefire reports
-            Path surefireDir = simDir.resolve("target/surefire-reports");
+            Path surefireDir = isolatedBuildDirectory.resolve("surefire-reports");
             if (Files.isDirectory(surefireDir)) {
                 summary = ExecutionService.readSummaryFromSurefire(surefireDir);
             }
@@ -218,7 +232,24 @@ public class GatlingPlugin implements RunnerPlugin {
             );
         }
 
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        try {
+            return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        } finally {
+            ArtifactPublicationService.discardStaging(gatlingStaging);
+            runningProcess = null;
+        }
+    }
+
+    static List<String> buildMavenCommand(String simulationClass, Path isolatedBuildDirectory,
+                                          String targetUrl) {
+        List<String> command = new ArrayList<>();
+        command.add("mvn");
+        command.add("test");
+        // Standard Maven output relocation; no undocumented Gatling flag is used.
+        command.add("-Dproject.build.directory=" + isolatedBuildDirectory.toAbsolutePath());
+        command.add("-Dgatling.simulationClass=" + simulationClass);
+        if (targetUrl != null && !targetUrl.isEmpty()) command.add("-Dbase.url=" + targetUrl);
+        return List.copyOf(command);
     }
 
     /**
@@ -240,18 +271,16 @@ public class GatlingPlugin implements RunnerPlugin {
     /**
      * Parse Gatling simulation results from the target directory.
      */
-    private RunSummary parseGatlingResults(Path simDir, Path runDirectory, Consumer<String> output) {
+    private RunSummary parseGatlingResults(Path isolatedBuildDirectory, Path runDirectory, Consumer<String> output) {
         // Check for Gatling HTML report
-        Path gatlingReport = simDir.resolve("target/gatling-simulations");
+        Path gatlingReport = isolatedBuildDirectory.resolve("gatling-simulations");
         if (Files.isDirectory(gatlingReport)) {
             try (var files = Files.walk(gatlingReport)) {
                 for (Path file : files.filter(Files::isRegularFile).toList()) {
                     if (file.getFileName().toString().equals("index.html")) {
                         output.accept("[runner] Found Gatling HTML report: " + file);
-                        // Copy report to run directory
                         Path dest = runDirectory.resolve("gatling-report");
-                        Files.createDirectories(dest);
-                        copyDirectory(gatlingReport, dest);
+                        ArtifactPublicationService.publishDirectory(projectRoot, gatlingReport, dest);
                         break;
                     }
                 }
@@ -260,19 +289,6 @@ public class GatlingPlugin implements RunnerPlugin {
             }
         }
         return null;
-    }
-
-    /**
-     * Copy directory recursively.
-     */
-    private void copyDirectory(Path source, Path target) throws IOException {
-        try (var files = Files.walk(source)) {
-            for (Path file : files.filter(Files::isRegularFile).toList()) {
-                Path targetFile = target.resolve(source.relativize(file));
-                Files.createDirectories(targetFile.getParent());
-                Files.copy(file, targetFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
     }
 
     /**

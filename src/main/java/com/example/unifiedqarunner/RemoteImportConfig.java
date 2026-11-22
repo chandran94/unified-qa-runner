@@ -26,19 +26,26 @@ public class RemoteImportConfig {
 
     /** Bounded ZIP import policy. Nested archives are retained as files and never recursively extracted. */
     record ZipImportLimits(long maxArchiveBytes, int maxEntries, long maxEntryBytes,
-                           long maxTotalBytes, int maxPathDepth) {
+                           long maxTotalBytes, int maxPathDepth, double maxCompressionRatio) {
+        ZipImportLimits(long maxArchiveBytes, int maxEntries, long maxEntryBytes,
+                        long maxTotalBytes, int maxPathDepth) {
+            this(maxArchiveBytes, maxEntries, maxEntryBytes, maxTotalBytes, maxPathDepth, 100.0d);
+        }
+
         static ZipImportLimits defaults() {
             return new ZipImportLimits(
                     configuredLong("qa.runner.zip.maxArchiveBytes", 50L * 1024 * 1024),
                     configuredInt("qa.runner.zip.maxEntries", 1024),
                     configuredLong("qa.runner.zip.maxEntryBytes", 8L * 1024 * 1024),
                     configuredLong("qa.runner.zip.maxTotalBytes", 64L * 1024 * 1024),
-                    configuredInt("qa.runner.zip.maxPathDepth", 32));
+                    configuredInt("qa.runner.zip.maxPathDepth", 32),
+                    configuredDouble("qa.runner.zip.maxCompressionRatio", 100.0d));
         }
 
         ZipImportLimits {
             if (maxArchiveBytes <= 0 || maxEntries <= 0 || maxEntryBytes <= 0
-                    || maxTotalBytes <= 0 || maxPathDepth <= 0) {
+                    || maxTotalBytes <= 0 || maxPathDepth <= 0
+                    || !Double.isFinite(maxCompressionRatio) || maxCompressionRatio <= 0.0d) {
                 throw new IllegalArgumentException("ZIP import limits must be positive.");
             }
         }
@@ -54,6 +61,13 @@ public class RemoteImportConfig {
             String value = System.getProperty(name);
             if (value == null || value.isBlank()) return fallback;
             try { return Integer.parseInt(value); }
+            catch (NumberFormatException ignored) { return fallback; }
+        }
+
+        private static double configuredDouble(String name, double fallback) {
+            String value = System.getProperty(name);
+            if (value == null || value.isBlank()) return fallback;
+            try { return Double.parseDouble(value); }
             catch (NumberFormatException ignored) { return fallback; }
         }
     }
@@ -120,6 +134,7 @@ public class RemoteImportConfig {
         if (projectRoot == null) throw new NullPointerException("projectRoot");
         if (zipLimits == null) throw new NullPointerException("zipLimits");
         this.projectRoot = projectRoot;
+        StorageWriteCoordinator.registerPersistentWriter(projectRoot.toAbsolutePath().normalize(), "imports");
         this.importsDir = projectRoot.resolve(IMPORTS_DIR);
         this.zipLimits = zipLimits;
         Files.createDirectories(importsDir);
@@ -172,36 +187,28 @@ public class RemoteImportConfig {
      */
     public void save() throws IOException {
         Path configFile = projectRoot.resolve(CONFIG_FILE);
-        Map<String, Object> config = new LinkedHashMap<>();
-
-        // Preserve existing sharedPaths
-        if (Files.isRegularFile(configFile)) {
-            String content = Files.readString(configFile, StandardCharsets.UTF_8);
-            Object parsed = JsonParser.parse(content);
-            if (parsed instanceof Map<?, ?> existingMap) {
-                Object sharedPaths = existingMap.get("sharedPaths");
-                if (sharedPaths != null) {
-                    config.put("sharedPaths", sharedPaths);
+        StorageWriteCoordinator.coordinatedWrite(projectRoot.toAbsolutePath().normalize(), "imports", () -> {
+            Map<String, Object> config = new LinkedHashMap<>();
+            if (Files.isRegularFile(configFile)) {
+                Object parsed = JsonParser.parse(Files.readString(configFile, StandardCharsets.UTF_8));
+                if (parsed instanceof Map<?, ?> existing) {
+                    for (Map.Entry<?, ?> entry : existing.entrySet()) config.put(String.valueOf(entry.getKey()), entry.getValue());
                 }
             }
-        }
-
-        // Add imports
-        List<Map<String, Object>> importsList = new java.util.ArrayList<>();
-        for (ImportEntry entry : imports) {
-            Map<String, Object> entryMap = new LinkedHashMap<>();
-            entryMap.put("id", entry.getId());
-            entryMap.put("name", entry.getName());
-            entryMap.put("type", entry.getType());
-            entryMap.put("source", entry.getSource());
-            entryMap.put("path", entry.getPath());
-            entryMap.put("importedAt", entry.getImportedAt());
-            importsList.add(entryMap);
-        }
-        config.put("imports", importsList);
-
-        String json = toJson(config);
-        Files.writeString(configFile, json, StandardCharsets.UTF_8);
+            List<Map<String, Object>> importsList = new java.util.ArrayList<>();
+            for (ImportEntry entry : imports) {
+                Map<String, Object> entryMap = new LinkedHashMap<>();
+                entryMap.put("id", entry.getId());
+                entryMap.put("name", entry.getName());
+                entryMap.put("type", entry.getType());
+                entryMap.put("source", entry.getSource());
+                entryMap.put("path", entry.getPath());
+                entryMap.put("importedAt", entry.getImportedAt());
+                importsList.add(entryMap);
+            }
+            config.put("imports", importsList);
+            Files.writeString(configFile, toJson(config), StandardCharsets.UTF_8);
+        });
     }
 
     private static String toJson(Object obj) {
@@ -351,6 +358,7 @@ public class RemoteImportConfig {
         int[] entryCount = {0};
         boolean[] sawEntry = {false};
         boolean completed = false;
+        long archiveBytes = Files.size(zipFile);
 
         try {
             // Extract ZIP with actual streamed byte accounting. Nested ZIPs are retained as files;
@@ -391,6 +399,10 @@ public class RemoteImportConfig {
                                         "ZIP entry exceeds the configured size limit.");
                                 totalBytes[0] = checkedAdd(totalBytes[0], read, zipLimits.maxTotalBytes(),
                                         "ZIP extraction exceeds the configured total size limit.");
+                                if (exceedsCompressionRatio(totalBytes[0], archiveBytes,
+                                        zipLimits.maxCompressionRatio())) {
+                                    throw new IOException("ZIP compression ratio exceeds the configured limit.");
+                                }
                                 output.write(buffer, 0, read);
                             }
                         }
@@ -425,6 +437,13 @@ public class RemoteImportConfig {
         long result = current + increment;
         if (result > limit) throw new IOException(message);
         return result;
+    }
+
+    private static boolean exceedsCompressionRatio(long uncompressedBytes, long archiveBytes,
+                                                    double maxCompressionRatio) {
+        if (uncompressedBytes <= 0) return false;
+        if (archiveBytes <= 0) return true;
+        return ((double) uncompressedBytes / (double) archiveBytes) > maxCompressionRatio;
     }
 
     private static int pathDepth(String entryName) {

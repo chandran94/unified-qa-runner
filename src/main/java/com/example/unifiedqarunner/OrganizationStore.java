@@ -48,6 +48,7 @@ final class OrganizationStore {
         backupPath = root.resolve(FILE_NAME + ".bak");
         lockPath = root.resolve(FILE_NAME + ".lock");
         jvmLock = JVM_LOCKS.computeIfAbsent(lockPath, ignored -> new ReentrantLock());
+        StorageWriteCoordinator.registerPersistentWriter(root, "organizations");
     }
 
     Path dataPath() { return dataPath; }
@@ -281,14 +282,14 @@ final class OrganizationStore {
     }
 
     private <T> T write(Function<Map<String, Object>, T> mutation) throws IOException {
-        return withFileLock(() -> {
+        return StorageWriteCoordinator.coordinatedCall(root, "organizations", () -> withFileLock(() -> {
             Map<String, Object> rootMap = readRoot(dataPath);
             validateVersion(rootMap);
             T result = mutation.apply(rootMap);
             rootMap.put(VERSION, CURRENT_SCHEMA_VERSION);
             writeRoot(rootMap);
             return result;
-        });
+        }));
     }
 
     private <T> T withFileLock(IoSupplier<T> action) throws IOException {

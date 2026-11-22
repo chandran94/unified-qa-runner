@@ -29,6 +29,7 @@ final class ProjectOwnershipManager {
 
     ProjectOwnershipManager(Path projectRoot) {
         this.configPath = projectRoot.resolve("qa-runner.json").toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(configPath.getParent(), "project-ownership");
     }
 
     synchronized List<Ownership> list() {
@@ -152,5 +153,5 @@ final class ProjectOwnershipManager {
     private Map<String,Object> readRoot(){try{if(!Files.exists(configPath))return new LinkedHashMap<>();Object parsed=JsonParser.parse(Files.readString(configPath));if(!(parsed instanceof Map<?,?> map))return new LinkedHashMap<>();Map<String,Object> copy=new LinkedHashMap<>();for(Map.Entry<?,?> entry:map.entrySet())copy.put(String.valueOf(entry.getKey()),entry.getValue());return copy;}catch(Exception e){throw new IllegalStateException("Project ownership store could not be read.",e);}}
     private List<Map<String,Object>> read(){Object raw=readRoot().get(KEY);List<Map<String,Object>> result=new ArrayList<>();for(Map<String,Object> item:listOfMaps(raw)){Map<String,Object> copy=new LinkedHashMap<>();copy.putAll(item);result.add(copy);}return result;}
     @SuppressWarnings("unchecked") private static List<Map<String,Object>> listOfMaps(Object raw){List<Map<String,Object>> result=new ArrayList<>();if(raw instanceof List<?> list)for(Object item:list)if(item instanceof Map<?,?> map){Map<String,Object> copy=new LinkedHashMap<>();for(Map.Entry<?,?> entry:map.entrySet())copy.put(String.valueOf(entry.getKey()),entry.getValue());result.add(copy);}return result;}
-    @SuppressWarnings("unchecked") private void write(List<Map<String,Object>> values)throws IOException{Map<String,Object> root=readRoot();root.put("projectOwnershipSchemaVersion",1);root.put(KEY,values);Path tmp=configPath.resolveSibling(configPath.getFileName()+".ownership.tmp");Files.writeString(tmp,CiCdConfig.toJson(root));try{Files.move(tmp,configPath,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}catch(java.nio.file.AtomicMoveNotSupportedException ignored){Files.move(tmp,configPath,StandardCopyOption.REPLACE_EXISTING);}}
+    @SuppressWarnings("unchecked") private void write(List<Map<String,Object>> values)throws IOException{StorageWriteCoordinator.coordinatedWrite(configPath.getParent(),"project-ownership",()->{Map<String,Object> root=readRoot();root.put("projectOwnershipSchemaVersion",1);root.put(KEY,values);Path tmp=configPath.resolveSibling(configPath.getFileName()+".ownership.tmp");Files.writeString(tmp,CiCdConfig.toJson(root));try{Files.move(tmp,configPath,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}catch(java.nio.file.AtomicMoveNotSupportedException ignored){Files.move(tmp,configPath,StandardCopyOption.REPLACE_EXISTING);}});}
 }

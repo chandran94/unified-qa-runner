@@ -54,7 +54,21 @@ final class SmtpVerificationDelivery implements VerificationDelivery {
 
     @Override
     public void send(String channel, String destination, String code) throws Exception {
-        if (!"EMAIL".equals(channel)) throw new IllegalArgumentException("SMTP delivery supports email only.");
+        sendMessage(destination, "Unified QA Runner verification code", "Your Unified QA Runner verification code is " + code + ". It expires in five minutes.");
+    }
+
+    @Override
+    public void sendVerification(String destination, String code, String token) throws Exception {
+        sendMessage(destination, "Unified QA Runner verification code",
+                "Your Unified QA Runner verification code is " + code + ". It expires in five minutes.\n\nVerification token: " + token);
+    }
+
+    @Override
+    public void sendPasswordReset(String destination, String token) throws Exception {
+        sendMessage(destination, "Unified QA Runner password reset", "Use this password reset token in Unified QA Runner: " + token + ". It expires in fifteen minutes and can be used once.");
+    }
+
+    private void sendMessage(String destination, String subject, String body) throws Exception {
         Properties properties = new Properties();
         properties.put("mail.smtp.host", host);
         properties.put("mail.smtp.port", String.valueOf(port));
@@ -78,8 +92,8 @@ final class SmtpVerificationDelivery implements VerificationDelivery {
         MimeMessage message = new MimeMessage(session);
         message.setFrom(new InternetAddress(sender));
         message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(destination, true));
-        message.setSubject("Unified QA Runner verification code", "UTF-8");
-        message.setText("Your Unified QA Runner verification code is " + code + ". It expires in five minutes.", "UTF-8");
+        message.setSubject(subject, "UTF-8");
+        message.setText(body, "UTF-8");
         Transport.send(message);
     }
 

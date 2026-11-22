@@ -88,9 +88,10 @@ public class PlaywrightPlugin implements RunnerPlugin {
         Path runDirectory = projectRoot.resolve("target").resolve("runner-reports")
                 .resolve(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(java.time.LocalDateTime.now()) + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(runDirectory);
+        Path stagingDirectory = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "playwright-" + java.util.UUID.randomUUID().toString().substring(0, 8));
 
-        Path surefireDir = runDirectory.resolve("surefire");
+        Path surefireDir = stagingDirectory.resolve("surefire");
         Files.createDirectories(surefireDir);
 
         String className = Path.of(selection).getFileName().toString().replaceFirst("\\.java$", "");
@@ -197,8 +198,13 @@ public class PlaywrightPlugin implements RunnerPlugin {
         }
         RunSummary summary = new RunSummary(label(), selection, total, total - failed - skipped,
                 failed, skipped, exitCode, List.of());
-        ReportWriter.write(runDirectory, summary);
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        try {
+            ArtifactPublicationService.publishDirectory(projectRoot, stagingDirectory, runDirectory);
+            ReportWriter.write(runDirectory, summary);
+            return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        } finally {
+            ArtifactPublicationService.discardStaging(stagingDirectory);
+        }
     }
 
     @Override

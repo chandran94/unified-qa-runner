@@ -164,22 +164,31 @@ class ScreenshotVideoStreamingTest {
     @Test
     void symlinkOutsideTrustedRootIsRejectedWhenWindowsAllowsSymlinkCreation() throws Exception {
         Path outside = Files.createTempFile("qa-media-outside-", ".png");
+        Path outsideVideo = Files.createTempFile("qa-media-outside-", ".mp4");
         try {
             Files.write(outside, patternedBytes(32, (byte) 0x19));
+            Files.write(outsideVideo, patternedBytes(32, (byte) 0x2B));
             Path link = root.resolve("target/screenshots/escaped.png");
+            Path videoLink = root.resolve("target/videos/escaped.mp4");
             try {
                 Files.createSymbolicLink(link, outside);
+                Files.createSymbolicLink(videoLink, outsideVideo);
             } catch (UnsupportedOperationException | SecurityException | java.nio.file.FileSystemException error) {
                 Assumptions.assumeTrue(false, "Symlink creation unavailable without elevation/Developer Mode: " + error.getClass().getSimpleName());
                 return;
             }
             ProjectOwnershipManager ownership = new ProjectOwnershipManager(root);
             ownership.assign("SCREENSHOT", "escaped.png", projectAId, "MEDIA_FIXTURE", Set.of(projectAId));
+            ownership.assign("VIDEO", "escaped.mp4", projectAId, "MEDIA_FIXTURE", Set.of(projectAId));
             HttpResponse<byte[]> response = clientA.getBytes("/screenshots/escaped.png");
             assertTrue(response.statusCode() >= 400, "Symlink escape must not stream external bytes");
             assertEquals(0, response.body().length);
+            HttpResponse<byte[]> videoResponse = clientA.getBytes("/videos/escaped.mp4");
+            assertTrue(videoResponse.statusCode() >= 400, "Video symlink escape must not stream external bytes");
+            assertEquals(0, videoResponse.body().length);
         } finally {
             Files.deleteIfExists(outside);
+            Files.deleteIfExists(outsideVideo);
         }
     }
 

@@ -119,7 +119,8 @@ public class RobotPlugin implements RunnerPlugin {
         Path runDirectory = projectRoot.resolve("target").resolve("runner-reports")
                 .resolve(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(java.time.LocalDateTime.now()) + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(runDirectory);
+        Path stagingDirectory = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "robot-" + java.util.UUID.randomUUID().toString().substring(0, 12));
 
         // Determine if this is a shared path test
         boolean isSharedPath = selection.contains(":") || selection.startsWith("/");
@@ -191,20 +192,23 @@ public class RobotPlugin implements RunnerPlugin {
         args.add("HEADLESS:" + (headless ? "True" : "False"));
 
         args.add("--outputdir");
-        args.add(runDirectory.toString());
+        args.add(stagingDirectory.toString());
         args.add(testFile.toString());
 
-        int exitCode = ExecutionService.runProcess(pythonCmd, args, logCollector, workDir,
-                p -> this.runningProcess = p);
-        logCollector.accept("[runner] Robot Framework exit code: " + exitCode);
+        try {
+            int exitCode = ExecutionService.runProcess(pythonCmd, args, logCollector, workDir,
+                    p -> this.runningProcess = p);
+            logCollector.accept("[runner] Robot Framework exit code: " + exitCode);
 
-        // Save logs to file for parsing
-        Path logFile = runDirectory.resolve("output.txt");
-        Files.writeString(logFile, String.join("\n", logLines));
-
-        // Parse results from Robot output
-        RunSummary summary = parseRobotOutput(logLines, exitCode, runDirectory);
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+            // Save logs and parse only inside isolated staging.
+            Path logFile = stagingDirectory.resolve("output.txt");
+            Files.writeString(logFile, String.join("\n", logLines));
+            RunSummary summary = parseRobotOutput(logLines, exitCode, stagingDirectory);
+            ArtifactPublicationService.publishDirectory(projectRoot, stagingDirectory, runDirectory);
+            return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        } finally {
+            ArtifactPublicationService.discardStaging(stagingDirectory);
+        }
     }
 
     @Override

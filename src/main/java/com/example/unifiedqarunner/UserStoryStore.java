@@ -72,6 +72,7 @@ final class UserStoryStore {
 
     UserStoryStore(Path projectRoot) {
         this.configPath = projectRoot.resolve(CONFIG_FILE).toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(configPath.getParent(), "qa-runner.json");
     }
 
     synchronized List<Project> listProjects(boolean includeArchived) throws IOException {
@@ -600,14 +601,16 @@ final class UserStoryStore {
     }
 
     private void writeRoot(Map<String, Object> root) throws IOException {
-        Files.createDirectories(configPath.getParent());
-        Path temp = configPath.resolveSibling(configPath.getFileName() + ".user-stories.tmp");
-        Files.writeString(temp, CiCdConfig.toJson(root), StandardCharsets.UTF_8);
-        try {
-            Files.move(temp, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-            Files.move(temp, configPath, StandardCopyOption.REPLACE_EXISTING);
-        }
+        StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "qa-runner.json", () -> {
+            Files.createDirectories(configPath.getParent());
+            Path temp = configPath.resolveSibling(configPath.getFileName() + ".user-stories.tmp");
+            Files.writeString(temp, CiCdConfig.toJson(root), StandardCharsets.UTF_8);
+            try {
+                Files.move(temp, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, configPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        });
     }
 
     private static List<Project> readProjects(Object raw) {

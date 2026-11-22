@@ -21,6 +21,13 @@ public final class Main {
         if (projectRoot == null) {
             return;
         }
+        try {
+            // Preserve an existing populated root unless an explicit migration is performed.
+            projectRoot = StorageRootResolver.resolve(projectRoot);
+        } catch (IOException exception) {
+            showError("Could not resolve application data root: " + exception.getMessage());
+            return;
+        }
         String requestedPort = System.getProperty("qa.runner.port");
         if (requestedPort == null) {
             for (String arg : args) {

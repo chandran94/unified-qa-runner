@@ -73,6 +73,61 @@ class ZipImportResourceLimitsTest {
     }
 
     @Test
+    void actualArchiveCompressionRatioIsBounded() throws Exception {
+        Path root = Files.createTempDirectory("qa-zip-ratio-");
+        try {
+            RemoteImportConfig config = new RemoteImportConfig(root,
+                    new RemoteImportConfig.ZipImportLimits(4096, 4, 4096, 4096, 4, 10.0d));
+            byte[] highlyCompressible = new byte[2048];
+            Path compressed = writeZip(root, List.of(new Entry("zeros.bin", highlyCompressible)));
+
+            assertThrows(IOException.class, () -> config.extractZipFile(compressed, "ratio.zip"));
+            assertNoExtractedDirectories(root);
+        } finally {
+            deleteTree(root);
+        }
+    }
+
+    @Test
+    void multipleHighlyCompressibleEntriesRemainBoundedByArchiveRatio() throws Exception {
+        Path root = Files.createTempDirectory("qa-zip-ratio-multi-");
+        try {
+            RemoteImportConfig config = new RemoteImportConfig(root,
+                    new RemoteImportConfig.ZipImportLimits(8192, 4, 4096, 8192, 4, 5.0d));
+            byte[] repeated = new byte[1024];
+            Path compressed = writeZip(root, List.of(
+                    new Entry("one.bin", repeated), new Entry("two.bin", repeated)));
+
+            assertThrows(IOException.class, () -> config.extractZipFile(compressed, "multi-ratio.zip"));
+            assertNoExtractedDirectories(root);
+        } finally {
+            deleteTree(root);
+        }
+    }
+
+    @Test
+    void dataDescriptorEntryIsCountedFromActualOutputAndEmptyArchiveIsRejected() throws Exception {
+        Path root = Files.createTempDirectory("qa-zip-ratio-descriptor-");
+        try {
+            RemoteImportConfig config = new RemoteImportConfig(root,
+                    new RemoteImportConfig.ZipImportLimits(8192, 4, 4096, 8192, 4, 5.0d));
+            byte[] repeated = new byte[1024];
+            Path descriptorArchive = writeZip(root, List.of(new Entry("descriptor.bin", repeated)));
+
+            // ZipOutputStream emits a data descriptor for this deflated entry; metadata is not
+            // used as the decompressed-byte accounting source.
+            assertThrows(IOException.class, () -> config.extractZipFile(descriptorArchive, "descriptor-ratio.zip"));
+            assertNoExtractedDirectories(root);
+
+            Path emptyArchive = writeZip(root, List.of());
+            assertThrows(IOException.class, () -> config.extractZipFile(emptyArchive, "empty.zip"));
+            assertNoExtractedDirectories(root);
+        } finally {
+            deleteTree(root);
+        }
+    }
+
+    @Test
     void pathDepthZipSlipAndDuplicatePathsAreRejected() throws Exception {
         Path root = Files.createTempDirectory("qa-zip-limits-");
         try {

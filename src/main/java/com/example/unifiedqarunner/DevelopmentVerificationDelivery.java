@@ -8,5 +8,7 @@ final class DevelopmentVerificationDelivery implements VerificationDelivery {
     private final Map<String, String> codes = new ConcurrentHashMap<>();
 
     @Override public void send(String channel, String destination, String code) { codes.put(channel + ":" + destination, code); }
+    @Override public void sendPasswordReset(String destination, String token) { codes.put("RESET:" + destination, token); }
     String code(String channel, String destination) { return codes.get(channel + ":" + destination); }
+    String resetToken(String destination) { return codes.get("RESET:" + destination); }
 }

@@ -23,6 +23,7 @@ public class TestCaseManager {
     public TestCaseManager(Path configPath) {
         this.configPath = java.util.Objects.requireNonNull(configPath, "configPath")
                 .toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(this.configPath.getParent(), "qa-runner.json");
     }
 
     public record TestCase(
@@ -119,7 +120,7 @@ public class TestCaseManager {
                 storyList.add(storyToMap(story));
             }
             root.put("stories", storyList);
-            Files.writeString(path, CiCdConfig.toJson(root));
+            StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "qa-runner.json", () -> Files.writeString(path, CiCdConfig.toJson(root)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to save stories: " + e.getMessage(), e);
         }
@@ -331,7 +332,7 @@ public class TestCaseManager {
                 suiteList.add(suiteToMap(suite));
             }
             root.put("testSuites", suiteList);
-            Files.writeString(path, CiCdConfig.toJson(root));
+            StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "qa-runner.json", () -> Files.writeString(path, CiCdConfig.toJson(root)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to save test suites: " + e.getMessage(), e);
         }
@@ -447,7 +448,7 @@ public class TestCaseManager {
             if (anyRemoved) {
                 Map<String, Object> rootMap = new LinkedHashMap<>((Map<String, Object>) root);
                 rootMap.put("testCases", remaining);
-                Files.writeString(path, CiCdConfig.toJson(rootMap));
+                StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "qa-runner.json", () -> Files.writeString(path, CiCdConfig.toJson(rootMap)));
             }
         } catch (Exception e) {
             // Silently fail - suites will still be deleted
@@ -560,7 +561,7 @@ public class TestCaseManager {
                 tcList.add(testCaseToMap(tc));
             }
             root.put("testCases", tcList);
-            Files.writeString(path, CiCdConfig.toJson(root));
+            StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "qa-runner.json", () -> Files.writeString(path, CiCdConfig.toJson(root)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to save test cases: " + e.getMessage(), e);
         }

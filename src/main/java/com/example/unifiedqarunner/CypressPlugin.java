@@ -105,7 +105,8 @@ public class CypressPlugin implements RunnerPlugin {
         Path runDirectory = projectRoot.resolve("target").resolve("runner-reports")
                 .resolve(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(java.time.LocalDateTime.now()) + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(runDirectory);
+        Path stagingDirectory = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "cypress-" + java.util.UUID.randomUUID().toString().substring(0, 8));
 
         // Determine the working directory (where cypress.config.js/package.json lives)
         Path workDir;
@@ -136,7 +137,7 @@ public class CypressPlugin implements RunnerPlugin {
         // Set the Cypress base URL via environment variable
         ProcessBuilder pb;
         String specArg = specPath.replace('\\', '/');
-        String reportPath = runDirectory.toString().replace('\\', '/') + "/cypress-results.json";
+        String reportPath = stagingDirectory.toString().replace('\\', '/') + "/cypress-results.json";
         if (System.getProperty("os.name").toLowerCase().contains("win")) {
             pb = new ProcessBuilder(
                     "cmd.exe", "/c",
@@ -168,20 +169,25 @@ public class CypressPlugin implements RunnerPlugin {
         output.accept("[runner] Cypress exited with code: " + exitCode);
 
         // Parse results from JSON report or log output
-        RunSummary summary = parseCypressResults(runDirectory, output);
-        if (summary == null) {
-            summary = new RunSummary(
-                    "Cypress",
-                    targetUrl,
-                    exitCode == 0 ? 0 : 1,
-                    exitCode == 0 ? 0 : 1,
-                    0,
-                    0,
-                    exitCode,
-                    List.of()
-            );
+        try {
+            RunSummary summary = parseCypressResults(stagingDirectory, output);
+            if (summary == null) {
+                summary = new RunSummary(
+                        "Cypress",
+                        targetUrl,
+                        exitCode == 0 ? 0 : 1,
+                        exitCode == 0 ? 0 : 1,
+                        0,
+                        0,
+                        exitCode,
+                        List.of()
+                );
+            }
+            ArtifactPublicationService.publishDirectory(projectRoot, stagingDirectory, runDirectory);
+            return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        } finally {
+            ArtifactPublicationService.discardStaging(stagingDirectory);
         }
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
     }
 
     /**

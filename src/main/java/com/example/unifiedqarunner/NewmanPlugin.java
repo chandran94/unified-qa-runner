@@ -108,7 +108,8 @@ public class NewmanPlugin implements RunnerPlugin {
         Path runDirectory = projectRoot.resolve("target").resolve("runner-reports")
                 .resolve(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(LocalDateTime.now()) + "-" + UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(runDirectory);
+        Path stagingDirectory = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "newman-" + UUID.randomUUID().toString().substring(0, 8));
 
         HttpServer healthServer = null;
         if (ExecutionService.isLoopbackTarget(target) && target.getPort() == 8080) {
@@ -122,7 +123,7 @@ public class NewmanPlugin implements RunnerPlugin {
         }
 
         Path collection = validateCollection(selection, target, authorized);
-        Path newmanJson = runDirectory.resolve("newman.json");
+        Path newmanJson = stagingDirectory.resolve("newman.json");
         Path nodeScript = projectRoot.resolve("node_modules").resolve("newman")
                 .resolve("bin").resolve("newman.js");
         if (!Files.isRegularFile(nodeScript)) {
@@ -141,9 +142,14 @@ public class NewmanPlugin implements RunnerPlugin {
             output.accept("[runner] Local health fixture stopped");
         }
 
-        RunSummary summary = ExecutionService.readNewmanSummary(selection, newmanJson, exitCode);
-        ReportWriter.write(runDirectory, summary);
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        try {
+            RunSummary summary = ExecutionService.readNewmanSummary(selection, newmanJson, exitCode);
+            ArtifactPublicationService.publishDirectory(projectRoot, stagingDirectory, runDirectory);
+            ReportWriter.write(runDirectory, summary);
+            return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        } finally {
+            ArtifactPublicationService.discardStaging(stagingDirectory);
+        }
     }
 
     @Override

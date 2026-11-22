@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -106,6 +107,38 @@ class FinalH005CrudHttpVerificationTest {
         HttpResponse<String> unauth = request("POST", "/api/testcases", null, null, testCaseBody(projectA, "anon"));
         assertEquals(401, unauth.statusCode(), unauth.body());
         assertEquals(200, sessionA.delete("/api/testcases/" + idA).statusCode());
+    }
+
+    @Test
+    void projectCreationAndManualAndAutomatedCasesPersistOverHttp() throws Exception {
+        HttpResponse<String> createdProject = sessionA.post(
+                "/api/organizations/" + orgAId() + "/projects",
+                Map.of("key", "CRNEW", "name", "CRUD New Project", "description", "synthetic"));
+        assertEquals(201, createdProject.statusCode(), createdProject.body());
+        String projectId = id(createdProject.body());
+
+        HttpResponse<String> projectList = sessionA.get(
+                "/api/organizations/" + orgAId() + "/projects");
+        assertEquals(200, projectList.statusCode(), projectList.body());
+        assertTrue(projectList.body().contains(projectId), projectList.body());
+
+        for (String method : List.of("Manual", "Automation")) {
+            Map<String, Object> body = new LinkedHashMap<>(testCaseBody(projectId, method + " case"));
+            body.put("testType", "Functional");
+            body.put("testMethod", method);
+            HttpResponse<String> createdCase = sessionA.post("/api/testcases", body);
+            assertEquals(201, createdCase.statusCode(), createdCase.body());
+            assertEquals(method, ((Map<?, ?>) JsonParser.parse(createdCase.body())).get("testMethod"));
+        }
+
+        HttpResponse<String> cases = sessionA.get("/api/testcases?organizationId=" + orgAId());
+        assertEquals(200, cases.statusCode(), cases.body());
+        assertTrue(cases.body().contains("Manual case"), cases.body());
+        assertTrue(cases.body().contains("Automation case"), cases.body());
+
+        HttpResponse<String> invalidCase = sessionA.post("/api/testcases",
+                Map.of("projectId", projectId, "name", "", "testMethod", "Manual"));
+        assertEquals(400, invalidCase.statusCode(), invalidCase.body());
     }
 
     @Test

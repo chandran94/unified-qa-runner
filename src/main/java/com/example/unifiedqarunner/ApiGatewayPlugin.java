@@ -659,7 +659,7 @@ public class ApiGatewayPlugin implements RunnerPlugin {
             report.append("\n");
         }
 
-        Files.writeString(runDirectory.resolve("apigateway-report.txt"), report.toString());
+        ArtifactPublicationService.writeText(projectRoot, runDirectory.resolve("apigateway-report.txt"), report.toString());
 
         // Write JUnit XML report
         StringBuilder junitXml = new StringBuilder();
@@ -682,7 +682,7 @@ public class ApiGatewayPlugin implements RunnerPlugin {
         }
 
         junitXml.append("</testsuite>");
-        Files.writeString(runDirectory.resolve("TEST-apigateway.xml"), junitXml.toString());
+        ArtifactPublicationService.writeText(projectRoot, runDirectory.resolve("TEST-apigateway.xml"), junitXml.toString());
     }
 
     /**

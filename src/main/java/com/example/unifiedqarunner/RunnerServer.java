@@ -63,7 +63,7 @@ final class RunnerServer implements AutoCloseable {
     private final AtomicBoolean runnerEnabled = new AtomicBoolean(true);
 
     private final TestCaseManager testCaseManager;
-    private final DefectManager defectManager = new DefectManager();
+    private final DefectManager defectManager;
     private final AutomationMappingManager automationMappingManager;
     private final AutomationExecutionManager automationExecutionManager;
     private final TeamMemberManager teamMemberManager;
@@ -71,6 +71,7 @@ final class RunnerServer implements AutoCloseable {
     private final AuthUserDirectory authUserDirectory;
     private final AuthSessionManager authSessionManager;
     private final AuthVerificationManager authVerificationManager;
+    private final PasswordResetManager passwordResetManager;
     private final AuthRegistrationRateLimiter authRegistrationRateLimiter = new AuthRegistrationRateLimiter();
     private final AuthRegistrationRateLimiter organizationInvitationRateLimiter = new AuthRegistrationRateLimiter();
     private final WikiManager wikiManager;
@@ -92,6 +93,7 @@ final class RunnerServer implements AutoCloseable {
     RunnerServer(Path projectRoot, int port, VerificationDelivery testEmailDelivery,
                  VerificationDelivery testSmsDelivery) throws IOException {
         this.projectRoot = projectRoot;
+        StorageWriteCoordinator.registerPersistentWriter(projectRoot, "attachments");
         this.executionService = new ExecutionService(projectRoot);
         Path compatibilityStore = projectRoot.resolve("qa-runner.json").toAbsolutePath().normalize();
         this.testCaseManager = new TestCaseManager(compatibilityStore);
@@ -99,6 +101,7 @@ final class RunnerServer implements AutoCloseable {
         this.sharedPathConfig = new SharedPathConfig(projectRoot);
         this.remoteImportConfig = new RemoteImportConfig(projectRoot);
         this.userStoryStore = new UserStoryStore(projectRoot);
+        this.defectManager = new DefectManager(projectRoot);
         this.automationExecutionManager = new AutomationExecutionManager(projectRoot);
         this.teamMemberManager = new TeamMemberManager(projectRoot);
         this.teamRoleManager = new TeamRoleManager(projectRoot);
@@ -108,6 +111,8 @@ final class RunnerServer implements AutoCloseable {
                 ? new AuthVerificationManager(authUserDirectory)
                 : new AuthVerificationManager(authUserDirectory, testEmailDelivery, testSmsDelivery,
                 java.time.Clock.systemUTC());
+        VerificationDelivery resetDelivery = testEmailDelivery == null ? configuredResetDelivery() : testEmailDelivery;
+        this.passwordResetManager = new PasswordResetManager(authUserDirectory, resetDelivery, authSessionManager);
         this.wikiManager = new WikiManager(projectRoot);
         this.projectOwnershipManager = new ProjectOwnershipManager(projectRoot);
         this.organizationStore = new OrganizationStore(projectRoot);
@@ -131,6 +136,17 @@ final class RunnerServer implements AutoCloseable {
 
     private static boolean isLocalOnlyProfile() {
         return "true".equalsIgnoreCase(System.getenv("QA_RUNNER_LOCAL_ONLY"));
+    }
+
+    private static VerificationDelivery configuredResetDelivery() {
+        SmtpVerificationDelivery smtp = SmtpVerificationDelivery.fromEnvironment();
+        if (smtp != null) return smtp;
+        String dev = System.getenv("QA_RUNNER_AUTH_DEV_VERIFICATION");
+        if ("true".equalsIgnoreCase(dev)
+                && AuthVerificationManager.developmentVerificationAllowed(System.getenv("QA_RUNNER_ENV"), System.getenv("QA_RUNNER_LOCAL_ONLY"))) {
+            return new DevelopmentVerificationDelivery();
+        }
+        return new ConfiguredVerificationDelivery();
     }
 
     URI start() {
@@ -159,6 +175,7 @@ final class RunnerServer implements AutoCloseable {
         executionService.cancel();
         databaseConnectionService.close();
         authVerificationManager.close();
+        passwordResetManager.close();
         runExecutor.shutdownNow();
         httpExecutor.shutdownNow();
         shutdownLatch.countDown();
@@ -221,8 +238,8 @@ final class RunnerServer implements AutoCloseable {
 
     private static boolean isPublicAuthApi(String path) {
         return Set.of("/api/auth/login", "/api/auth/register", "/api/auth/verification/send",
-                "/api/auth/verification/resend", "/api/auth/verification/confirm", "/api/auth/me",
-                "/api/auth/logout").contains(path);
+                "/api/auth/verification/resend", "/api/auth/verification/resend-by-email", "/api/auth/verification/confirm", "/api/auth/me",
+                "/api/auth/logout", "/api/auth/password-reset/request", "/api/auth/password-reset/confirm").contains(path);
     }
 
     private static boolean isProtectedApplicationPage(String path) {
@@ -235,7 +252,7 @@ final class RunnerServer implements AutoCloseable {
     }
 
     private static boolean queryParametersAllowed(String path) {
-        return isPublicAuthPage(path) || path.startsWith("/api/organizations") || path.startsWith("/api/organization-invitations") || path.startsWith("/api/user-stories/projects") || path.startsWith("/api/user-stories/epics") || path.startsWith("/api/user-stories/stories") || path.startsWith("/api/user-stories/sprints") || path.startsWith("/api/user-stories/board") || path.equals("/api/user-stories/work-items") || path.equals("/api/user-stories/test-case-links") || path.equals("/api/stories/testcases") || path.equals("/api/testcases") || path.equals("/api/testcases/sync") || path.equals("/api/defects") || path.equals("/api/testcase-automation-mappings") || path.equals("/api/automation-executions") || path.equals("/api/automation-assets/scenarios") || path.equals("/api/team-members") || path.equals("/api/team-permissions") || path.equals("/api/team-roles") || path.startsWith("/api/wiki/spaces") || path.equals("/api/database/connections") || path.startsWith("/api/database/connections/") || path.startsWith("/api/database/connection-tests/") || path.startsWith("/api/cicd/");
+        return isPublicAuthPage(path) || path.startsWith("/api/organizations") || path.startsWith("/api/organization-invitations") || path.startsWith("/api/user-stories/projects") || path.startsWith("/api/user-stories/epics") || path.startsWith("/api/user-stories/stories") || path.startsWith("/api/user-stories/sprints") || path.startsWith("/api/user-stories/board") || path.equals("/api/user-stories/work-items") || path.equals("/api/user-stories/test-case-links") || path.equals("/api/stories/testcases") || path.equals("/api/testcases") || path.startsWith("/api/testcases/") || path.equals("/api/testcases/sync") || path.equals("/api/defects") || path.equals("/api/testcase-automation-mappings") || path.equals("/api/automation-executions") || path.equals("/api/automation-assets/scenarios") || path.equals("/api/team-members") || path.equals("/api/team-permissions") || path.equals("/api/team-roles") || path.startsWith("/api/wiki/spaces") || path.equals("/api/database/connections") || path.startsWith("/api/database/connections/") || path.startsWith("/api/database/connection-tests/") || path.startsWith("/api/cicd/");
     }
 
     private void handleApi(HttpExchange exchange, String path) throws Exception {
@@ -296,13 +313,40 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         if (path.equals("/api/auth/verification/send") && method.equals("POST")) {
-            requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthVerificationManager.Result result=authVerificationManager.resend(stringField(values,"verificationToken")); sendJson(exchange,202,verificationToMap(result)); return;
+            requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthVerificationManager.Result result=authVerificationManager.resend(stringField(values,"verificationToken"), exchange.getRemoteAddress().getAddress().getHostAddress()); sendJson(exchange,202,verificationToMap(result)); return;
         }
         if (path.equals("/api/auth/verification/resend") && method.equals("POST")) {
-            requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthVerificationManager.Result result=authVerificationManager.resend(stringField(values,"verificationToken")); sendJson(exchange,202,verificationToMap(result)); return;
+            requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthVerificationManager.Result result=authVerificationManager.resend(stringField(values,"verificationToken"), exchange.getRemoteAddress().getAddress().getHostAddress()); sendJson(exchange,202,verificationToMap(result)); return;
+        }
+        if (path.equals("/api/auth/verification/resend-by-email") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            try { authVerificationManager.resendByEmail(stringField(requestObject(exchange), "email"), exchange.getRemoteAddress().getAddress().getHostAddress()); }
+            catch (Exception ignored) { }
+            sendJson(exchange, 202, Map.of("accepted", true, "message", "If verification is available, new instructions will be sent."));
+            return;
         }
         if (path.equals("/api/auth/verification/confirm") && method.equals("POST")) {
             requireSameOrigin(exchange); Map<String,Object> values=requestObject(exchange); AuthUserDirectory.User user=authVerificationManager.confirm(stringField(values,"verificationToken"),stringField(values,"otp")); sendJson(exchange,200,Map.of("verified",true,"userId",user.id(),"message","Account verified. Please sign in.")); return;
+        }
+        if (path.equals("/api/auth/password-reset/request") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            try { passwordResetManager.request(stringField(values, "email")); }
+            catch (Exception ignored) { }
+            sendJson(exchange, 202, Map.of("accepted", true, "message", "If the account can be recovered, reset instructions will be sent."));
+            return;
+        }
+        if (path.equals("/api/auth/password-reset/confirm") && method.equals("POST")) {
+            requireSameOrigin(exchange);
+            Map<String, Object> values = requestObject(exchange);
+            String password = stringField(values, "password");
+            String confirmation = stringField(values, "confirmPassword");
+            if (!password.equals(confirmation)) throw new IllegalArgumentException("Passwords do not match.");
+            char[] passwordChars = password.toCharArray();
+            try { passwordResetManager.confirm(stringField(values, "token"), passwordChars); }
+            finally { java.util.Arrays.fill(passwordChars, '\0'); }
+            sendJson(exchange, 200, Map.of("reset", true, "message", "Password reset successfully. Please sign in."));
+            return;
         }
         if (path.equals("/api/auth/me") && method.equals("GET")) {
             AuthSessionManager.Session session = session(exchange);
@@ -904,7 +948,7 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         if (path.equals("/api/defects") && method.equals("GET")) {
-            String requestedProject = queryParameter(exchange, "projectId");
+            String requestedProject = java.util.Objects.requireNonNullElse(queryParameter(exchange, "projectId"), "");
             if (!requestedProject.isBlank()) requireProjectAccess(exchange, requestedProject, TeamAuthorization.DEFECTS, false);
             List<Map<String, Object>> defects = defectManager.list(queryParameter(exchange, "testCaseId"), queryParameter(exchange, "storyId"));
             sendJson(exchange, 200, defects.stream().filter(defect -> requestedProject.isBlank()
@@ -1070,7 +1114,10 @@ final class RunnerServer implements AutoCloseable {
         if (path.equals("/api/user-stories/test-case-links") && method.equals("GET")) {
             Map<String, UserStoryStore.Story> stories = userStoryStore.listStories(null, null, null, 0, 100, true).stream()
                     .collect(java.util.stream.Collectors.toMap(UserStoryStore.Story::id, story -> story, (left, right) -> left, LinkedHashMap::new));
-            List<Map<String, Object>> links = userStoryStore.listTestCaseLinks().stream().map(link -> {
+            List<Map<String, Object>> links = userStoryStore.listTestCaseLinks().stream().filter(link -> {
+                UserStoryStore.Story story = stories.get(link.storyId());
+                return story != null && tenantVisibleProject(exchange, story.projectId());
+            }).map(link -> {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("testCaseId", link.testCaseId());
                 item.put("storyId", link.storyId());
@@ -1127,6 +1174,7 @@ final class RunnerServer implements AutoCloseable {
             String storyId = path.substring("/api/user-stories/stories/".length(), markerIndex);
             String commentId = path.substring(markerIndex + marker.length());
             requireStoryProjectAccess(exchange, storyId, true);
+            requireCommentMutationAccess(exchange, storyId, commentId);
             if (method.equals("PUT")) {
                 Map<String, Object> values = requestObject(exchange);
                 sendJson(exchange, 200, activityToMap(userStoryStore.updateComment(storyId, commentId, stringField(values, "comment"), authActorId(exchange), authActorName(exchange))));
@@ -2357,8 +2405,8 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         Path screenshotsDir = projectRoot.resolve("target").resolve("screenshots");
-        Path screenshot = screenshotsDir.resolve(fileName).normalize();
-        if (!screenshot.startsWith(screenshotsDir) || !Files.isRegularFile(screenshot)) {
+        Path screenshot = resolveContainedMediaFile(screenshotsDir, fileName);
+        if (screenshot == null) {
             sendError(exchange, 404, "Screenshot not found.");
             return;
         }
@@ -2676,6 +2724,7 @@ final class RunnerServer implements AutoCloseable {
             UserStoryStore.Project project = userStoryStore.createProject(stringField(values, "key"), stringField(values, "name"), optionalString(values, "description"), tenant.authenticatedUserId());
             try {
                 organizationStore.assignProject(project.id(), organizationId, "ORGANIZATION_API_CREATE");
+                ensureCreatorProjectMembership(tenant.authenticatedUserId(), project.id());
             } catch (Exception error) {
                 organizationStore.quarantineProject(project.id());
                 throw new IllegalStateException("Project creation could not be completed safely.");
@@ -2699,6 +2748,35 @@ final class RunnerServer implements AutoCloseable {
     private void requireOrganizationManager(TenantContext tenant) {
         try { TenantAuthorizationPrimitives.requireOrganizationRole(tenant, OrganizationRole.OWNER, OrganizationRole.ADMIN); }
         catch (TenantAuthorizationException error) { throw new AuthorizationException(403, "An organization owner or admin is required."); }
+    }
+
+    private void ensureCreatorProjectMembership(String userId, String projectId) throws IOException {
+        TeamMemberManager.Member existing = teamMemberManager.list().stream()
+                .filter(member -> userId.equals(member.registeredUserId()))
+                .findFirst().orElse(null);
+        if (existing != null) {
+            if (!TeamMemberManager.ACTIVE.equals(existing.status())) {
+                throw new IllegalStateException("The project creator has an inactive team membership.");
+            }
+            if (existing.projectIds().contains(projectId)) return;
+            List<String> projectIds = new ArrayList<>(existing.projectIds());
+            projectIds.add(projectId);
+            teamMemberManager.update(existing.id(), Map.of("projectIds", projectIds), validProjectIds(), teamRoleManager.list());
+            return;
+        }
+
+        AuthUserDirectory.User creator = authUserDirectory.findById(userId);
+        if (creator == null || !AuthUserDirectory.ACTIVE.equals(creator.status())) {
+            throw new IllegalStateException("The project creator is no longer active.");
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("name", creator.fullName());
+        values.put("email", creator.email());
+        values.put("username", creator.username());
+        values.put("registeredUserId", creator.id());
+        values.put("role", "Project Manager");
+        values.put("projectIds", List.of(projectId));
+        teamMemberManager.create(values, validProjectIds(), teamRoleManager.list());
     }
 
     private void auditOrganization(String action, UUID organizationId, String actorId, String subject) {
@@ -3076,6 +3154,21 @@ final class RunnerServer implements AutoCloseable {
         requireProjectAccess(exchange, story.projectId(), TeamAuthorization.USER_STORIES, write);
     }
 
+    private void requireCommentMutationAccess(HttpExchange exchange, String storyId, String commentId) {
+        if (isGlobalAdmin(exchange)) return;
+        try {
+            UserStoryStore.Activity comment = userStoryStore.listActivity(storyId).stream()
+                    .filter(item -> item.id().equals(commentId) && "Comment".equals(item.action()))
+                    .findFirst()
+                    .orElseThrow(() -> new AuthorizationException(404, "Comment not found."));
+            if (!authActorId(exchange).equals(comment.actorId())) {
+                throw new AuthorizationException(403, "Only the comment author or an administrator may change this comment.");
+            }
+        } catch (IOException error) {
+            throw new IllegalStateException("Comment authorization data could not be loaded.", error);
+        }
+    }
+
     private String projectIdForStory(String storyId) {
         if (storyId == null || storyId.isBlank()) return "";
         try {
@@ -3385,7 +3478,7 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         requireArtifactAccess(exchange, "SCREENSHOT", fileName, TeamAuthorization.TEST_EXECUTION, true);
-        Files.delete(screenshot);
+        StorageWriteCoordinator.coordinatedWrite(projectRoot, "media-artifacts", () -> Files.delete(screenshot));
         sendJson(exchange, 200, Map.of("message", "Screenshot deleted: " + fileName));
     }
 
@@ -3400,7 +3493,7 @@ final class RunnerServer implements AutoCloseable {
             for (Path p : stream.filter(Files::isRegularFile).toList()) {
                 if (!artifactVisible(exchange, "SCREENSHOT", p.getFileName().toString(), TeamAuthorization.TEST_EXECUTION)) continue;
                 try {
-                    Files.delete(p);
+                    StorageWriteCoordinator.coordinatedWrite(projectRoot, "media-artifacts", () -> Files.delete(p));
                     count++;
                 } catch (IOException e) {
                     System.err.println("Failed to delete screenshot: " + p + " - " + e.getMessage());
@@ -3418,13 +3511,13 @@ final class RunnerServer implements AutoCloseable {
             return;
         }
         Path videosDir = projectRoot.resolve("target").resolve("videos");
-        Path video = videosDir.resolve(fileName).normalize();
-        if (!video.startsWith(videosDir) || !Files.isRegularFile(video)) {
+        Path video = resolveContainedMediaFile(videosDir, fileName);
+        if (video == null) {
             sendError(exchange, 404, "Video not found: " + fileName);
             return;
         }
         requireArtifactAccess(exchange, "VIDEO", fileName, TeamAuthorization.TEST_EXECUTION, true);
-        Files.delete(video);
+        StorageWriteCoordinator.coordinatedWrite(projectRoot, "media-artifacts", () -> Files.delete(video));
         sendJson(exchange, 200, Map.of("message", "Video deleted: " + fileName));
     }
 
@@ -3439,7 +3532,7 @@ final class RunnerServer implements AutoCloseable {
             for (Path p : stream.filter(Files::isRegularFile).toList()) {
                 if (!artifactVisible(exchange, "VIDEO", p.getFileName().toString(), TeamAuthorization.TEST_EXECUTION)) continue;
                 try {
-                    Files.delete(p);
+                    StorageWriteCoordinator.coordinatedWrite(projectRoot, "media-artifacts", () -> Files.delete(p));
                     count++;
                 } catch (IOException e) {
                     System.err.println("Failed to delete video: " + p + " - " + e.getMessage());
@@ -3483,6 +3576,20 @@ final class RunnerServer implements AutoCloseable {
                     output.write(buffer, 0, count);
                 }
             }
+        }
+    }
+
+    /** Resolve media through the filesystem and require the target to remain below its trusted root. */
+    private static Path resolveContainedMediaFile(Path trustedRoot, String fileName) {
+        try {
+            Path realRoot = trustedRoot.toRealPath();
+            Path lexicalCandidate = trustedRoot.resolve(fileName).normalize();
+            if (!lexicalCandidate.startsWith(trustedRoot)) return null;
+            Path realCandidate = lexicalCandidate.toRealPath();
+            return realCandidate.startsWith(realRoot) && Files.isRegularFile(realCandidate)
+                    ? realCandidate : null;
+        } catch (IOException error) {
+            return null;
         }
     }
 
@@ -5048,7 +5155,8 @@ final class RunnerServer implements AutoCloseable {
             String storageName = UUID.randomUUID() + extensionOf(safeName);
             Path target = directory.resolve(storageName).normalize();
             if (!target.getParent().equals(directory)) throw new IllegalArgumentException("Invalid attachment path.");
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            StorageWriteCoordinator.coordinatedWrite(projectRoot, "attachments",
+                    () -> Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING));
             try {
                 UserStoryStore.Attachment saved = userStoryStore.addAttachment(storyId, safeName, storageName, size, validatedType, CURRENT_USER_ID, CURRENT_USER_NAME);
                 String storyProject = projectIdForStory(storyId);
@@ -5062,7 +5170,7 @@ final class RunnerServer implements AutoCloseable {
                 keep = true;
                 return attachmentToMap(saved);
             } finally {
-                if (!keep) Files.deleteIfExists(target);
+                if (!keep) StorageWriteCoordinator.coordinatedWrite(projectRoot, "attachments", () -> Files.deleteIfExists(target));
             }
         } finally {
             Files.deleteIfExists(temporary);
@@ -5086,7 +5194,9 @@ final class RunnerServer implements AutoCloseable {
         Path file = directory.resolve(attachment.storageName()).normalize();
         userStoryStore.removeAttachment(attachmentId);
         userStoryStore.recordActivity(attachment.storyId(), "Attachment removed", attachment.originalName(), CURRENT_USER_ID, CURRENT_USER_NAME);
-        if (file.getParent().equals(directory)) Files.deleteIfExists(file);
+        if (file.getParent().equals(directory)) {
+            StorageWriteCoordinator.coordinatedWrite(projectRoot, "attachments", () -> Files.deleteIfExists(file));
+        }
         sendJson(exchange, 204, Map.of());
     }
 

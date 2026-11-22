@@ -509,7 +509,7 @@ public class SwaggerPlugin implements RunnerPlugin {
             sb.append("\n");
         }
 
-        Files.writeString(endpointFile, sb.toString());
+        ArtifactPublicationService.writeText(projectRoot, endpointFile, sb.toString());
 
         // Write JUnit-compatible XML for CI/CD integration
         Path xmlFile = runDirectory.resolve("TEST-swagger-results.xml");
@@ -533,7 +533,7 @@ public class SwaggerPlugin implements RunnerPlugin {
         }
 
         xml.append("</testsuite>\n");
-        Files.writeString(xmlFile, xml.toString());
+        ArtifactPublicationService.writeText(projectRoot, xmlFile, xml.toString());
     }
 
     private String escapeXml(String str) {

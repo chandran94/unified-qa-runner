@@ -99,9 +99,10 @@ public class WebdriverIOPlugin implements RunnerPlugin {
         Path runDirectory = projectRoot.resolve("target").resolve("runner-reports")
                 .resolve(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(java.time.LocalDateTime.now()) + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(runDirectory);
+        Path stagingDirectory = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "webdriverio-" + java.util.UUID.randomUUID().toString().substring(0, 8));
 
-        Path wdioReportsDir = runDirectory.resolve("wdio-reports");
+        Path wdioReportsDir = stagingDirectory.resolve("wdio-reports");
         Files.createDirectories(wdioReportsDir);
 
         String browser = browsers != null && !browsers.isEmpty() ? browsers.get(0) : "chrome";
@@ -240,8 +241,13 @@ public class WebdriverIOPlugin implements RunnerPlugin {
         }
         RunSummary summary = new RunSummary(label(), selection, total, total - failed - skipped,
                 failed, skipped, exitCode, List.of());
-        ReportWriter.write(runDirectory, summary);
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        try {
+            ArtifactPublicationService.publishDirectory(projectRoot, stagingDirectory, runDirectory);
+            ReportWriter.write(runDirectory, summary);
+            return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        } finally {
+            ArtifactPublicationService.discardStaging(stagingDirectory);
+        }
     }
 
     @Override

@@ -38,6 +38,7 @@ final class TeamMemberManager {
 
     TeamMemberManager(Path projectRoot) {
         this.configPath = projectRoot.resolve("qa-runner.json").toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(configPath.getParent(), "team");
     }
 
     synchronized List<Member> list() {
@@ -195,19 +196,21 @@ final class TeamMemberManager {
 
     @SuppressWarnings("unchecked")
     private void write(List<Map<String, Object>> members) throws IOException {
-        Map<String, Object> root;
-        if (Files.exists(configPath)) {
-            Object parsed = JsonParser.parse(Files.readString(configPath));
-            root = parsed instanceof Map<?, ?> map ? new LinkedHashMap<>((Map<String, Object>) map) : new LinkedHashMap<>();
-        } else root = new LinkedHashMap<>();
-        root.put(KEY, members);
-        Path temporary = configPath.resolveSibling(configPath.getFileName() + ".tmp");
-        Files.writeString(temporary, CiCdConfig.toJson(root));
-        try {
-            Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
-            Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING);
-        }
+        StorageWriteCoordinator.coordinatedWrite(configPath.getParent(), "team", () -> {
+            Map<String, Object> root;
+            if (Files.exists(configPath)) {
+                Object parsed = JsonParser.parse(Files.readString(configPath));
+                root = parsed instanceof Map<?, ?> map ? new LinkedHashMap<>((Map<String, Object>) map) : new LinkedHashMap<>();
+            } else root = new LinkedHashMap<>();
+            root.put(KEY, members);
+            Path temporary = configPath.resolveSibling(configPath.getFileName() + ".tmp");
+            Files.writeString(temporary, CiCdConfig.toJson(root));
+            try {
+                Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        });
     }
 
     private Member toMember(Map<String, Object> map) {

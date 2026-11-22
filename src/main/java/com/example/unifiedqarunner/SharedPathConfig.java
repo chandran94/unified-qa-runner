@@ -49,6 +49,7 @@ public class SharedPathConfig {
 
     public SharedPathConfig(Path projectRoot) {
         this.projectRoot = projectRoot;
+        StorageWriteCoordinator.registerPersistentWriter(projectRoot.toAbsolutePath().normalize(), "shared-paths");
         load();
     }
 
@@ -93,17 +94,24 @@ public class SharedPathConfig {
      */
     public void save() throws IOException {
         Path configFile = projectRoot.resolve(CONFIG_FILE);
-        Map<String, Object> config = new LinkedHashMap<>();
-        List<Map<String, String>> pathsList = new java.util.ArrayList<>();
-        for (SharedPathEntry entry : sharedPaths) {
-            Map<String, String> entryMap = new LinkedHashMap<>();
-            entryMap.put("name", entry.getName());
-            entryMap.put("path", entry.getPath());
-            pathsList.add(entryMap);
-        }
-        config.put("sharedPaths", pathsList);
-        String json = toJson(config);
-        Files.writeString(configFile, json, StandardCharsets.UTF_8);
+        StorageWriteCoordinator.coordinatedWrite(projectRoot.toAbsolutePath().normalize(), "shared-paths", () -> {
+            Map<String, Object> config = new LinkedHashMap<>();
+            if (Files.isRegularFile(configFile)) {
+                Object parsed = JsonParser.parse(Files.readString(configFile, StandardCharsets.UTF_8));
+                if (parsed instanceof Map<?, ?> existing) {
+                    for (Map.Entry<?, ?> entry : existing.entrySet()) config.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+            List<Map<String, String>> pathsList = new java.util.ArrayList<>();
+            for (SharedPathEntry entry : sharedPaths) {
+                Map<String, String> entryMap = new LinkedHashMap<>();
+                entryMap.put("name", entry.getName());
+                entryMap.put("path", entry.getPath());
+                pathsList.add(entryMap);
+            }
+            config.put("sharedPaths", pathsList);
+            Files.writeString(configFile, toJson(config), StandardCharsets.UTF_8);
+        });
     }
 
     /**

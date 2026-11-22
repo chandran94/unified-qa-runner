@@ -10,9 +10,23 @@ final class ReportWriter {
     }
 
     static void write(Path directory, RunSummary summary) throws IOException {
-        Files.createDirectories(directory);
-        Files.writeString(directory.resolve("summary.csv"), csv(summary), StandardCharsets.UTF_8);
-        Files.writeString(directory.resolve("index.html"), html(summary), StandardCharsets.UTF_8);
+        Path root = projectRoot(directory);
+        StorageWriteCoordinator.coordinatedWrite(root, "reports", () -> {
+            Files.createDirectories(directory);
+            Files.writeString(directory.resolve("summary.csv"), csv(summary), StandardCharsets.UTF_8);
+            Files.writeString(directory.resolve("index.html"), html(summary), StandardCharsets.UTF_8);
+        });
+    }
+
+    private static Path projectRoot(Path directory) {
+        Path current = directory.toAbsolutePath().normalize();
+        while (current != null) {
+            if (current.getFileName() != null && "target".equals(current.getFileName().toString())) {
+                return current.getParent() == null ? directory : current.getParent();
+            }
+            current = current.getParent();
+        }
+        return directory.toAbsolutePath().normalize();
     }
 
     private static String csv(RunSummary summary) {

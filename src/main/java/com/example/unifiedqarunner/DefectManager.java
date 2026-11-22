@@ -11,7 +11,16 @@ import java.util.UUID;
 
 /** Persists defects and their many-to-many test-case/execution links in qa-runner.json. */
 final class DefectManager {
-    private static final Path CONFIG_FILE = Path.of("qa-runner.json");
+    private final Path configFile;
+
+    DefectManager() {
+        this(Path.of("qa-runner.json"));
+    }
+
+    DefectManager(Path projectRoot) {
+        this.configFile = projectRoot.resolve("qa-runner.json").toAbsolutePath().normalize();
+        StorageWriteCoordinator.registerPersistentWriter(configFile.getParent(), "qa-runner.json");
+    }
 
     synchronized List<Map<String, Object>> list(String testCaseId) {
         return list(testCaseId, null);
@@ -136,7 +145,7 @@ final class DefectManager {
 
     private void validateTestCase(String testCaseId) {
         if (testCaseId == null || testCaseId.isBlank()) return;
-        if (new TestCaseManager().list().stream().noneMatch(tc -> testCaseId.equals(tc.id()) || testCaseId.equals(tc.caseId()))) {
+        if (new TestCaseManager(configFile).list().stream().noneMatch(tc -> testCaseId.equals(tc.id()) || testCaseId.equals(tc.caseId()))) {
             throw new IllegalArgumentException("Test case not found: " + testCaseId);
         }
     }
@@ -144,7 +153,7 @@ final class DefectManager {
     private void validateStory(String storyId) {
         if (storyId == null || storyId.isBlank()) return;
         try {
-            boolean exists = new UserStoryStore(Path.of(".")).listStories(null, null, "", 0, Integer.MAX_VALUE, true)
+            boolean exists = new UserStoryStore(configFile.getParent()).listStories(null, null, "", 0, Integer.MAX_VALUE, true)
                     .stream().anyMatch(story -> story.id().equals(storyId));
             if (!exists) throw new IllegalArgumentException("User story not found: " + storyId);
         } catch (java.io.IOException e) {
@@ -170,16 +179,16 @@ final class DefectManager {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> loadRoot() {
+    private Map<String, Object> loadRoot() {
         try {
-            if (!Files.exists(CONFIG_FILE)) return new LinkedHashMap<>();
-            Object parsed = JsonParser.parse(Files.readString(CONFIG_FILE));
+            if (!Files.exists(configFile)) return new LinkedHashMap<>();
+            Object parsed = JsonParser.parse(Files.readString(configFile));
             return parsed instanceof Map<?, ?> map ? new LinkedHashMap<>((Map<String, Object>) map) : new LinkedHashMap<>();
         } catch (Exception e) { throw new RuntimeException("Failed to load defects: " + e.getMessage(), e); }
     }
 
-    private static void saveRoot(Map<String, Object> root) {
-        try { Files.writeString(CONFIG_FILE, CiCdConfig.toJson(root)); }
+    private void saveRoot(Map<String, Object> root) {
+        try { StorageWriteCoordinator.coordinatedWrite(configFile.getParent(), "qa-runner.json", () -> Files.writeString(configFile, CiCdConfig.toJson(root))); }
         catch (Exception e) { throw new RuntimeException("Failed to save defects: " + e.getMessage(), e); }
     }
 

@@ -116,8 +116,9 @@ class OrganizationBrowserE2ETest {
         ownerBrowser = browser();
         login(ownerBrowser, ownerA.username());
         waitForText(ownerBrowser, "Organization A");
+        openOrganizationSettings(ownerBrowser);
         click(ownerBrowser, "Manage");
-        waitForText(ownerBrowser, "Organization management");
+        waitForText(ownerBrowser, "Members");
         new WebDriverWait(ownerBrowser, Duration.ofSeconds(10)).until(driver -> driver.findElements(By.cssSelector(".organization-member-row")).size() == 4);
         assertTrue(ownerBrowser.findElements(By.cssSelector("select[aria-label^='Role for ']")).size() == 4);
 
@@ -147,7 +148,7 @@ class OrganizationBrowserE2ETest {
         input(ownerBrowser, "input[name='invitedEmail']", "pending@example.test");
         click(ownerBrowser, "Create pending invitation");
         waitForText(ownerBrowser, "pending@example.test");
-        assertTrue(ownerBrowser.findElement(By.cssSelector(".organization-panel-overlay")).getText().contains("PENDING"));
+        assertTrue(ownerBrowser.findElement(By.id("organizationSettingsContent")).getText().contains("PENDING"));
 
         click(ownerBrowser, "+ Project");
         input(ownerBrowser, "input[name='key']", "OUI");
@@ -162,10 +163,36 @@ class OrganizationBrowserE2ETest {
     }
 
     @Test
+    void organizationManagementIsAvailableUnderSettingsWithoutDashboardDuplication() {
+        ownerBrowser = browser();
+        login(ownerBrowser, ownerA.username());
+        waitForText(ownerBrowser, "Organization A");
+        openOrganizationSettings(ownerBrowser);
+
+        new WebDriverWait(ownerBrowser, Duration.ofSeconds(10)).until(driver ->
+                "#settings-organization".equals(driver.getCurrentUrl().substring(driver.getCurrentUrl().indexOf('#')))
+                        && driver.findElement(By.id("organizationSettings")).isDisplayed());
+        waitForText(ownerBrowser, "Members");
+        assertTrue(String.valueOf(((JavascriptExecutor) ownerBrowser).executeScript(
+                "return document.getElementById('tenantContextBar').parentElement.id;"))
+                .equals("organizationSettingsSlot"));
+
+        ownerBrowser.get(baseUrl + "/#dashboard");
+        new WebDriverWait(ownerBrowser, Duration.ofSeconds(10)).until(driver ->
+                !driver.findElement(By.id("organizationSettings")).isDisplayed());
+        assertTrue(String.valueOf(((JavascriptExecutor) ownerBrowser).executeScript(
+                "return document.getElementById('tenantContextBar').parentElement.id;"))
+                .equals("organizationSettingsSlot"));
+        assertTrue(ownerBrowser.findElement(By.id("tenantContextOrganization")).isDisplayed());
+        logout(ownerBrowser);
+    }
+
+    @Test
     void multiOrganizationSwitchUsesServerAuthorizedDataAndCancelsStaleUiWork() {
         multiBrowser = browser();
         login(multiBrowser, multi.username());
         waitForText(multiBrowser, "Organization A");
+        openOrganizationSettings(multiBrowser);
         Select organization = new Select(multiBrowser.findElement(By.id("organizationSelector")));
         String aId = organization.getFirstSelectedOption().getAttribute("value");
         String bId = organization.getOptions().stream().map(option -> option.getAttribute("value"))
@@ -180,14 +207,17 @@ class OrganizationBrowserE2ETest {
                       init.signal?.addEventListener('abort',()=>{clearTimeout(t);window.__qaRace.push('aborted');reject(new DOMException('Aborted','AbortError'));});});
                   return original(input,init); };
                 """, aId);
-        organization.selectByValue(bId);
+        ((JavascriptExecutor) multiBrowser).executeAsyncScript("""
+                const done=arguments[arguments.length-1];
+                switchOrganization(arguments[0]).then(()=>done()).catch(error=>done(String(error)));
+                """, bId);
         waitForText(multiBrowser, "Organization B Project");
         assertFalse(multiBrowser.findElement(By.id("userStoryContent")).getText().contains("Organization A Project"));
         assertNotEquals(aId, new Select(multiBrowser.findElement(By.id("organizationSelector"))).getFirstSelectedOption().getAttribute("value"));
         assertTrue(String.valueOf(((JavascriptExecutor) multiBrowser).executeScript("return localStorage.getItem('qa.selectedOrganization');")).contains(bId));
 
         ((JavascriptExecutor) multiBrowser).executeScript("localStorage.setItem('qa.selectedOrganization','unauthorized-id'); location.reload();");
-        waitForText(multiBrowser, "No active organization membership");
+        waitForText(multiBrowser, "No active organization");
         assertTrue(String.valueOf(((JavascriptExecutor) multiBrowser).executeScript("return localStorage.getItem('qa.selectedOrganization');")).equals("null"));
         logout(multiBrowser);
     }
@@ -196,6 +226,7 @@ class OrganizationBrowserE2ETest {
     void invitationAcceptanceUsesNormalUiAndFixtureTokenOnlyInMemory() {
         inviteeBrowser = browser();
         login(inviteeBrowser, invitee.username());
+        openOrganizationSettings(inviteeBrowser);
         click(inviteeBrowser, "Accept invite");
         input(inviteeBrowser, "input[name='invitationId']", invitationId);
         input(inviteeBrowser, "input[name='token']", invitationToken);
@@ -228,6 +259,11 @@ class OrganizationBrowserE2ETest {
         browser.findElement(By.id("authSubmitButton")).click();
         new WebDriverWait(browser, Duration.ofSeconds(10)).until(ExpectedConditions.invisibilityOfElementLocated(By.id("authUsername")));
         wait(browser, By.id("organizationSelector"));
+    }
+
+    private void openOrganizationSettings(WebDriver browser) {
+        browser.findElement(By.cssSelector("a.nav[href='#settings-organization']")).click();
+        new WebDriverWait(browser, Duration.ofSeconds(10)).until(driver -> driver.findElement(By.id("organizationSettings")).isDisplayed());
     }
 
     private void logout(WebDriver browser) { browser.findElement(By.xpath("//button[normalize-space()='Sign out']")).click(); wait(browser, By.id("authUsername")); }

@@ -86,7 +86,8 @@ public class JMeterCLIPlugin implements RunnerPlugin {
         Path runDirectory = projectRoot.resolve("target").resolve("runner-reports")
                 .resolve(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                         .format(LocalDateTime.now()) + "-" + UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(runDirectory);
+        Path stagingDirectory = ArtifactPublicationService.createStagingDirectory(projectRoot,
+                "jmeter-" + UUID.randomUUID().toString().substring(0, 8));
 
         output.accept("[runner] Executing JMeter CLI test plan: " + selection);
 
@@ -121,8 +122,8 @@ public class JMeterCLIPlugin implements RunnerPlugin {
         output.accept("[runner] JMeter CLI found: " + jmeterCmd);
 
         // Set up output files
-        Path jtlFile = runDirectory.resolve("results.jtl");
-        Path htmlReportDir = runDirectory.resolve("html-report");
+        Path jtlFile = stagingDirectory.resolve("results.jtl");
+        Path htmlReportDir = stagingDirectory.resolve("html-report");
 
         // Build JMeter CLI command
         List<String> command = new ArrayList<>();
@@ -160,9 +161,15 @@ public class JMeterCLIPlugin implements RunnerPlugin {
         output.accept("[runner] JMeter exit code: " + exitCode);
 
         // Parse results
-        RunSummary summary = parseJMeterResults(jtlFile, htmlReportDir, runDirectory, output);
-        runningProcess = null;
-        return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        try {
+            RunSummary summary = parseJMeterResults(jtlFile, htmlReportDir, runDirectory, output);
+            ArtifactPublicationService.publishDirectory(projectRoot, stagingDirectory, runDirectory);
+            runningProcess = null;
+            return new ExecutionService.RunResult(runDirectory, exitCode, summary);
+        } finally {
+            runningProcess = null;
+            ArtifactPublicationService.discardStaging(stagingDirectory);
+        }
     }
 
     /**

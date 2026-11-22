@@ -178,7 +178,7 @@ public class PytestPlugin implements RunnerPlugin {
 
         // Save logs to file for parsing
         Path logFile = runDirectory.resolve("output.txt");
-        Files.writeString(logFile, String.join("\n", logLines));
+        ArtifactPublicationService.writeText(projectRoot, logFile, String.join("\n", logLines));
 
         // Parse results from collected logs
         RunSummary summary = parsePytestOutput(logLines, exitCode, runDirectory);
